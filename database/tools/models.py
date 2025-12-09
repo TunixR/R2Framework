@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from importlib import import_module
 from typing import Callable
 
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 from strands.tools.decorator import DecoratedFunctionTool
 
 
@@ -21,6 +21,11 @@ class Tool(SQLModel, table=True):
         ...,
         description="The module path where the tool function is located.",
         unique=True,
+    )
+
+    traces: list["ToolTrace"] = Relationship(  # noqa: F821 # pyright:ignore[reportUndefinedVariable]
+        back_populates="tool",
+        sa_relationship_kwargs={"lazy": "joined"},
     )
 
     created_at: datetime = Field(

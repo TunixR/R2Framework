@@ -10,6 +10,7 @@ from settings import POSTGRES_URL
 # from modules.models import *  # Needed for SQLModel to recognize the models defined in modules.models
 from .agents.models import *  # noqa: F403 Needed for SQLModel to recognize the models defined in agents.models
 from .auth.models import *  # noqa: F403 # Needed for SQLModel to recognize the models defined in auth.models
+from .logging.models import *  # noqa: F403 Needed for SQLModel to recognize the models defined in logging.models
 from .provider.models import *  # noqa: F403 Needed for SQLModel to recognize the models defined in provider
 from .tools.models import *  # noqa: F403 Needed for SQLModel to recognize the models defined in tools.models
 

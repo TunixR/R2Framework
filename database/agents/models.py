@@ -160,6 +160,11 @@ class Agent(SQLModel, table=True):
         },
     )
 
+    traces: list["AgentTrace"] = Relationship(  # noqa: F821 # pyright:ignore[reportUndefinedVariable]
+        back_populates="agent",
+        sa_relationship_kwargs={"lazy": "joined"},
+    )
+
     created_at: datetime = Field(
         default=datetime.now(timezone.utc),
         description="Timestamp of when the agent was created.",
