@@ -4,6 +4,9 @@ import pytest
 from strands.types.tools import JSONSchema
 
 from database.agents.models import Agent, AgentType, Argument
+from database.logging.models import (
+    ToolTrace,  # noqa: F401 Needs to be imported to register with SQLModel
+)
 from database.provider.models import Router
 
 
