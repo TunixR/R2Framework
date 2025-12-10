@@ -198,7 +198,8 @@ class AgentLoggingHook(HookProvider):
 
             if self.parent_agent_id:
                 sub_trace = SubAgentTrace(
-                    parent_trace_id=self.parent_agent_id,
+                    session=session,
+                    parent_trace_id=self.parent_trace_id,
                     child_trace_id=self.agent_trace_id,
                 )
                 session.add(sub_trace)

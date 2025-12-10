@@ -99,32 +99,31 @@ class SubAgentTrace(SQLModel, table=True):
         },
     )
 
-    def __init__(self, engine: Engine, **data):
+    def __init__(self, session: Session, **data):
         super().__init__(**data)
         if self.parent_trace_id == self.child_trace_id:
             raise ValueError("An trace cannot be a sub-trace of itself.")
 
-        with Session(engine) as session:
-            if session.exec(
-                select(SubAgentTrace).where(
-                    SubAgentTrace.child_trace_id == self.child_trace_id
-                )
-            ).first():
-                raise ValueError("One trace cannot have multiple parent traces.")
-            elif session.exec(
-                select(SubAgentTrace).where(
-                    (SubAgentTrace.parent_trace_id == self.parent_trace_id)
-                    & (SubAgentTrace.child_trace_id == self.child_trace_id)
-                )
-            ).first():
-                raise ValueError("This sub-trace relationship already exists.")
-            elif session.exec(
-                select(SubAgentTrace).where(
-                    (SubAgentTrace.child_trace_id == self.parent_trace_id)
-                    & (SubAgentTrace.parent_trace_id == self.child_trace_id)
-                )
-            ).first():
-                raise ValueError("Circular sub-trace relationships are not allowed.")
+        if session.exec(
+            select(SubAgentTrace).where(
+                SubAgentTrace.child_trace_id == self.child_trace_id
+            )
+        ).first():
+            raise ValueError("One trace cannot have multiple parent traces.")
+        elif session.exec(
+            select(SubAgentTrace).where(
+                (SubAgentTrace.parent_trace_id == self.parent_trace_id)
+                & (SubAgentTrace.child_trace_id == self.child_trace_id)
+            )
+        ).first():
+            raise ValueError("This sub-trace relationship already exists.")
+        elif session.exec(
+            select(SubAgentTrace).where(
+                (SubAgentTrace.child_trace_id == self.parent_trace_id)
+                & (SubAgentTrace.parent_trace_id == self.child_trace_id)
+            )
+        ).first():
+            raise ValueError("Circular sub-trace relationships are not allowed.")
 
 
 class RobotException(SQLModel, table=True):
