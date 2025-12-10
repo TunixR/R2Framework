@@ -1,4 +1,6 @@
 from datetime import datetime
+from functools import reduce
+from itertools import chain
 from threading import Lock
 from typing import Any, Dict, override
 from uuid import UUID, uuid4
@@ -97,8 +99,8 @@ class ToolLoggingHook(HookProvider):
         registry.add_callback(AfterToolCallEvent, self.log_tool_response)
 
     def log_tool_call(self, event: BeforeToolCallEvent) -> None:
-        from ..database.general import general_engine
-        from ..database.logging.models import ToolTrace
+        from database.general import general_engine
+        from database.logging.models import ToolTrace
 
         tool_name = event.tool_use.get("name", "")
         if tool_name not in self.tools:
@@ -117,8 +119,8 @@ class ToolLoggingHook(HookProvider):
             self.trace_id = trace_id
 
     def log_tool_response(self, event: AfterToolCallEvent) -> None:
-        from ..database.general import general_engine
-        from ..database.logging.models import ToolTrace
+        from database.general import general_engine
+        from database.logging.models import ToolTrace
 
         tool_name = event.tool_use.get("name", "")
         if tool_name not in self.tools:
@@ -146,7 +148,7 @@ class ToolLoggingHook(HookProvider):
 
 
 class AgentLoggingHook(HookProvider):
-    parent_agent_id: UUID | None
+    parent_trace_id: UUID | None
     agent_id: UUID
     agent_trace_id: UUID
     invocation_state: dict
@@ -157,7 +159,7 @@ class AgentLoggingHook(HookProvider):
         self,
         agent_id: UUID,
         invocation_state: dict,
-        parent_agent_id: UUID | None = None,
+        parent_trace_id: UUID | None = None,
         is_gui_agent: bool = False,
     ):
         """Initializes the AgentLoggingHook.
@@ -168,7 +170,7 @@ class AgentLoggingHook(HookProvider):
             parent_agent_id: The UUID of the parent agent, if any.
             is_gui_agent: Whether the agent is a GUI agent.
         """
-        self.parent_agent_id = parent_agent_id
+        self.parent_trace_id = parent_trace_id
         self.agent_id = agent_id
         self.invocation_state = invocation_state
         self.is_gui_agent = is_gui_agent
@@ -181,8 +183,8 @@ class AgentLoggingHook(HookProvider):
         registry.add_callback(MessageAddedEvent, self.log_message)
 
     def log_start(self, event: BeforeInvocationEvent) -> None:
-        from ..database.general import general_engine
-        from ..database.logging.models import AgentTrace, SubAgentTrace
+        from database.general import general_engine
+        from database.logging.models import AgentTrace, SubAgentTrace
 
         with Session(general_engine) as session:
             # We first register the agent trace here
@@ -196,7 +198,7 @@ class AgentLoggingHook(HookProvider):
             )
             session.add(trace)
 
-            if self.parent_agent_id:
+            if self.parent_trace_id:
                 sub_trace = SubAgentTrace(
                     session=session,
                     parent_trace_id=self.parent_trace_id,
@@ -219,8 +221,8 @@ class AgentLoggingHook(HookProvider):
         self.update_trace()
 
     def update_trace(self, finished: bool = False):
-        from ..database.general import general_engine
-        from ..database.logging.models import AgentTrace
+        from database.general import general_engine
+        from database.logging.models import AgentTrace
 
         with Session(general_engine) as session:
             trace = session.get(AgentTrace, self.agent_trace_id)
@@ -229,12 +231,17 @@ class AgentLoggingHook(HookProvider):
                     f"AgentTrace with id {self.agent_trace_id} not found."
                 )
 
-            text: str = "\n".join(
+            text: str = "\n".join(  # Fucking unreadable. Refer to tests to understand whats the expected input/output
                 map(
                     lambda c: c.get("text", ""),
-                    filter(
-                        lambda m: m.get("role") == "assistant",
-                        self.messages,
+                    chain.from_iterable(
+                        map(
+                            lambda c: c.get("content", []),
+                            filter(
+                                lambda m: m.get("role") == "assistant",
+                                self.messages,
+                            ),
+                        ),
                     ),
                 )
             )
@@ -255,8 +262,8 @@ class AgentLoggingHook(HookProvider):
         if not self.is_gui_agent:
             raise RuntimeError("Cannot register GUI trace for non-GUI agent.")
 
-        from ..database.general import general_engine
-        from ..database.logging.models import GUITrace
+        from database.general import general_engine
+        from database.logging.models import GUITrace
 
         with Session(general_engine) as session:
             screenshot_id = uuid4()

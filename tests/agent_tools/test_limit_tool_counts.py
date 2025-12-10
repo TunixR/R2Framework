@@ -1,79 +1,12 @@
-import types
-from typing import Any, Callable, List, Tuple
-
-from pydantic import BaseModel, ValidationError
-from strands.agent.agent import Agent
-from strands.hooks import AfterToolCallEvent, BeforeInvocationEvent, BeforeToolCallEvent
-
-# Import the class under test
 from agent_tools.hooks import LimitToolCounts
-
-
-class FakeRegistry:
-    """
-    Minimal stand-in for HookRegistry that records added callbacks.
-
-    We don't rely on specific event classes from strands.hooks;
-    we just store whatever is passed in by the hook provider.
-    """
-
-    def __init__(self):
-        # Each entry: (event_type, callback)
-        self.callbacks: List[Tuple[Any, Callable]] = []
-
-    def add_callback(self, event_type: Any, callback: Callable):
-        self.callbacks.append((event_type, callback))
-
-
-class FakeBeforeInvocationEvent(BeforeInvocationEvent):
-    """Fake event used to call reset_counts."""
-
-    def __init__(self):
-        self.agent = Agent()
-
-
-class FakeBeforeToolCallEvent(BeforeToolCallEvent):
-    """
-    Fake event used to call intercept_tool.
-
-    Attributes:
-        tool_use: dict with tool 'name'
-        cancel_tool: optional str message set by hook
-    """
-
-    def __init__(self, tool_name: str):
-        self.tool_use = {"name": tool_name, "input": None, "toolUseId": ""}
-        self.cancel_tool = False
-
-
-class FakeAfterToolCallEvent(AfterToolCallEvent):
-    """
-    Fake event used to call intercept_response.
-
-    Attributes:
-        tool_use: dict with tool 'name'
-        exception: the exception raised in tool call (or None)
-    """
-
-    def __init__(self, tool_name: str, exception: Exception | None):
-        self.tool_use = {"name": tool_name, "input": None, "toolUseId": ""}
-        self.exception = exception
-        self.result = {"status": "success", "content": [], "toolUseId": ""}
-
-
-# Helpers to generate a ValidationError in a deterministic way
-class SampleModel(BaseModel):
-    value: int
-
-
-def make_validation_error() -> ValidationError:
-    try:
-        # This will raise a ValidationError (value expects int, not str)
-        SampleModel(value="not-an-int")  # type: ignore
-    except ValidationError as e:
-        return e
-    raise AssertionError("Expected ValidationError was not raised")
-
+from tests.agent_tools._shared.fakes import (
+    FakeAfterToolCallEvent,
+    FakeBeforeInvocationEvent,
+    FakeBeforeToolCallEvent,
+    FakeRegistry,
+    is_bound_method_of,
+    make_validation_error,
+)
 
 # ---------------------------------------------------------------------------
 # Tests: register_hooks
@@ -97,8 +30,7 @@ def test_register_hooks_adds_callbacks():
 
     # Ensure they are bound to the same hooks instance (method __self__)
     for _, cb in registry.callbacks:
-        assert isinstance(cb, types.MethodType)
-        assert cb.__self__ is hooks
+        assert is_bound_method_of(hooks, cb)
 
 
 # ---------------------------------------------------------------------------
