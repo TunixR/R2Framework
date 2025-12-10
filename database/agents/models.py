@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 from importlib import import_module
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
@@ -10,10 +10,11 @@ from sqlalchemy import Column
 from sqlmodel import Enum, Field, Relationship, SQLModel
 from strands import Agent as StrandsAgent
 from strands import ToolContext, tool
+from strands.hooks import HookProvider
 from strands.tools.decorator import DecoratedFunctionTool
 from typing_extensions import Dict
 
-from agent_tools.hooks import LimitToolCounts
+from agent_tools.hooks import AgentLoggingHook, LimitToolCounts, ToolLoggingHook
 from agent_tools.image import screenshot_bytes
 
 from ..provider.models import Router
@@ -213,6 +214,23 @@ class Agent(SQLModel, table=True):
                 tool_limits[sa.child_agent.get_tool_name()] = sa.limit
         return LimitToolCounts(tool_limits)
 
+    def get_logging_hooks(self, invocation_state: Dict[str, Any]) -> List[HookProvider]:
+        agent_logging_hook = AgentLoggingHook(
+            agent_id=self.id,
+            invocation_state=invocation_state,
+            parent_trace_id=invocation_state.get("parent_trace_id", None),
+            is_gui_agent=self.type == AgentType.GuiAgent,
+        )
+        invocation_state["parent_trace_id"] = agent_logging_hook.agent_trace_id
+
+        tools = {at.tool.name: at.tool.id for at in self.tools}
+        tool_logging_hook = ToolLoggingHook(
+            agent_trace_id=agent_logging_hook.agent_trace_id,
+            tools=tools,
+        )
+
+        return [agent_logging_hook, tool_logging_hook]
+
     def as_tool(self) -> DecoratedFunctionTool:
         """Dynamically creates the agent tool function for usage within other agents."""
 
@@ -384,7 +402,7 @@ class Agent(SQLModel, table=True):
         strands_agent = StrandsAgent(
             model=model,
             tools=tools + sub_agent_tools,
-            hooks=[self.get_tool_limiter()],
+            hooks=[self.get_tool_limiter(), *self.get_logging_hooks(invocation_state)],
             messages=messages,  # type: ignore This works fine
         )
 

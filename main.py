@@ -9,6 +9,7 @@ from sqlmodel import Session, select
 from strands.telemetry import StrandsTelemetry
 
 import database.general as database
+from database.logging.models import RobotException
 
 
 @asynccontextmanager
@@ -81,7 +82,15 @@ async def handle_robot_exception(websocket: WebSocket):
                 await websocket.close()
                 return
 
-            invocation_state = {"websocket": websocket}
+            exception = RobotException(exception_details=data)
+            session.add(exception)
+            session.commit()
+            session.refresh(exception)
+
+            invocation_state = {
+                "websocket": websocket,
+                "robot_exception_id": exception.id,
+            }
             try:
                 response = await agent(invocation_state=invocation_state, **data)
                 await websocket.send_json({"type": "done", "content": response})
