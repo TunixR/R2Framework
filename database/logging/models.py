@@ -55,7 +55,7 @@ class AgentTrace(SQLModel, table=True):
     conversion_rate: int = Field(default=0)  # cost per 1M tokens in cents
 
     created_at: datetime = Field(
-        default=datetime.now(timezone.utc),
+        default_factory=datetime.now,
         description="Timestamp of when the trace was created.",
     )
     finished_at: datetime = Field(
@@ -148,7 +148,7 @@ class RobotException(SQLModel, table=True):
     )  # Whether the robot operator reported a successful recovery
 
     created_at: datetime = Field(
-        default=datetime.now(timezone.utc),
+        default_factory=datetime.now,
         description="Timestamp of when the trace was created.",
     )
     finished_at: datetime = Field(
@@ -187,7 +187,7 @@ class GUITrace(SQLModel, table=True):
     success: bool = Field(default=False)
 
     created_at: datetime = Field(
-        default=datetime.now(timezone.utc),
+        default_factory=datetime.now,
         description="Timestamp of when the trace was created.",
     )
     finished_at: datetime = Field(
@@ -226,7 +226,7 @@ class ToolTrace(SQLModel, table=True):
     success: bool = Field(default=False)
 
     created_at: datetime = Field(
-        default=datetime.now(timezone.utc),
+        default_factory=datetime.now,
         description="Timestamp of when the trace was created.",
     )
     finished_at: datetime = Field(

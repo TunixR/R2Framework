@@ -1,10 +1,10 @@
 import enum
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from importlib import import_module
 from typing import Any, List, Optional
 
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocketDisconnect
 from pydantic import BaseModel
 from sqlalchemy import Column
 from sqlmodel import Enum, Field, Relationship, SQLModel
@@ -167,11 +167,11 @@ class Agent(SQLModel, table=True):
     )
 
     created_at: datetime = Field(
-        default=datetime.now(timezone.utc),
+        default_factory=datetime.now,
         description="Timestamp of when the agent was created.",
     )
     updated_at: datetime = Field(
-        default=datetime.now(timezone.utc),
+        default_factory=datetime.now,
         description="Timestamp of when the agent was last updated.",
     )
 
@@ -488,7 +488,7 @@ class SubAgent(SQLModel, table=True):
     )
 
     created_at: datetime = Field(
-        default=datetime.now(timezone.utc),
+        default_factory=datetime.now,
         description="Timestamp of when the sub-agent association was created.",
     )
 
@@ -530,6 +530,6 @@ class AgentTool(SQLModel, table=True):
     )
 
     created_at: datetime = Field(
-        default=datetime.now(timezone.utc),
+        default_factory=datetime.now,
         description="Timestamp of when the agent-tool association was created.",
     )

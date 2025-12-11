@@ -29,11 +29,11 @@ class Tool(SQLModel, table=True):
     )
 
     created_at: datetime = Field(
-        default=datetime.now(timezone.utc),
+        default_factory=datetime.now,
         description="Timestamp of when the tool was created.",
     )
     updated_at: datetime = Field(
-        default=datetime.now(timezone.utc),
+        default_factory=datetime.now,
         description="Timestamp of when the tool was last updated.",
     )
 
