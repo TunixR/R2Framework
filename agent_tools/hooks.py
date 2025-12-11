@@ -154,6 +154,7 @@ class AgentLoggingHook(HookProvider):
     invocation_state: dict
     messages: list[dict] = []
     is_gui_agent: bool = False
+    created: bool = False
 
     def __init__(
         self,
@@ -176,6 +177,7 @@ class AgentLoggingHook(HookProvider):
         self.is_gui_agent = is_gui_agent
         # We generate here the id for the agent trace so we can reference it outside
         self.agent_trace_id = uuid4()
+        self.created = False
 
     @override
     def register_hooks(self, registry: HookRegistry, **kwargs) -> None:
@@ -183,6 +185,9 @@ class AgentLoggingHook(HookProvider):
         registry.add_callback(MessageAddedEvent, self.log_message)
 
     def log_start(self, event: BeforeInvocationEvent) -> None:
+        # Skip if already logged, can happen if multiple invocations are made
+        if self.created:
+            return
         from database.general import general_engine
         from database.logging.models import AgentTrace, SubAgentTrace
 
@@ -207,6 +212,7 @@ class AgentLoggingHook(HookProvider):
                 session.add(sub_trace)
 
             session.commit()
+            self.created = True
 
     def log_message(self, event: MessageAddedEvent) -> None:
         message = {
