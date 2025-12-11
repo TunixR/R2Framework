@@ -251,12 +251,13 @@ class Agent(SQLModel, table=True):
                 raise ValueError(
                     "WebSocket must be provided in tool context invocation state."
                 )
-
-            websocket: WebSocket = tool_context.invocation_state["websocket"]
-            invocation_state: dict[str, Any] = {"websocket": websocket}
+            if "robot_exception_id" not in tool_context.invocation_state:
+                raise ValueError(
+                    "A valid robot_exception_id must be provided in tool context invocation state."
+                )
 
             return await self(
-                invocation_state=invocation_state,
+                invocation_state=tool_context.invocation_state,
                 **tool_context.tool_use.get("input", {}),
             )
 
@@ -354,6 +355,9 @@ class Agent(SQLModel, table=True):
         Dinamically computes tools, subagents, output model and input validation. Calls the agent and returns the final structered response.
         """
         self.validate_input(*args, **kwargs)
+        invocation_state["inputs"] = {
+            arg.name: kwargs.get(arg.name) for arg in self.arguments
+        }
 
         tools: list[DecoratedFunctionTool] = [
             t.get_tool_function() for t in self.get_tools()
