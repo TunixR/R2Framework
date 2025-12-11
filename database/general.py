@@ -23,6 +23,9 @@ general_engine = create_engine(postgres_url)
 
 async def create_db_and_tables():
     SQLModel.metadata.create_all(general_engine)
+
+
+async def populate_db():
     for populator in populators.__all__:
         populator_func = getattr(populators, populator)
         if callable(populator_func):

@@ -13,3 +13,4 @@ wheels/
 .env
 .vscode
 strands.log
+migrations/versions/

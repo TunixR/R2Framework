@@ -31,9 +31,8 @@ async def lifespan(app: FastAPI):
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    await database.create_db_and_tables()
+    await database.populate_db()
     yield
-    await database.drop_db_and_tables()
 
 
 app = FastAPI(lifespan=lifespan)
