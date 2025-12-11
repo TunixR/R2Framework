@@ -1,10 +1,16 @@
-from datetime import datetime, timezone
-from typing import Dict
+from datetime import datetime
+from typing import Dict, Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.engine import Engine
-from sqlmodel import Field, Relationship, Session, SQLModel, select
+from sqlmodel import (
+    Field,
+    ForeignKey,
+    Relationship,
+    Session,
+    SQLModel,
+    select,
+)
 
 from database.agents.models import Agent
 from database.tools.models import Tool
@@ -25,13 +31,19 @@ class AgentTrace(SQLModel, table=True):
     agent_id: UUID = Field(foreign_key="agent.id")
     agent: Agent = Relationship(back_populates="traces")
 
-    gui_trace_id: UUID | None = Field(foreign_key="guitrace.id", default=None)
-    gui_trace: "GUITrace" = Relationship(
+    gui_trace_id: Optional[UUID] = Field(
+        ForeignKey("guitrace.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    gui_trace: Optional["GUITrace"] = Relationship(
         back_populates="agent_trace",
         sa_relationship_kwargs={
             "lazy": "joined",
             "foreign_keys": "GUITrace.agent_trace_id",
+            "uselist": False,
+            "single_parent": True,
         },
+        cascade_delete=True,
     )
 
     sub_agents_traces: list["SubAgentTrace"] = Relationship(
@@ -165,7 +177,10 @@ class GUITrace(SQLModel, table=True):
         primary_key=True,
     )
 
-    agent_trace_id: UUID = Field(foreign_key="agenttrace.id")
+    agent_trace_id: UUID = Field(
+        foreign_key="agenttrace.id",
+        ondelete="CASCADE",
+    )
     agent_trace: AgentTrace = Relationship(
         back_populates="gui_trace",
         sa_relationship_kwargs={
