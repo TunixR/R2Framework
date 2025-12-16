@@ -43,7 +43,7 @@ def fake_openai_model(monkeypatch):
     """
     import strands.models.openai as openai_mod
 
-    from tests.shared.mock_strands_model import MockStrandsModel
+    from tests.unit.shared.mock_strands_model import MockStrandsModel
 
     monkeypatch.setattr(openai_mod, "OpenAIModel", MockStrandsModel, raising=True)
 

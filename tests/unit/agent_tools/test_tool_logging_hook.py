@@ -7,7 +7,7 @@ from strands.types.tools import ToolResult
 
 from agent_tools.hooks import ToolLoggingHook
 from database.logging.models import ToolTrace
-from tests.agent_tools._shared.fakes import (
+from tests.unit.agent_tools._shared.fakes import (
     FakeAfterToolCallEvent,
     FakeBeforeToolCallEvent,
 )

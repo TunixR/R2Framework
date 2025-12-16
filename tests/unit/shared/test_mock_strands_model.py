@@ -9,7 +9,7 @@ from openai.types.chat.chat_completion_chunk import (
     ChoiceDeltaToolCallFunction,
 )
 
-from tests.shared.mock_strands_model import MockStrandsModel
+from tests.unit.shared.mock_strands_model import MockStrandsModel
 
 # Local typevar to match structured_output signature expectations
 T = TypeVar("T")

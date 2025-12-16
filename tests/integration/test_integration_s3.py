@@ -8,18 +8,6 @@ import botocore.exceptions as bex
 from settings import S3_URL, S3_BUCKET
 from s3.utils import upload_bytes, download_bytes, delete_object, _client
 
-
-def _want_run() -> bool:
-    """
-    Environment-aware toggle to run integration tests.
-
-    If RUN_S3_TESTS is set to "1" or "true" (case-insensitive), we try to run tests.
-    Otherwise, we still attempt a connectivity check and will skip if S3 isn't reachable.
-    """
-    val = os.getenv("INTEGRATION_TESTS", "").strip().lower()
-    return val in {"1", "true", "yes", "y", "on"}
-
-
 async def _ensure_bucket_exists() -> None:
     """
     Ensure the S3 bucket exists, creating it if necessary.
@@ -50,14 +38,7 @@ async def s3_ready():
             # Basic connectivity check
             await s3c.list_buckets()
     except Exception as e:
-        if _want_run():
-            # If the user asked to run, but we still can't connect, skip with details.
-            pytest.skip(f"S3 integration tests skipped (cannot connect to {S3_URL}): {e}")
-        else:
-            pytest.skip(
-                "S3 integration tests skipped (S3 not available). "
-                "Set RUN_S3_TESTS=1 to attempt running these tests."
-            )
+        pytest.skip(f"S3 integration tests skipped (cannot connect to {S3_URL}): {e}")
 
     # If connectivity works, ensure the bucket is present
     try:
