@@ -272,12 +272,9 @@ class AgentLoggingHook(HookProvider):
         from database.logging.models import GUITrace
 
         with Session(general_engine) as session:
-            screenshot_id = uuid4()
-            # TODO: Upload screenshot_bytes to storage with id as name
-
             gui_trace = GUITrace(
+                screenshot_b=screenshot_bytes,
                 agent_trace_id=self.agent_trace_id,
-                screenshot_id=screenshot_id,
                 action_type=action_type,
                 action_content=action_content,
                 success=success,

@@ -46,6 +46,7 @@ Normalization:
 import ast
 import asyncio
 import math
+import uuid
 
 # Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
 # SPDX-License-Identifier: Apache-2.0
@@ -55,6 +56,8 @@ from typing import List
 from fastapi import WebSocketDisconnect
 from strands import Agent, ToolContext, tool
 from strands.models.openai import OpenAIModel
+
+from agent_tools.hooks import AgentLoggingHook
 
 from agent_tools.image import screenshot_bytes
 from config import Config
@@ -751,7 +754,8 @@ Variables: {variables}
         model_id=PROVIDER_GROUNDING_MODEL,
     )
 
-    agent = Agent(model=model, messages=messages)  # type: ignore
+    hook = AgentLoggingHook(agent_id=uuid.uuid4(), invocation_state=tool_context.invocation_state, parent_trace_id=tool_context.invocation_state.get("parent_trace_id", None), is_gui_agent=True)
+    agent = Agent(model=model, messages=messages, hooks=[hook])  # type: ignore
     try:
         response = await agent.invoke_async(
             ""
@@ -789,13 +793,27 @@ Variables: {variables}
                 )  # Action will be parsed and executed by the client
                 # Wait for action result
                 result = await websocket.receive_json()
-                # Artificial delay to allow UI to update
-                await asyncio.sleep(0.5)
-                image = await screenshot_bytes(websocket)
                 if not result.get("success"):
+                    hook.register_gui_trace(
+                        action_type=action.get("action_type", "unknown"),
+                        action_content=action.get("action_inputs", {}),
+                        screenshot_bytes=image,
+                        success=False,
+                    )
                     raise RuntimeError(
                         f"Action execution failed on client side. With action: {action}"
                     )
+
+                hook.register_gui_trace(
+                    action_type=action.get("action_type", "unknown"),
+                    action_content=action.get("action_inputs", {}),
+                    screenshot_bytes=image,
+                    success=True,
+                )
+
+                # Artificial delay to allow UI to update
+                await asyncio.sleep(0.5)
+                image = await screenshot_bytes(websocket)
 
                 new_messages = [
                     {

@@ -5,7 +5,7 @@ import pytest
 
 from agent_tools.hooks import AgentLoggingHook
 from database.logging.models import AgentTrace, GUITrace
-from tests.agent_tools._shared.fakes import (
+from tests.unit.agent_tools._shared.fakes import (
     FakeBeforeInvocationEvent,
     FakeRegistry,
     is_bound_method_of,

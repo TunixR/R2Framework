@@ -9,7 +9,7 @@ from openai.types.chat.chat_completion_chunk import (
     ChoiceDeltaToolCallFunction,
 )
 
-from tests.shared.mock_strands_model import MockStrandsModel
+from tests.unit.shared.mock_strands_model import MockStrandsModel
 
 # Local typevar to match structured_output signature expectations
 T = TypeVar("T")
@@ -203,7 +203,7 @@ async def test_stream_handles_tool_deltas():
                 logprobs=None,
             ),
             Choice(
-                index=0,
+                index=1,
                 delta=ChoiceDelta(
                     content=None,
                     role=None,
@@ -215,10 +215,18 @@ async def test_stream_handles_tool_deltas():
                                 name="toolA", arguments='{"param": "value"}'
                             ),
                             type="function",
+                        ),
+                        ChoiceDeltaToolCall(
+                            index=1,
+                            id="tool_call_1",
+                            function=ChoiceDeltaToolCallFunction(
+                                name="toolA", arguments='{"param": "value2"}'
+                            ),
+                            type="function",
                         )
                     ],
                 ),
-                finish_reason="tool_calls",
+                finish_reason=None,
                 logprobs=None,
             ),
         ],
@@ -244,15 +252,30 @@ async def test_stream_handles_tool_deltas():
         "contentBlockDelta" in collected[2]
         and collected[2]["contentBlockDelta"]["delta"]["text"] == "Hello"
     )
-    assert "contentBlockStop" in collected[3]
     assert (
-        "contentBlockStart" in collected[4]
-        and collected[4]["contentBlockStart"]["start"]["toolUse"]["inputs"]
-        == '{"param": "value"}'
+        "contentBlockStart" in collected[3]
+        and collected[3]["contentBlockStart"]["start"]["toolUse"]["name"]
+        == "toolA"
     )
     assert (
-        "messageStop" in collected[5]
-        and collected[5]["messageStop"]["stopReason"] == "tool_calls"
+        "contentBlockDelta" in collected[4]
+        and collected[4]["contentBlockDelta"]["delta"]["toolUse"]["input"]
+        == '{"param": "value"}'
+    )
+    assert "contentBlockStop" in collected[5]
+    assert (
+        "contentBlockStart" in collected[6]
+        and collected[6]["contentBlockStart"]["start"]["toolUse"]["name"]
+        == "toolA"
+    )
+    assert (
+        "contentBlockDelta" in collected[7]
+        and collected[7]["contentBlockDelta"]["delta"]["toolUse"]["input"]
+        == '{"param": "value2"}'
+    )
+    assert "contentBlockStop" in collected[5]
+    assert (
+        "messageStop" in collected[9] and collected[9]["messageStop"]["stopReason"] == "end_turn"
     )
 
 

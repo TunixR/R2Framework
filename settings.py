@@ -24,3 +24,8 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 
 UI_ERROR_PLANNING = os.getenv("UI_ERROR_PLANNING", "false").lower() == "true"
 UI_MID_AGENT = os.getenv("UI_MID_AGENT", "false").lower() == "true"
+
+S3_URL = os.getenv("S3_URL", "http://localhost:8333")
+S3_BUCKET = os.getenv("S3_BUCKET", "gateway")
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "your_access_key")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "your_secret_key")

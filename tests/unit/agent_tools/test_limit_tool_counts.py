@@ -1,5 +1,5 @@
 from agent_tools.hooks import LimitToolCounts
-from tests.agent_tools._shared.fakes import (
+from tests.unit.agent_tools._shared.fakes import (
     FakeAfterToolCallEvent,
     FakeBeforeInvocationEvent,
     FakeBeforeToolCallEvent,

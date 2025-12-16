@@ -1,6 +1,8 @@
+import asyncio
 from datetime import datetime
 from typing import Dict, Optional
 from uuid import UUID, uuid4
+from s3 import S3Client
 
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import (
@@ -32,7 +34,7 @@ class AgentTrace(SQLModel, table=True):
     agent: Agent = Relationship(back_populates="traces")
 
     gui_trace_id: Optional[UUID] = Field(
-        ForeignKey("guitrace.id", ondelete="SET NULL"),
+        ForeignKey("guitrace.id", ondelete="SET NULL", default=None),
         nullable=True,
     )
     gui_trace: Optional["GUITrace"] = Relationship(
@@ -189,7 +191,7 @@ class GUITrace(SQLModel, table=True):
         },
     )
 
-    screenshot_id: UUID | None = Field(
+    screenshot_key: str | None = Field(
         default=None
     )  # Screenshot name identifier in the configured S3 bucket
 
@@ -210,6 +212,18 @@ class GUITrace(SQLModel, table=True):
         description="Timestamp of when the trace was closed.",
         nullable=True,
     )
+
+    def __init__(self, screenshot_b: bytes, **data):
+        super().__init__(**data)
+        if not self.agent_trace:
+            raise ValueError("GUITrace must be associated with an AgentTrace.")
+
+        screenshot_key = asyncio.run_coroutine_threadsafe(S3Client.upload_bytes(
+            screenshot_b,
+            content_type="image/png",
+        ), asyncio.EventLoop()).result()
+
+        self.screenshot_key = screenshot_key
 
 
 class ToolTrace(SQLModel, table=True):
