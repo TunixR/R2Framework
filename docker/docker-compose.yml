@@ -1,0 +1,94 @@
+services:
+  database:
+    image: "postgres:latest"
+    ports:
+      - 5432:5432
+    env_file:
+      - .env
+    networks:
+      - postgres-network
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready"]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+
+  pgadmin:
+    image: dpage/pgadmin4
+    ports:
+      - 15433:80
+    env_file:
+      - .env
+    depends_on:
+      - database
+    networks:
+      - postgres-network
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+
+  swfs-master:
+    image: chrislusf/seaweedfs # use a remote image
+    ports:
+      - 9333:9333
+      - 19333:19333
+      - 9324:9324
+    command: "master -ip=swfs-master -ip.bind=0.0.0.0 -metricsPort=9324"
+  swfs-volume:
+    image: chrislusf/seaweedfs # use a remote image
+    ports:
+      - 8080:8080
+      - 18080:18080
+      - 9325:9325
+    command: 'volume -ip=swfs-volume -master="swfs-master:9333" -ip.bind=0.0.0.0 -port=8080 -metricsPort=9325'
+    depends_on:
+      - swfs-master
+  swfs-filer:
+    image: chrislusf/seaweedfs # use a remote image
+    ports:
+      - 8888:8888
+      - 18888:18888
+      - 9326:9326
+    command: 'filer -ip=swfs-filer -master="swfs-master:9333" -ip.bind=0.0.0.0 -metricsPort=9326'
+    tty: true
+    stdin_open: true
+    depends_on:
+      - swfs-master
+      - swfs-volume
+  swfs-s3:
+    image: chrislusf/seaweedfs # use a remote image
+    ports:
+      - 8333:8333
+      - 9327:9327
+    command: 's3 -filer="swfs-filer:8888" -ip.bind=0.0.0.0 -metricsPort=9327'
+    depends_on:
+      - swfs-master
+      - swfs-volume
+      - swfs-filer
+  swfs-webdav:
+    image: chrislusf/seaweedfs # use a remote image
+    ports:
+      - 7333:7333
+    command: 'webdav -filer="swfs-filer:8888"'
+    depends_on:
+      - swfs-master
+      - swfs-volume
+      - swfs-filer
+  prometheus:
+    image: prom/prometheus:v2.21.0
+    ports:
+      - 9000:9090
+    volumes:
+      - ./prometheus:/etc/prometheus
+    command: "--web.enable-lifecycle --config.file=/etc/prometheus/prometheus.yml"
+    depends_on:
+      - swfs-s3
+
+volumes:
+  db-data:
+  pgadmin-data:
+
+networks:
+  postgres-network:
+    driver: bridge
