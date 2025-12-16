@@ -1,6 +1,9 @@
-from settings import S3_URL, S3_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
 import uuid
+
 import aioboto3
+
+from settings import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, S3_BUCKET, S3_URL
+
 
 class S3Client:
     @staticmethod
@@ -10,11 +13,13 @@ class S3Client:
             endpoint_url=S3_URL,
             aws_access_key_id=AWS_ACCESS_KEY_ID,
             aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-            region_name="us-east-1"
+            region_name="us-east-1",
         )
 
     @staticmethod
-    async def upload_bytes(file_bytes: bytes, content_type: str, bucket: str = S3_BUCKET) -> str:
+    async def upload_bytes(
+        file_bytes: bytes, content_type: str, bucket: str = S3_BUCKET
+    ) -> str:
         """
         Uploads bytes to the specified S3 bucket and returns the S3 URI.
 
@@ -26,10 +31,11 @@ class S3Client:
             str: The S3 key of the uploaded file.
         """
         key = str(uuid.uuid4())
-        async with _client() as s3_client: # pyright: ignore
-            await s3_client.put_object(Bucket=bucket, Key=key, Body=file_bytes, ContentType=content_type)
+        async with S3Client._client() as s3_client:  # pyright: ignore
+            await s3_client.put_object(
+                Bucket=bucket, Key=key, Body=file_bytes, ContentType=content_type
+            )
         return key
-
 
     @staticmethod
     async def download_bytes(key: str, bucket: str = S3_BUCKET) -> bytes:
@@ -42,9 +48,9 @@ class S3Client:
         Returns:
             bytes: The downloaded file bytes.
         """
-        async with _client() as s3_client: # pyright: ignore
+        async with S3Client._client() as s3_client:  # pyright: ignore
             obj = await s3_client.get_object(Bucket=bucket, Key=key)
-            file_bytes = await obj['Body'].read()
+            file_bytes = await obj["Body"].read()
         return file_bytes
 
     @staticmethod
@@ -56,5 +62,5 @@ class S3Client:
             key (str): The S3 key of the file to delete.
             bucket (str): The S3 bucket to delete from. Defaults to S3_BUCKET.
         """
-        async with _client() as s3_client: # pyright: ignore
+        async with S3Client._client() as s3_client:  # pyright: ignore
             await s3_client.delete_object(Bucket=bucket, Key=key)

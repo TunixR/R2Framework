@@ -1,18 +1,18 @@
-import os
 import uuid
 
+import botocore.exceptions as bex
 import pytest
 import pytest_asyncio
-import botocore.exceptions as bex
 
-from settings import S3_URL, S3_BUCKET
-from s3.utils import upload_bytes, download_bytes, delete_object, _client
+from s3.utils import S3Client
+from settings import S3_BUCKET, S3_URL
+
 
 async def _ensure_bucket_exists() -> None:
     """
     Ensure the S3 bucket exists, creating it if necessary.
     """
-    async with _client() as s3c: # pyright: ignore
+    async with S3Client._client() as s3c:  # pyright: ignore
         try:
             await s3c.head_bucket(Bucket=S3_BUCKET)
         except bex.ClientError as e:
@@ -34,7 +34,7 @@ async def s3_ready():
       - Skips tests if S3 is not reachable.
     """
     try:
-        async with _client() as s3c: # pyright: ignore
+        async with S3Client._client() as s3c:  # pyright: ignore
             # Basic connectivity check
             await s3c.list_buckets()
     except Exception as e:
@@ -44,7 +44,9 @@ async def s3_ready():
     try:
         await _ensure_bucket_exists()
     except Exception as e:
-        pytest.skip(f"S3 integration tests skipped (cannot ensure bucket {S3_BUCKET}): {e}")
+        pytest.skip(
+            f"S3 integration tests skipped (cannot ensure bucket {S3_BUCKET}): {e}"
+        )
 
     yield
     # No teardown: leave bucket/objects management to tests and environment
@@ -56,14 +58,16 @@ async def test_upload_and_download_roundtrip():
     Upload bytes and download them back; assert roundtrip integrity.
     """
     payload = b"hello s3 integration!"
-    key = await upload_bytes(payload, content_type="text/plain", bucket=S3_BUCKET)
+    key = await S3Client.upload_bytes(
+        payload, content_type="text/plain", bucket=S3_BUCKET
+    )
 
     try:
-        downloaded = await download_bytes(key, bucket=S3_BUCKET)
+        downloaded = await S3Client.download_bytes(key, bucket=S3_BUCKET)
         assert downloaded == payload
     finally:
         # Cleanup regardless of assertion outcome
-        await delete_object(key, bucket=S3_BUCKET)
+        await S3Client.delete_object(key, bucket=S3_BUCKET)
 
 
 @pytest.mark.asyncio
@@ -72,14 +76,16 @@ async def test_delete_object_removes_key():
     Upload an object, delete it, then verify subsequent download fails.
     """
     payload = b"to be deleted"
-    key = await upload_bytes(payload, content_type="application/octet-stream", bucket=S3_BUCKET)
+    key = await S3Client.upload_bytes(
+        payload, content_type="application/octet-stream", bucket=S3_BUCKET
+    )
 
     # Delete the object
-    await delete_object(key, bucket=S3_BUCKET)
+    await S3Client.delete_object(key, bucket=S3_BUCKET)
 
     # Verify download now fails
     with pytest.raises(bex.ClientError) as excinfo:
-        await download_bytes(key, bucket=S3_BUCKET)
+        await S3Client.download_bytes(key, bucket=S3_BUCKET)
 
     # Be flexible across providers (AWS S3, MinIO, LocalStack, etc.)
     err_code = excinfo.value.response.get("Error", {}).get("Code", "")
@@ -94,7 +100,7 @@ async def test_download_nonexistent_raises():
     random_key = str(uuid.uuid4())
 
     with pytest.raises(bex.ClientError) as excinfo:
-        await download_bytes(random_key, bucket=S3_BUCKET)
+        await S3Client.download_bytes(random_key, bucket=S3_BUCKET)
 
     err_code = excinfo.value.response.get("Error", {}).get("Code", "")
     assert err_code in {"NoSuchKey", "404", "NotFound"}
