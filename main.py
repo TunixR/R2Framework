@@ -94,6 +94,11 @@ async def handle_robot_exception(websocket: WebSocket):
                 response = await agent(invocation_state=invocation_state, **data)
                 await websocket.send_json({"type": "done", "content": response})
                 await websocket.close()
+
+                success = response.get("success", False)
+                exception.infered_success = success
+                session.add(exception)
+                session.commit()
             except WebSocketDisconnect as _:
                 logging.info("WebSocket disconnected before completion.")
             except Exception as e:

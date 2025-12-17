@@ -350,7 +350,7 @@ class Agent(SQLModel, table=True):
 
     async def __call__(
         self, invocation_state: dict[str, Any] = {}, *args, **kwargs
-    ) -> str | Dict[str, Any]:
+    ) -> Dict[str, Any]:
         """
         Dinamically computes tools, subagents, output model and input validation. Calls the agent and returns the final structered response.
         """
@@ -403,10 +403,12 @@ class Agent(SQLModel, table=True):
 
         model = self.router.get_model()
 
+        hooks = [self.get_tool_limiter(), *self.get_logging_hooks(invocation_state)]
+
         strands_agent = StrandsAgent(
             model=model,
             tools=tools + sub_agent_tools,
-            hooks=[self.get_tool_limiter(), *self.get_logging_hooks(invocation_state)],
+            hooks=hooks,
             messages=messages,  # type: ignore This works fine
         )
 
@@ -433,6 +435,8 @@ class Agent(SQLModel, table=True):
             raise
         except Exception as e:
             raise
+        finally:
+            hooks[1].update_trace(finished=True)  # type: AgentLoggingHook
 
     def __init__(self, **data: Any) -> None:
         super().__init__(**data)

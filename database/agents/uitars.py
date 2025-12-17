@@ -866,3 +866,5 @@ Variables: {variables}
         raise
     except Exception as e:
         return [{"text": str(e)}]
+    finally:
+        hook.update_trace(finished=True)
