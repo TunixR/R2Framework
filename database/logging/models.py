@@ -1,10 +1,8 @@
 from datetime import datetime
 from typing import Dict
 from uuid import UUID, uuid4
-from s3 import S3Client
 
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import (
     Field,
     Relationship,
@@ -15,6 +13,7 @@ from sqlmodel import (
 
 from database.agents.models import Agent
 from database.tools.models import Tool
+from s3 import S3Client
 
 
 class AgentTrace(SQLModel, table=True):
@@ -206,17 +205,18 @@ class GUITrace(SQLModel, table=True):
         nullable=True,
     )
 
-    def __init__(self, screenshot_b: bytes, **data):
-        super().__init__(**data)
-        if not self.agent_trace:
-            raise ValueError("GUITrace must be associated with an AgentTrace.")
-
-        screenshot_key = asyncio.run_coroutine_threadsafe(S3Client.upload_bytes(
+    @staticmethod
+    async def create(screenshot_b: bytes, **data):
+        screenshot_key = await S3Client.upload_bytes(
             screenshot_b,
             content_type="image/png",
-        ), asyncio.EventLoop()).result()
+        )
+        return GUITrace(screenshot_key=screenshot_key, **data)
 
-        self.screenshot_key = screenshot_key
+    def __init__(self, **data):
+        super().__init__(**data)
+        if not self.agent_trace_id:
+            raise ValueError("GUITrace must be associated with an AgentTrace.")
 
 
 class ToolTrace(SQLModel, table=True):

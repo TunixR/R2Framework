@@ -258,11 +258,13 @@ class AgentLoggingHook(HookProvider):
             session.add(trace)
             session.commit()
 
-    def register_gui_trace(
+    async def register_gui_trace(
         self,
         action_type: str,
         action_content: Dict[str, Any],
         screenshot_bytes: bytes,
+        started_at: datetime,
+        finished_at: datetime,
         success: bool = True,
     ):
         if not self.is_gui_agent:
@@ -272,12 +274,14 @@ class AgentLoggingHook(HookProvider):
         from database.logging.models import GUITrace
 
         with Session(general_engine) as session:
-            gui_trace = GUITrace(
+            gui_trace = await GUITrace.create(
                 screenshot_b=screenshot_bytes,
                 agent_trace_id=self.agent_trace_id,
                 action_type=action_type,
                 action_content=action_content,
                 success=success,
+                created_at=started_at,
+                finished_at=finished_at,
             )
             session.add(gui_trace)
             session.commit()

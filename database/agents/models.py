@@ -431,7 +431,7 @@ class Agent(SQLModel, table=True):
             return response.model_dump()
         except WebSocketDisconnect as _:
             raise
-        except Exception as _:
+        except Exception as e:
             raise
 
     def __init__(self, **data: Any) -> None:

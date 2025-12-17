@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -146,26 +147,32 @@ def test_log_message_updates_trace_output_and_finished():
 # ---------------------------------------------------------------------------
 
 
-def test_register_gui_trace_raises_for_non_gui_agent():
+@pytest.mark.asyncio
+async def test_register_gui_trace_raises_for_non_gui_agent():
     hook = AgentLoggingHook(agent_id=uuid4(), invocation_state={}, is_gui_agent=False)
 
     with pytest.raises(RuntimeError):
-        hook.register_gui_trace(
+        await hook.register_gui_trace(
             action_type="click",
             action_content={"x": 10, "y": 20},
             screenshot_bytes=b"\x89PNG",
             success=True,
+            started_at=datetime.now(),
+            finished_at=datetime.now(),
         )
 
 
-def test_register_gui_trace_saves_gui_entry_when_gui_agent():
+@pytest.mark.asyncio
+async def test_register_gui_trace_saves_gui_entry_when_gui_agent():
     hook = AgentLoggingHook(agent_id=uuid4(), invocation_state={}, is_gui_agent=True)
 
-    hook.register_gui_trace(
+    await hook.register_gui_trace(
         action_type="click",
         action_content={"x": 10, "y": 20},
         screenshot_bytes=b"\x89PNG",
         success=True,
+        started_at=datetime.now(),
+        finished_at=datetime.now(),
     )
 
     gui_traces = [o for o in _STORE.values() if isinstance(o, GUITrace)]

@@ -46,11 +46,12 @@ Normalization:
 import ast
 import asyncio
 import math
-import uuid
 
 # Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
 # SPDX-License-Identifier: Apache-2.0
 import re
+import uuid
+from datetime import datetime
 from typing import List
 
 from fastapi import WebSocketDisconnect
@@ -58,7 +59,6 @@ from strands import Agent, ToolContext, tool
 from strands.models.openai import OpenAIModel
 
 from agent_tools.hooks import AgentLoggingHook
-
 from agent_tools.image import screenshot_bytes
 from config import Config
 from modules.uierror.prompts import (
@@ -754,7 +754,12 @@ Variables: {variables}
         model_id=PROVIDER_GROUNDING_MODEL,
     )
 
-    hook = AgentLoggingHook(agent_id=uuid.uuid4(), invocation_state=tool_context.invocation_state, parent_trace_id=tool_context.invocation_state.get("parent_trace_id", None), is_gui_agent=True)
+    hook = AgentLoggingHook(
+        agent_id=uuid.UUID("d3befb44-ade2-479d-b71c-b76fa0bddc1c"),  # Huge mega hack
+        invocation_state=tool_context.invocation_state,
+        parent_trace_id=tool_context.invocation_state.get("parent_trace_id", None),
+        is_gui_agent=True,
+    )
     agent = Agent(model=model, messages=messages, hooks=[hook])  # type: ignore
     try:
         response = await agent.invoke_async(
@@ -788,27 +793,33 @@ Variables: {variables}
                 if code == "DONE":
                     break
 
+                start_datetime = datetime.now()
                 await websocket.send_json(
                     {"type": "action", "content": action}
                 )  # Action will be parsed and executed by the client
                 # Wait for action result
                 result = await websocket.receive_json()
+                finish_datetime = datetime.now()
                 if not result.get("success"):
-                    hook.register_gui_trace(
+                    await hook.register_gui_trace(
                         action_type=action.get("action_type", "unknown"),
                         action_content=action.get("action_inputs", {}),
                         screenshot_bytes=image,
                         success=False,
+                        started_at=start_datetime,
+                        finished_at=finish_datetime,
                     )
                     raise RuntimeError(
                         f"Action execution failed on client side. With action: {action}"
                     )
 
-                hook.register_gui_trace(
+                await hook.register_gui_trace(
                     action_type=action.get("action_type", "unknown"),
                     action_content=action.get("action_inputs", {}),
                     screenshot_bytes=image,
                     success=True,
+                    started_at=start_datetime,
+                    finished_at=finish_datetime,
                 )
 
                 # Artificial delay to allow UI to update
