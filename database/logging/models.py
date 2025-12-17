@@ -1,13 +1,12 @@
-import asyncio
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict
 from uuid import UUID, uuid4
 from s3 import S3Client
 
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import (
     Field,
-    ForeignKey,
     Relationship,
     Session,
     SQLModel,
@@ -33,16 +32,11 @@ class AgentTrace(SQLModel, table=True):
     agent_id: UUID = Field(foreign_key="agent.id")
     agent: Agent = Relationship(back_populates="traces")
 
-    gui_trace_id: Optional[UUID] = Field(
-        ForeignKey("guitrace.id", ondelete="SET NULL", default=None),
-        nullable=True,
-    )
-    gui_trace: Optional["GUITrace"] = Relationship(
+    gui_traces: list["GUITrace"] = Relationship(
         back_populates="agent_trace",
         sa_relationship_kwargs={
             "lazy": "joined",
             "foreign_keys": "GUITrace.agent_trace_id",
-            "uselist": False,
             "single_parent": True,
         },
         cascade_delete=True,
@@ -184,7 +178,6 @@ class GUITrace(SQLModel, table=True):
         ondelete="CASCADE",
     )
     agent_trace: AgentTrace = Relationship(
-        back_populates="gui_trace",
         sa_relationship_kwargs={
             "lazy": "joined",
             "foreign_keys": "GUITrace.agent_trace_id",
@@ -205,11 +198,11 @@ class GUITrace(SQLModel, table=True):
 
     created_at: datetime = Field(
         default_factory=datetime.now,
-        description="Timestamp of when the trace was created.",
+        description="Timestamp of when the gui interaction was started.",
     )
     finished_at: datetime = Field(
         default=None,
-        description="Timestamp of when the trace was closed.",
+        description="Timestamp of when the gui interaction was finished.",
         nullable=True,
     )
 
