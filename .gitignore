@@ -14,3 +14,5 @@ wheels/
 .vscode
 strands.log
 migrations/versions/
+
+.coverage
