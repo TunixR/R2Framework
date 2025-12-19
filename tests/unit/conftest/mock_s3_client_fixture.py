@@ -1,9 +1,19 @@
 import pytest
 
 
-@pytest.fixture(autouse=False, scope="function")
-def fake_s3client_model(monkeypatch):
+@pytest.fixture(autouse=True)
+def mock_s3client_model(monkeypatch):
+    import database.logging.models as logging_models_mod
+    import s3 as s3_mod
     from s3 import utils as s3_utils
     from tests.unit.shared.mock_s3 import MockS3Client
 
     monkeypatch.setattr(s3_utils, "S3Client", MockS3Client, raising=True)
+    monkeypatch.setattr(s3_mod, "S3Client", MockS3Client, raising=True)
+    monkeypatch.setattr(logging_models_mod, "S3Client", MockS3Client, raising=True)
+
+    return {
+        "s3_utils": s3_utils,
+        "s3_mod": s3_mod,
+        "logging_models_mod": logging_models_mod,
+    }
