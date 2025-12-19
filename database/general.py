@@ -6,8 +6,6 @@ from sqlmodel import Session, SQLModel, create_engine
 import database.populators as populators
 from settings import POSTGRES_URL
 
-# from gateway.models import *  # Needed for SQLModel to recognize the models defined in gateway.models
-# from modules.models import *  # Needed for SQLModel to recognize the models defined in modules.models
 from .agents.models import *  # noqa: F403 Needed for SQLModel to recognize the models defined in agents.models
 from .auth.models import *  # noqa: F403 # Needed for SQLModel to recognize the models defined in auth.models
 from .logging.models import *  # noqa: F403 Needed for SQLModel to recognize the models defined in logging.models

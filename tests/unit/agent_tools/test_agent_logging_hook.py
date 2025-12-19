@@ -12,7 +12,9 @@ from tests.unit.agent_tools._shared.fakes import (
     is_bound_method_of,
 )
 
-from ..conftest.mock_s3_client_fixture import fake_s3client_model
+from ..conftest.mock_s3_client_fixture import (
+    mock_s3client_model,  # noqa: F401 We need to import this fixture for it to activate
+)
 from ..shared.mock_session import (  # noqa: F401 We need to import these fixtures for them to activate
     _STORE,
     clear_store,
@@ -164,7 +166,7 @@ async def test_register_gui_trace_raises_for_non_gui_agent():
 
 
 @pytest.mark.asyncio
-async def test_register_gui_trace_saves_gui_entry_when_gui_agent():
+async def test_register_gui_trace_saves_gui_entry_when_gui_agent(mock_s3client_model):
     hook = AgentLoggingHook(agent_id=uuid4(), invocation_state={}, is_gui_agent=True)
 
     await hook.register_gui_trace(

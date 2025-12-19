@@ -49,7 +49,6 @@ from database.provider.models import *  # noqa: F401,F403
 from database.tools.models import *  # noqa: F401,F403
 
 # Import all models so metadata is populated
-from gateway.models import *  # noqa: F401,F403
 from modules.models import *  # noqa: F401,F403
 
 # ---------------------------------------------------------------------------
