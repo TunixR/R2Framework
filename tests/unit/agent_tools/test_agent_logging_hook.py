@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 
@@ -12,6 +12,7 @@ from tests.unit.agent_tools._shared.fakes import (
     is_bound_method_of,
 )
 
+from ..conftest.mock_s3_client_fixture import fake_s3client_model
 from ..shared.mock_session import (  # noqa: F401 We need to import these fixtures for them to activate
     _STORE,
     clear_store,
