@@ -8,7 +8,8 @@ from settings import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, S3_BUCKET, S3_URL
 class S3Client:
     @staticmethod
     def _client():
-        return aioboto3.client(
+        session = aioboto3.Session()
+        return session.client(
             "s3",
             endpoint_url=S3_URL,
             aws_access_key_id=AWS_ACCESS_KEY_ID,
