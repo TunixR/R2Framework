@@ -1,63 +1,15 @@
 # Defines the data models for the gateway service
 
-from sqlmodel import SQLModel, Field, Relationship
+import uuid
+from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel
 from sqlalchemy import Column
 from sqlalchemy.dialects.postgresql import JSON
-from typing import Optional
-from datetime import datetime
+from sqlmodel import Field, SQLModel
+
 from gateway.enums import ExceptionType
-from agent_tools.links import ToolModuleLink
-import uuid
-from pydantic import BaseModel
-
-
-class Module(SQLModel, table=True):
-    """
-    Represents a error resolution module.
-    """
-
-    id: uuid.UUID = Field(
-        default_factory=uuid.uuid4,
-        description="Unique identifier for the module.",
-        primary_key=True,
-    )
-    timestamp: str = Field(
-        datetime.now(),
-        description="Timestamp of when the exception record was created.",
-    )
-    name: str = Field(..., description="Name of the module.")
-    description: str = Field(
-        ..., description="Description of the module, if available."
-    )
-    enabled: bool = Field(
-        True, description="Indicates whether the module is enabled or not."
-    )
-    routing_tool: str = Field(
-        ...,
-        description="The name of the tool used for routing exceptions to this module. This should be the name of a tool that is registered in the system.",
-    )
-    # restrictions: Optional[list[str]] = Field(None, description="List of restrictions for the module, if any. (eg. 'no access to UI')")
-    tools: list["Tool"] = Relationship(  # noqa
-        back_populates="modules",
-        sa_relationship_kwargs={"lazy": "joined"},
-        link_model=ToolModuleLink,
-    )
-
-    def to_json(self) -> dict:
-        """Convert the model to a dictionary structure."""
-        return {
-            "id": str(self.id),
-            "timestamp": self.timestamp,
-            "name": self.name,
-            "description": self.description,
-            "enabled": self.enabled,
-            "routing_tool": self.routing_tool,
-            "tools": [
-                str(tool.id) if hasattr(tool, "id") else tool for tool in self.tools
-            ]
-            if self.tools
-            else [],
-        }
 
 
 class RobotException(SQLModel, table=True):

@@ -73,25 +73,21 @@ class RecoveryPlannerReport(TemplateModel):
 
 
 class UiExceptionReport(TemplateModel):
-    reasoning: RecoveryReasoning = Field(
-        ...,
-        description="Reasoning captured during the exception handling workflow.",
-    )
-    steps: list[str] = Field(
-        ...,
-        description="Steps executed or proposed as part of the recovery.",
-    )
     result: str = Field(
         ...,
         description="Summary of the recovery execution result.",
     )
-    finish_activity: bool = Field(
+    finished_activity: bool = Field(
         ...,
-        description="Flag indicating whether the activity completed successfully.",
+        description="Flag indicating whether the task and all future activities were completed.",
     )
-    continue_from_step: int | None = Field(
-        None,
-        description="Index of the next step to resume if unfinished, otherwise null.",
+    success: bool = Field(
+        ...,
+        description="Indicates if the recovery was successful.",
+    )
+    continue_from_step: int = Field(
+        ...,
+        description="Index of the next step to resume if unfinished, otherwise -1.",
     )
 
 

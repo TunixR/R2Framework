@@ -1,0 +1,28 @@
+{
+  "routers": [
+    {
+      "model_name": "$PROVIDER_MODEL",
+      "api_key": "$FREE_PROVIDER_API_KEY",
+      "api_endpoint": "$PROVIDER_API_BASE",
+      "provider_type": "OPENAI"
+    },
+    {
+      "model_name": "$PROVIDER_VISION_MODEL",
+      "api_key": "$FREE_PROVIDER_API_KEY",
+      "api_endpoint": "$PROVIDER_API_BASE",
+      "provider_type": "OPENAI"
+    },
+    {
+      "model_name": "$PROVIDER_VISION_TOOL_MODEL",
+      "api_key": "$FREE_PROVIDER_API_KEY",
+      "api_endpoint": "$PROVIDER_API_BASE",
+      "provider_type": "OPENAI"
+    },
+    {
+      "model_name": "$PROVIDER_GROUNDING_MODEL",
+      "api_key": "$PROVIDER_API_KEY",
+      "api_endpoint": "$PROVIDER_API_BASE",
+      "provider_type": "OPENAI"
+    }
+  ]
+}

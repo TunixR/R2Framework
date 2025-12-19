@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+
 from pydantic import BaseModel, Field
 
 
@@ -21,7 +22,7 @@ class ResponseToRPA(TemplateModel):
     )
     continue_from_step: int | None = Field(
         ...,
-        description="The step number from which the RPA should continue its execution. Indexes future activities. If error or future activities have been executed, this should be None.",
+        description="The step number from which the RPA should continue its execution. PRIORITIZE THE STEP INDICATED BY THE CALLED RECOVERY PATH RESPONSE IF GIVEN. Indexes future activities. If error or future activities have been executed, this should be None.",
     )
 
 

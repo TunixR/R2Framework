@@ -1,15 +1,13 @@
-from fastapi import WebSocket
-from strands import ToolContext, tool
-import base64
-from PIL import Image
-import numpy as np
-from skimage.metrics import structural_similarity as ssim
-import cv2
-from io import BytesIO
-from pyautogui import screenshot
 import asyncio
-import json
+import base64
+from io import BytesIO
 
+import cv2
+import numpy as np
+from fastapi import WebSocket, WebSocketDisconnect
+from PIL import Image
+from skimage.metrics import structural_similarity as ssim
+from strands import ToolContext, tool
 
 IMAGE_SIMILARITY_THRESHOLD = 0.95  # Threshold for image similarity (0 to 1)
 
@@ -91,8 +89,10 @@ async def take_screenshot(tool_context: ToolContext) -> list:
                 }
             }
         ]
+    except WebSocketDisconnect as _:
+        raise
     except Exception as e:
-        return [{"text": f"Error taking screenshot: {str(e)}"}]
+        raise Exception(f"Error taking screenshot: {str(e)}")
 
 
 async def compare_images(
@@ -121,15 +121,17 @@ async def compare_images(
         # )
 
         # Compute SSIM between two images
-        ssim_index, _ = ssim(
+        ssim_index = ssim(
             before_image_cv2,
             after_image_cv2,
-            full=True,
+            full=False,
             multichannel=True,
-        )
+        )[0]
 
         return (ssim_index < IMAGE_SIMILARITY_THRESHOLD) == expected_change
 
+    except WebSocketDisconnect as _:
+        raise
     except Exception as _:
         raise ValueError(
             "Error comparing images. Use the take_screenshot() tool and judge the outcome yourself"
@@ -160,11 +162,13 @@ async def request_remote_screenshot(
         RuntimeError: For unexpected message formats or disconnections.
     """
 
-    await websocket.send_json({"type": "request_screenshot", "content": ""})
+    await websocket.send_json({"type": "screenshot", "content": ""})
 
     try:
         data = await asyncio.wait_for(websocket.receive_bytes(), timeout=timeout)
         return data
+    except WebSocketDisconnect as _:
+        raise
     except TimeoutError:
         raise TimeoutError("Timed out waiting for screenshot from client")
     except Exception as e:
@@ -184,7 +188,4 @@ async def screenshot_bytes(websocket: WebSocket) -> bytes:
     Usage:
         screenshot_data = await screenshot_bytes(websocket)
     """
-    buffer = BytesIO()
-    screenshot().save(buffer, format="JPEG")
-    return buffer.getvalue()
     return await request_remote_screenshot(websocket)

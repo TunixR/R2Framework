@@ -1,9 +1,8 @@
-from argparse import Action
-from sqlmodel import SQLModel, Field
-from typing import Optional
-from sqlalchemy import Column
-from datetime import datetime
 import uuid
+from datetime import datetime
+from typing import Optional
+
+from sqlmodel import Field, SQLModel
 
 
 class Execution(SQLModel, table=True):
