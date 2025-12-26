@@ -40,6 +40,9 @@ class MockSession:
     def get(self, model_class, id: UUID):
         return _STORE.get(id)
 
+    def refresh(self, obj: Any):
+        pass
+
 
 @pytest.fixture(autouse=True)
 def patched_dependencies(monkeypatch):
