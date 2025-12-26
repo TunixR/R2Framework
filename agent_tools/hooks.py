@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from sqlmodel import Session
 from strands.hooks import (
     AfterToolCallEvent,
-    BeforeInvocationEvent,
+    BeforeModelCallEvent,
     BeforeToolCallEvent,
     HookProvider,
     HookRegistry,
@@ -33,11 +33,11 @@ class LimitToolCounts(HookProvider):
 
     @override
     def register_hooks(self, registry: HookRegistry, **kwargs) -> None:
-        registry.add_callback(BeforeInvocationEvent, self.reset_counts)
+        registry.add_callback(BeforeModelCallEvent, self.reset_counts)
         registry.add_callback(BeforeToolCallEvent, self.intercept_tool)
         registry.add_callback(AfterToolCallEvent, self.intercept_response)
 
-    def reset_counts(self, event: BeforeInvocationEvent) -> None:
+    def reset_counts(self, event: BeforeModelCallEvent) -> None:
         with self._lock:
             self.tool_counts = {}
 
@@ -179,10 +179,10 @@ class AgentLoggingHook(HookProvider):
 
     @override
     def register_hooks(self, registry: HookRegistry, **kwargs) -> None:
-        registry.add_callback(BeforeInvocationEvent, self.log_start)
+        registry.add_callback(BeforeModelCallEvent, self.log_start)
         registry.add_callback(MessageAddedEvent, self.log_message)
 
-    def log_start(self, event: BeforeInvocationEvent) -> None:
+    def log_start(self, event: BeforeModelCallEvent) -> None:
         # Skip if already logged, can happen if multiple invocations are made
         if self.created:
             return

@@ -32,7 +32,7 @@ class Execution(SQLModel, table=True):
         description="ID of the module that executed the tool.",
     )
 
-    class Config:
+    class ConfigDict:
         arbitrary_types_allowed = True
 
     def to_json(self) -> dict:

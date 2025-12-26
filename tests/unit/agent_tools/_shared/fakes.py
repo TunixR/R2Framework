@@ -1,14 +1,15 @@
 import types
-from typing import Any, Callable, List, Tuple
+from typing import Any, Callable, List, Literal, Tuple
 
 from pydantic import BaseModel, ValidationError
 from strands.agent.agent import Agent
 from strands.hooks import (
     AfterToolCallEvent,
-    BeforeInvocationEvent,
+    BeforeModelCallEvent,
     BeforeToolCallEvent,
     MessageAddedEvent,
 )
+from strands.types.content import ContentBlock
 from strands.types.tools import ToolResult
 
 
@@ -28,7 +29,7 @@ class FakeRegistry:
         self.callbacks.append((event_type, callback))
 
 
-class FakeBeforeInvocationEvent(BeforeInvocationEvent):
+class FakeBeforeModelCallEvent(BeforeModelCallEvent):
     """Fake event used to trigger hooks for the invocation start."""
 
     def __init__(self):
@@ -78,7 +79,11 @@ class FakeMessageAddedEvent(MessageAddedEvent):
         message: dict with 'role' and 'content'
     """
 
-    def __init__(self, role: str = "assistant", content: list[dict] | None = None):
+    def __init__(
+        self,
+        role: Literal["user", "assistant"] = "assistant",
+        content: list[ContentBlock] | None = None,
+    ):
         self.message = {
             "role": role,
             "content": content or [],

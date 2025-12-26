@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 class TemplateModel(BaseModel):
     """Base model that provides consistent formatting helpers."""
 
-    class Config:
+    class ConfigDict:
         extra = "forbid"
 
     def __str__(self) -> str:  # pragma: no cover - simple serialization helper
