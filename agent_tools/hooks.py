@@ -237,21 +237,7 @@ class AgentLoggingHook(HookProvider):
                     f"AgentTrace with id {self.agent_trace_id} not found."
                 )
 
-            text: str = "\n".join(  # Fucking unreadable. Refer to tests to understand whats the expected input/output
-                map(
-                    lambda c: c.get("text", ""),
-                    chain.from_iterable(
-                        map(
-                            lambda c: c.get("content", []),
-                            filter(
-                                lambda m: m.get("role") == "assistant",
-                                self.messages,
-                            ),
-                        ),
-                    ),
-                )
-            )
-            trace.output = text
+            trace.messages = self.messages
             if finished:
                 trace.finished_at = datetime.now()
 

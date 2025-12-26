@@ -2,12 +2,14 @@ from datetime import datetime
 from typing import Dict
 from uuid import UUID, uuid4
 
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlmodel import (
+    Column,
     Field,
     Relationship,
     Session,
     SQLModel,
+    String,
     select,
 )
 
@@ -55,7 +57,11 @@ class AgentTrace(SQLModel, table=True):
         sa_type=JSONB,
     )
 
-    output: str | None = Field(default=None)
+    # Input and output messages exchanged with the LLM
+    # Each message is a dict with 'role' and 'content' keys
+    messages: list[dict[str, str]] | None = Field(
+        default=None, sa_column=Column(ARRAY(String()))
+    )
 
     tokens: int = Field(default=0)
 

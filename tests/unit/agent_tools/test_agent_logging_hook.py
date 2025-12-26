@@ -136,7 +136,7 @@ def test_log_message_updates_trace_output_and_finished():
     # Fetch and check AgentTrace after log_message calls
     trace: AgentTrace | None = _STORE.get(hook.agent_trace_id)  # type: ignore[assignment]
     assert isinstance(trace, AgentTrace)
-    assert trace.output == "Hello there"
+    assert len(trace.messages) == 2  # pyright:ignore[reportArgumentType]
 
     # Mark as finished
     hook.update_trace(finished=True)
