@@ -5,16 +5,15 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlmodel import (
-    Column,
     Field,
     Relationship,
     SQLModel,
-    String,
 )
 
 from database.agents.models import Agent
 from database.tools.models import Tool
 from s3 import S3Client
+from settings import POSTGRES_DB
 
 
 class AgentTrace(SQLModel, table=True):
@@ -58,9 +57,7 @@ class AgentTrace(SQLModel, table=True):
 
     # Input and output messages exchanged with the LLM
     # Each message is a dict with 'role' and 'content' keys
-    messages: list[dict[str, Any]] | None = Field(
-        default=None, sa_column=Column(ARRAY(String()))
-    )
+    messages: list[Dict[str, Any]] | None = Field(default=None, sa_type=JSONB)
 
     tokens: int = Field(default=0)
 
@@ -82,7 +79,7 @@ class AgentTrace(SQLModel, table=True):
 
     # TODO: Use agent router on creation to fetch model conversion rate from router
 
-    def get_makdown_log(
+    async def get_makdown_log(
         self, include_subtraces: bool = True, include_tool_traces: bool = True
     ) -> str:
         log = f"# Agent Trace: {self.id}\n"
@@ -107,13 +104,16 @@ class AgentTrace(SQLModel, table=True):
                     if "text" in part:
                         log_msg += f"{part['text']}\n"
                     elif "image" in part:
-                        image_b: bytes = (
-                            part["image"].get("source", {}).get("bytes", b"")
-                        )
-                        image_url = (
-                            f"data:image/png;base64,{b64encode(image_b).decode()}"
-                        )
-                        log_msg += f"![Image]({image_url})\n"
+                        image_uuid: str = part["image"].get("uuid", "")
+                        if image_uuid == "<uuid_pending>":
+                            log_msg += "_Image upload pending..._\n"
+                        else:
+                            image_b = await S3Client.download_bytes(image_uuid)
+                            if image_b:
+                                image_url = f"data:image/png;base64,{b64encode(image_b).decode()}"
+                                log_msg += f"![Image]({image_url})\n"
+                            else:
+                                log_msg += "_Image no longer available_\n"
                     else:  # Unknown dict format
                         log_msg += f"{part}\n"
                 timestamped_logs.append((msg.get("timestamp", datetime.now()), log_msg))
@@ -134,7 +134,7 @@ class AgentTrace(SQLModel, table=True):
             log_msg = f"\n### Sub-Agent Trace {i}:\n"
             if include_subtraces and self.sub_agents_traces:
                 log_msg += "BEGIN Sub-Agent Trace:\n"
-                log_msg += sub_trace.child_trace.get_makdown_log(
+                log_msg += await sub_trace.child_trace.get_makdown_log(
                     include_subtraces=include_subtraces,
                     include_tool_traces=include_tool_traces,
                 )

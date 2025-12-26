@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datetime import datetime
 from threading import Lock
 from typing import Any, Dict, override
@@ -214,11 +215,18 @@ class AgentLoggingHook(HookProvider):
     def log_message(self, event: MessageAddedEvent) -> None:
         message = {
             "role": event.message.get("role", "unknown"),
-            "content": event.message.get(
-                "content", []
-            ),  # Includes text, toolcalls, images, etc. # TODO: Figure out what to do with this
+            "content": deepcopy(
+                event.message.get("content", [])
+            ),  # Includes text, toolcalls, images, etc.
             "timestamp": datetime.now().isoformat(),
         }
+
+        for part in message["content"]:
+            if part.get("image", None):
+                part[
+                    "image"
+                ] = {}  # We reset the dict to remove the possibly large data
+                part["image"]["uuid"] = "<uuid_pending>"
 
         self.messages.append(message)
         self.update_trace()
@@ -268,3 +276,18 @@ class AgentLoggingHook(HookProvider):
             )
             session.add(gui_trace)
             session.commit()
+            session.refresh(gui_trace)
+
+            # This is a fucking hack if I've ever seen one
+            # We need to update the agent trace messages with images so that they contain the uuid of the image stored in S3
+            # However GUI traces are not saved until the message has been sent and processed by the agent. Thus, here we retrieve the last
+            # message with image and fill in the image_uuid previously missing
+            for msg in reversed(self.messages):
+                for part in msg["content"]:
+                    if (
+                        part.get("image", None)
+                        and part["image"].get("uuid", None) == "<uuid_pending>"
+                    ):
+                        part["image"]["uuid"] = str(gui_trace.screenshot_key)
+                        self.update_trace()
+                        return

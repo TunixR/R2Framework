@@ -5,6 +5,9 @@ import pytest
 from database.agents.models import Agent, AgentType
 from database.logging.models import AgentTrace, SubAgentTrace, ToolTrace
 from database.provider.models import Router
+from tests.unit.conftest.mock_s3_client_fixture import (
+    mock_s3client_model,  # noqa: F401 We need to import this fixture for it to activate
+)
 
 
 def make_router() -> Router:
@@ -91,11 +94,12 @@ def add_sub_trace(parent_trace, child_trace, monkeypatch):
     return sub
 
 
-def test_no_messages_returns_early_with_no_messages_section_only():
+@pytest.mark.asyncio
+async def test_no_messages_returns_early_with_no_messages_section_only():
     agent = make_agent()
     trace = make_agent_trace(agent, messages=None, inputs={"task": "T1"})
 
-    log = trace.get_makdown_log()
+    log = await trace.get_makdown_log()
 
     # Header basics
     assert f"# Agent Trace: {trace.id}" in log
@@ -115,14 +119,15 @@ def test_no_messages_returns_early_with_no_messages_section_only():
     assert "BEGIN Sub-Agent Trace" not in log
 
 
-def test_messages_are_rendered_in_log_after_bug_fix():
+@pytest.mark.asyncio
+async def test_messages_are_rendered_in_log_after_bug_fix():
     agent = make_agent()
     msgs = [
         {
             "role": "user",
             "content": [
                 {"text": "Hello world"},
-                {"image": {"source": {"bytes": b"\x89PNG"}}},
+                {"text": "How are you?"},
             ],
             "timestamp": datetime.now(),
         },
@@ -134,19 +139,17 @@ def test_messages_are_rendered_in_log_after_bug_fix():
     ]
     trace = make_agent_trace(agent, messages=msgs)
 
-    log = trace.get_makdown_log()
+    log = await trace.get_makdown_log()
 
     # Messages section is present
     assert "## Messages:" in log
 
     # User text appears
     assert "Hello world" in log
+    assert "How are you?" in log
 
     # Assistant text appears
     assert "Response from assistant" in log
-
-    # Image markdown is rendered
-    assert "![Image](data:image/png;base64," in log
 
 
 @pytest.mark.parametrize(
@@ -158,7 +161,8 @@ def test_messages_are_rendered_in_log_after_bug_fix():
         (False, False),
     ],
 )
-def test_flags_control_presence_of_tool_and_sub_sections(
+@pytest.mark.asyncio
+async def test_flags_control_presence_of_tool_and_sub_sections(
     include_sub, include_tools, monkeypatch
 ):
     agent = make_agent()
@@ -224,7 +228,7 @@ def test_flags_control_presence_of_tool_and_sub_sections(
     )
     add_sub_trace(child, grandchild, monkeypatch)
 
-    log = parent.get_makdown_log(
+    log = await parent.get_makdown_log(
         include_subtraces=include_sub,
         include_tool_traces=include_tools,
     )
