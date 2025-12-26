@@ -2,11 +2,10 @@
 # It also sets up the database connection and includes the necessary routers.
 import asyncio
 import logging
-from fastapi import FastAPI, WebSocket
-from scalar_fastapi import get_scalar_api_reference
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from scalar_fastapi import get_scalar_api_reference
 from sqlmodel import Session, select
 from strands.telemetry import StrandsTelemetry
 

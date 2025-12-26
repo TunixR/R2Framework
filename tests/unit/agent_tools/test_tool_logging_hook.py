@@ -1,8 +1,5 @@
-import sys
-from types import SimpleNamespace
 from uuid import UUID, uuid4
 
-import pytest
 from strands.types.tools import ToolResult
 
 from agent_tools.hooks import ToolLoggingHook
