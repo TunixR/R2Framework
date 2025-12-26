@@ -1,5 +1,6 @@
+from base64 import b64encode
 from datetime import datetime
-from typing import Dict
+from typing import Any, Dict, Tuple
 from uuid import UUID, uuid4
 
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
@@ -7,10 +8,8 @@ from sqlmodel import (
     Column,
     Field,
     Relationship,
-    Session,
     SQLModel,
     String,
-    select,
 )
 
 from database.agents.models import Agent
@@ -59,7 +58,7 @@ class AgentTrace(SQLModel, table=True):
 
     # Input and output messages exchanged with the LLM
     # Each message is a dict with 'role' and 'content' keys
-    messages: list[dict[str, str]] | None = Field(
+    messages: list[dict[str, Any]] | None = Field(
         default=None, sa_column=Column(ARRAY(String()))
     )
 
@@ -82,6 +81,71 @@ class AgentTrace(SQLModel, table=True):
         return float(self.tokens * self.conversion_rate) / 1_000_000.0
 
     # TODO: Use agent router on creation to fetch model conversion rate from router
+
+    def get_makdown_log(
+        self, include_subtraces: bool = True, include_tool_traces: bool = True
+    ) -> str:
+        log = f"# Agent Trace: {self.id}\n"
+        log += f"**Agent:** {self.agent.name} ({self.agent.id})\n\n"
+        log += f"**Created At:** {self.created_at}\n\n"
+        log += f"**Finished At:** {self.finished_at}\n\n"
+        log += f"**Tokens Used:** {self.tokens}\n\n"
+        log += f"**Cost:** ${self.cost:.6f}\n\n"
+        log += f"**Inputs:**\n```\n{self.inputs}\n```\n\n"
+        log += "## Messages:\n"
+
+        timestamped_logs: list[
+            Tuple[datetime, str]
+        ] = []  # We will use this to later sort messages by timestamp
+        # Sorry. Dict moment
+        if self.messages:
+            for i, msg in enumerate(self.messages):
+                log_msg = f"\n### Message {i}:\n"
+                log_msg += f"- **{msg.get('role', '').capitalize()}:** "
+                content = msg.get("content", [])
+                for part in content:
+                    if "text" in part:
+                        log_msg += f"{part['text']}\n"
+                    elif "image" in part:
+                        image_b: bytes = (
+                            part["image"].get("source", {}).get("bytes", b"")
+                        )
+                        image_url = (
+                            f"data:image/png;base64,{b64encode(image_b).decode()}"
+                        )
+                        log_msg += f"![Image]({image_url})\n"
+                    else:  # Unknown dict format
+                        log_msg += f"{part}\n"
+                timestamped_logs.append((msg.get("timestamp", datetime.now()), log_msg))
+        else:
+            log += "_No messages recorded._\n"
+            return log
+
+        for i, tool_trace in enumerate(self.tool_traces):
+            log_msg = f"\n### Tool Trace {i}:\n"
+            if include_tool_traces and self.tool_traces:
+                log_msg += f"- Tool: {tool_trace.tool.name} ({tool_trace.tool.id})\n"
+                log_msg += f"  - Input: {tool_trace.input}\n"
+                log_msg += f"  - Output: {tool_trace.output}\n"
+                log_msg += f"  - Success: {tool_trace.success}\n"
+            timestamped_logs.append((tool_trace.created_at, log_msg))
+
+        for i, sub_trace in enumerate(self.sub_agents_traces):
+            log_msg = f"\n### Sub-Agent Trace {i}:\n"
+            if include_subtraces and self.sub_agents_traces:
+                log_msg += "BEGIN Sub-Agent Trace:\n"
+                log_msg += sub_trace.child_trace.get_makdown_log(
+                    include_subtraces=include_subtraces,
+                    include_tool_traces=include_tool_traces,
+                )
+                log_msg += "END Sub-Agent Trace:\n"
+            timestamped_logs.append((sub_trace.child_trace.created_at, log_msg))
+
+        timestamped_logs.sort(key=lambda x: x[0])
+        for _, log_msg in timestamped_logs:
+            log += log_msg
+
+        return log
 
 
 class SubAgentTrace(SQLModel, table=True):
@@ -112,31 +176,10 @@ class SubAgentTrace(SQLModel, table=True):
         },
     )
 
-    def __init__(self, session: Session, **data):
+    def __init__(self, **data: object) -> None:
         super().__init__(**data)
         if self.parent_trace_id == self.child_trace_id:
-            raise ValueError("An trace cannot be a sub-trace of itself.")
-
-        if session.exec(
-            select(SubAgentTrace).where(
-                SubAgentTrace.child_trace_id == self.child_trace_id
-            )
-        ).first():
-            raise ValueError("One trace cannot have multiple parent traces.")
-        elif session.exec(
-            select(SubAgentTrace).where(
-                (SubAgentTrace.parent_trace_id == self.parent_trace_id)
-                & (SubAgentTrace.child_trace_id == self.child_trace_id)
-            )
-        ).first():
-            raise ValueError("This sub-trace relationship already exists.")
-        elif session.exec(
-            select(SubAgentTrace).where(
-                (SubAgentTrace.child_trace_id == self.parent_trace_id)
-                & (SubAgentTrace.parent_trace_id == self.child_trace_id)
-            )
-        ).first():
-            raise ValueError("Circular sub-trace relationships are not allowed.")
+            raise ValueError("A trace cannot be a sub-trace of itself.")
 
 
 class RobotException(SQLModel, table=True):

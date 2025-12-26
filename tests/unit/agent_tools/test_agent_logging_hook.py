@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -70,17 +69,6 @@ def test_log_start_creates_subagent_when_parent_id(monkeypatch):
     while the hook constructs it without engine. We monkeypatch the SubAgentTrace
     class in the models module to a lightweight version compatible with the hook.
     """
-    from database.logging import models as models_mod
-
-    class DummySubAgentTrace:
-        def __init__(self, session, **data: Any):
-            self.id = uuid4()
-            self.parent_trace_id = data.get("parent_trace_id")
-            self.child_trace_id = data.get("child_trace_id")
-
-    # Patch the SubAgentTrace class used by the hook to avoid __init__ using the session arg
-    monkeypatch.setattr(models_mod, "SubAgentTrace", DummySubAgentTrace, raising=True)
-
     parent_id = uuid4()
     hook = AgentLoggingHook(
         agent_id=uuid4(), invocation_state={"inputs": {}}, parent_trace_id=parent_id
