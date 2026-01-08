@@ -5,7 +5,7 @@ from pydantic import BaseModel, ValidationError
 from strands.agent.agent import Agent
 from strands.hooks import (
     AfterToolCallEvent,
-    BeforeModelCallEvent,
+    BeforeInvocationEvent,
     BeforeToolCallEvent,
     MessageAddedEvent,
 )
@@ -29,7 +29,7 @@ class FakeRegistry:
         self.callbacks.append((event_type, callback))
 
 
-class FakeBeforeModelCallEvent(BeforeModelCallEvent):
+class FakeBeforeInvocationEvent(BeforeInvocationEvent):
     """Fake event used to trigger hooks for the invocation start."""
 
     def __init__(self):

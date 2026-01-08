@@ -1,7 +1,7 @@
 from agent_tools.hooks import LimitToolCounts
 from tests.unit.agent_tools._shared.fakes import (
     FakeAfterToolCallEvent,
-    FakeBeforeModelCallEvent,
+    FakeBeforeInvocationEvent,
     FakeBeforeToolCallEvent,
     FakeRegistry,
     is_bound_method_of,
@@ -73,7 +73,7 @@ def test_reset_counts_clears_state():
     assert hooks.tool_counts.get("a", 0) == 1
 
     # Reset counts
-    hooks.reset_counts(FakeBeforeModelCallEvent())
+    hooks.reset_counts(FakeBeforeInvocationEvent())
     assert hooks.tool_counts == {}
 
 

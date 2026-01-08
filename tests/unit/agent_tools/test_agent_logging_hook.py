@@ -6,7 +6,7 @@ import pytest
 from agent_tools.hooks import AgentLoggingHook
 from database.logging.models import AgentTrace, GUITrace
 from tests.unit.agent_tools._shared.fakes import (
-    FakeBeforeModelCallEvent,
+    FakeBeforeInvocationEvent,
     FakeRegistry,
     is_bound_method_of,
 )
@@ -52,7 +52,7 @@ def test_log_start_creates_agent_trace():
     inputs = {"task": "do something"}
     hook = AgentLoggingHook(agent_id=agent_id, invocation_state={"inputs": inputs})
 
-    evt = FakeBeforeModelCallEvent()
+    evt = FakeBeforeInvocationEvent()
     hook.log_start(evt)
 
     # An AgentTrace must be stored with the generated agent_trace_id
@@ -74,7 +74,7 @@ def test_log_start_creates_subagent_when_parent_id(monkeypatch):
         agent_id=uuid4(), invocation_state={"inputs": {}}, parent_trace_id=parent_id
     )
 
-    evt = FakeBeforeModelCallEvent()
+    evt = FakeBeforeInvocationEvent()
     hook.log_start(evt)
 
     # AgentTrace is created
@@ -107,7 +107,7 @@ def test_log_message_updates_trace_output_and_finished():
     hook = AgentLoggingHook(agent_id=uuid4(), invocation_state={"inputs": {}})
 
     # First ensure the AgentTrace exists
-    hook.log_start(FakeBeforeModelCallEvent())
+    hook.log_start(FakeBeforeInvocationEvent())
 
     # Add assistant and user messages
     assistant_msg = {"role": "assistant", "content": [{"text": "Hello there"}]}
