@@ -791,6 +791,14 @@ Variables: {variables}
                 code = parsing_response_to_pyautogui_code(action, 1080, 1920)
 
                 if code == "DONE":
+                    await hook.register_gui_trace(
+                        action_type=action.get("action_type", "unknown"),
+                        action_content=action.get("action_inputs", {}),
+                        screenshot_bytes=image,
+                        success=True,
+                        started_at=datetime.now(),
+                        finished_at=datetime.now(),
+                    )
                     break
 
                 start_datetime = datetime.now()
