@@ -78,10 +78,6 @@ class LimitToolCounts(HookProvider):
 
 
 class ToolLoggingHook(HookProvider):
-    agent_trace_id: UUID
-    tools: dict[str, UUID]
-    trace_id: UUID
-
     def __init__(self, agent_trace_id: UUID, tools: dict[str, UUID]):
         """Initializes the ToolLoggingHook.
 
@@ -91,6 +87,7 @@ class ToolLoggingHook(HookProvider):
         """
         self.agent_trace_id = agent_trace_id
         self.tools = tools
+        self.trace_id: UUID
 
     @override
     def register_hooks(self, registry: HookRegistry, **kwargs) -> None:
@@ -147,14 +144,6 @@ class ToolLoggingHook(HookProvider):
 
 
 class AgentLoggingHook(HookProvider):
-    parent_trace_id: UUID | None
-    agent_id: UUID
-    agent_trace_id: UUID
-    invocation_state: dict
-    messages: list[dict] = []
-    is_gui_agent: bool = False
-    created: bool = False
-
     def __init__(
         self,
         agent_id: UUID,
@@ -177,6 +166,8 @@ class AgentLoggingHook(HookProvider):
         # We generate here the id for the agent trace so we can reference it outside
         self.agent_trace_id = uuid4()
         self.created = False
+        self.messages: list[dict] = []
+        self.created: bool = False
 
     @override
     def register_hooks(self, registry: HookRegistry, **kwargs) -> None:
