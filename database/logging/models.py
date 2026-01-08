@@ -1,3 +1,4 @@
+import json
 from base64 import b64encode
 from datetime import datetime
 from typing import Any, Dict, Tuple
@@ -88,7 +89,7 @@ class AgentTrace(SQLModel, table=True):
         log += f"**Finished At:** {self.finished_at}\n\n"
         log += f"**Tokens Used:** {self.tokens}\n\n"
         log += f"**Cost:** ${self.cost:.6f}\n\n"
-        log += f"**Inputs:**\n```\n{self.inputs}\n```\n\n"
+        log += f"**Inputs:**\n```\n{json.dumps(self.inputs)}\n```\n\n"
         log += "## Messages:\n"
 
         timestamped_logs: list[
@@ -116,7 +117,24 @@ class AgentTrace(SQLModel, table=True):
                                 log_msg += "_Image no longer available_\n"
                     else:  # Unknown dict format
                         log_msg += f"{part}\n"
-                timestamped_logs.append((msg.get("timestamp", datetime.now()), log_msg))
+                date = msg.get("timestamp", datetime.now())
+                if isinstance(date, str):
+                    timestamped_logs.append(
+                        (
+                            datetime.strptime(
+                                date.replace(" ", "T"),
+                                "%Y-%m-%dT%H:%M:%S.%f",
+                            ),
+                            log_msg,
+                        )
+                    )
+                else:
+                    timestamped_logs.append(
+                        (
+                            date,
+                            log_msg,
+                        )
+                    )
         else:
             log += "_No messages recorded._\n"
             return log
@@ -131,7 +149,7 @@ class AgentTrace(SQLModel, table=True):
             timestamped_logs.append((tool_trace.created_at, log_msg))
 
         for i, sub_trace in enumerate(self.sub_agents_traces):
-            log_msg = f"\n### Sub-Agent Trace {i}:\n"
+            log_msg = f"\n### Sub-Agent Trace: {sub_trace.child_trace.agent.name}:\n"
             if include_subtraces and self.sub_agents_traces:
                 log_msg += "BEGIN Sub-Agent Trace:\n"
                 log_msg += await sub_trace.child_trace.get_makdown_log(

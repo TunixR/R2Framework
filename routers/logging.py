@@ -15,6 +15,7 @@ router = APIRouter(prefix="/logging")
         404: {"description": "AgentTrace not found"},
         200: {"content": {"text/markdown": {}}},
     },
+    tags=["Logging"],
 )
 async def get_agent_trace_markdown(agent_trace_id: str):
     """
@@ -33,4 +34,4 @@ async def get_agent_trace_markdown(agent_trace_id: str):
             )
 
         markdown_log = await agent_trace.get_makdown_log()
-        return Response(content=markdown_log, media_type="text/markdown")
+        return Response(content=markdown_log, media_type="text/plain")
