@@ -2298,11 +2298,11 @@ wheels = [
 
 [[package]]
 name = "scalar-fastapi"
-version = "1.5.0"
+version = "1.6.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/b2/1a/4897819ef5682f40cce1f9b552a1e002d394bf7e12e5d6fe62f843ffef51/scalar_fastapi-1.5.0.tar.gz", hash = "sha256:5ae887fcc0db63305dc41dc39d61f7be183256085872aa33b294e0d48e29901e", size = 7447, upload-time = "2025-12-04T19:44:12.04Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4d/c5/bc6af52b86758420067e9ecfb8ee6b1f85191e61ca22cd54a7726574aee4/scalar_fastapi-1.6.0.tar.gz", hash = "sha256:3ddeb7c6733f97bbeddf05742594259ddcd01ee1468ee3c9724fb90b7e1d5eee", size = 7772, upload-time = "2026-01-07T20:11:26.848Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7a/cc/c0712ac83a31ae96785d9916d7be54595914aa93375ea5df3ba3eadab8af/scalar_fastapi-1.5.0-py3-none-any.whl", hash = "sha256:8e712599ccdfbb614bff5583fdbee1bef03e5fac1e06520287337ff232cb667a", size = 6828, upload-time = "2025-12-04T19:44:11.242Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/ba/2e4d8ef2a4fb999e96884694aa86180e228d78a0d27d89e771d65d8f5f5b/scalar_fastapi-1.6.0-py3-none-any.whl", hash = "sha256:dced90a726c0408aee96217b3aa30424fda0ab4cb2f476753f8592f8d73a9edf", size = 7129, upload-time = "2026-01-07T20:11:25.816Z" },
 ]
 
 [[package]]
