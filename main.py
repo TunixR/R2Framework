@@ -8,8 +8,12 @@ from scalar_fastapi import get_scalar_api_reference
 from strands.telemetry import StrandsTelemetry
 
 import database.general as database
+from routers.agents import router as agents_router
+from routers.auth import router as auth_router
 from routers.logging import router as logging_router
+from routers.provider import router as provider_router
 from routers.recovery import router as recovery_router
+from routers.tools import router as tools_router
 
 
 @asynccontextmanager
@@ -36,8 +40,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
 app.include_router(logging_router)
+
 app.include_router(recovery_router)
+app.include_router(agents_router)
+app.include_router(tools_router)
+app.include_router(provider_router)
+app.include_router(auth_router)
 
 
 @app.get("/scalar", include_in_schema=False)

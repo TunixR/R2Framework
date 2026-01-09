@@ -1,7 +1,9 @@
 import enum
 import uuid
 from datetime import datetime
+from typing import Tuple
 
+import requests
 from sqlmodel import Column, Enum, Field, Relationship, SQLModel
 from strands.models import Model
 from strands.models.openai import OpenAIModel
@@ -10,6 +12,7 @@ from strands.models.openai import OpenAIModel
 class Router(SQLModel, table=True):
     class Provider(str, enum.Enum):
         OPENAI = "openai"
+        OPENROUTER = "openrouter"
 
     id: uuid.UUID = Field(
         default_factory=uuid.uuid4,
@@ -53,7 +56,10 @@ class Router(SQLModel, table=True):
 
     def get_model(self) -> Model:
         """Return the model instance for the router."""
-        if self.provider_type == self.Provider.OPENAI:
+        if (
+            self.provider_type == self.Provider.OPENAI
+            or self.provider_type == self.Provider.OPENROUTER
+        ):
             return OpenAIModel(
                 client_args={
                     "api_key": self.api_key,
@@ -62,4 +68,41 @@ class Router(SQLModel, table=True):
                 model_id=self.model_name,
             )
 
-        raise ValueError(f"Unsupported provider type: {self.provider_type}")
+        raise NotImplementedError(
+            f"Router provider {self.provider_type} not yet implemented."
+        )
+
+    def get_rates(self) -> Tuple[float, float]:
+        """Return the token rates for the router model."""
+        if self.provider_type == self.Provider.OPENROUTER:
+            headers = {"Authorization": f"Bearer {self.api_key}"}
+            response = requests.get(
+                "https://openrouter.ai/api/v1/models", headers=headers
+            )
+
+            if response.status_code == 200:
+                models = response.json()["data"]
+                # Find specific model
+                for model in models:
+                    if model["id"] == self.model_name:
+                        pricing = model.get("pricing", {})
+                        prompt_cost = float(pricing.get("prompt", 0)) * 1_000_000
+                        completion_cost = (
+                            float(pricing.get("completion", 0)) * 1_000_000
+                        )
+
+                        return (prompt_cost, completion_cost)
+            return (-1.0, -1.0)
+
+        raise NotImplementedError(
+            f"Router provider {self.provider_type} not yet implemented."
+        )
+
+
+class RouterPublic(SQLModel):
+    id: uuid.UUID
+    model_name: str
+    api_endpoint: str
+    provider_type: Router.Provider
+    created_at: datetime
+    updated_at: datetime
