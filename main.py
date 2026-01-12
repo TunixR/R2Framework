@@ -34,8 +34,6 @@ async def lifespan(app: FastAPI):
         filemode="a",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-
-    await database.populate_db()
     yield
 
 
