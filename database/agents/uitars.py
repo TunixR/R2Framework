@@ -52,9 +52,11 @@ import math
 import re
 import uuid
 from datetime import datetime
+from io import BytesIO
 from typing import List
 
 from fastapi import WebSocketDisconnect
+from PIL import Image
 from strands import Agent, ToolContext, tool
 from strands.models.openai import OpenAIModel
 
@@ -728,6 +730,7 @@ Variables: {variables}
     )
     websocket = tool_context.invocation_state["websocket"]
     image = await screenshot_bytes(websocket)
+    image_size = Image.open(BytesIO(image)).size
 
     messages = [
         {
@@ -785,10 +788,12 @@ Variables: {variables}
             try:
                 action = parse_action_to_structure_output(
                     ui_tars_response,
-                    origin_resized_height=1080,
-                    origin_resized_width=1920,
+                    origin_resized_height=image_size[1],
+                    origin_resized_width=image_size[0],
                 )[0]
-                code = parsing_response_to_pyautogui_code(action, 1080, 1920)
+                code = parsing_response_to_pyautogui_code(
+                    action, image_size[1], image_size[0]
+                )
 
                 if code == "DONE":
                     await hook.register_gui_trace(
@@ -833,6 +838,7 @@ Variables: {variables}
                 # Artificial delay to allow UI to update
                 await asyncio.sleep(0.5)
                 image = await screenshot_bytes(websocket)
+                image_size = Image.open(BytesIO(image)).size
 
                 new_messages = [
                     {
