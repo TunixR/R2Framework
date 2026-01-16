@@ -4,19 +4,17 @@ from sqlmodel import (
     select,
 )
 
-from database.logging.models import SubAgentTrace
+from database.logging.models import GUITrace, SubAgentTrace
+from s3.utils import S3Client
 
 
 @event.listens_for(Session, "before_flush")
-def _validate_sub_agent_traces(
+def _validate_sub_agent_trace(
     session: Session,
     _,
     _2,
 ) -> None:
     for obj in session.new:
-        if not isinstance(obj, SubAgentTrace):
-            continue
-
         if obj.parent_trace_id == obj.child_trace_id:
             raise ValueError("A trace cannot be a sub-trace of itself.")
 
@@ -42,3 +40,9 @@ def _validate_sub_agent_traces(
             )
         ).first():
             raise ValueError("Circular sub-trace relationships are not allowed.")
+
+
+@event.listens_for(GUITrace, "before_delete")
+async def _cascade_delete_gui_trace_screenshot(_, _2, target: GUITrace):
+    if target.screenshot_key:
+        await S3Client.delete_object(target.screenshot_key)
