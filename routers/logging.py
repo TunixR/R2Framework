@@ -1,11 +1,15 @@
+import zipfile
+from io import BytesIO
 from typing import Sequence
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Response, status
+from fastapi.responses import StreamingResponse
 from sqlmodel import select
 
 from database.general import SessionDep
 from database.logging.models import AgentTrace, GUITrace, RobotException, ToolTrace
+from s3.utils import S3Client
 
 router = APIRouter(prefix="/logging", tags=["Logging"])
 
@@ -35,6 +39,92 @@ async def get_agent_trace_markdown(agent_trace_id: str, session: SessionDep):
 
     markdown_log = await agent_trace.get_makdown_log()
     return Response(content=markdown_log, media_type="text/plain")
+
+
+@router.get(
+    "/ui_log/",
+    description="Retrieve the UI log for a given robot exception ID, alongside screenshots",
+    summary="Get Robot Exception UI Log",
+    responses={
+        404: {"description": "RobotException not found"},
+        200: {"content": {"text/csv": {}}},
+    },
+)
+async def get_exception_ui_log(exception_id: str, session: SessionDep):
+    """
+    Retrieve the UI log for a given robot exception ID.
+    """
+    robot_exception = session.exec(
+        select(RobotException).where(RobotException.id == exception_id)
+    ).first()
+
+    if not robot_exception:
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"RobotException with ID {exception_id} not found.",
+        )
+    gui_traces = (
+        session.exec(
+            select(GUITrace)
+            .join(AgentTrace)
+            .where(AgentTrace.robot_exception_id == exception_id)
+            .where(GUITrace.success)
+        )
+        .unique()
+        .all()
+    )
+
+    ui_log = "timestamp,event_type,click_x,click_y,text,screenshot\n"
+    screenshots = []
+
+    for gui_trace in gui_traces:
+        timestamp = gui_trace.finished_at.isoformat() if gui_trace.finished_at else ""
+        event_type = gui_trace.action_type
+        click_x = ""
+        click_y = ""
+        text = gui_trace.action_content.get("content", "")
+        screenshot = f"{gui_trace.screenshot_key}.jpeg" or "not found"
+
+        screenshots.append(gui_trace.screenshot_key)
+
+        coords = gui_trace.action_content.get("start_box", [])
+        if coords:
+            # Relative coordinates [0,1]
+            click_x = str(coords[0])
+            click_y = str(coords[1])
+
+        # Special cases
+        if event_type.lower() == "scroll":
+            direction = gui_trace.action_content.get("direction", "")
+            event_type = f"scroll_{direction}"
+
+        # Two events: start and end
+        elif event_type.lower() == "drag" or event_type.lower() == "select":
+            ui_log += f"{timestamp},{event_type}_start,{click_x},{click_y},{text},{screenshot}\n"
+            end_coords = gui_trace.action_content.get("end_box", [])
+            if end_coords:
+                click_x = str(end_coords[0])
+                click_y = str(end_coords[1])
+            ui_log += f"{timestamp},{event_type}_end,{click_x},{click_y},{text},{screenshot}\n"
+            continue
+
+        elif event_type.lower() == "wait" or event_type.lower() == "finish":
+            continue
+
+        ui_log += f"{timestamp},{event_type},{click_x},{click_y},{text},{screenshot}\n"
+
+    screenshots = await S3Client.bulk_download_bytes(screenshots)
+
+    # Construct zip file in memory
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
+        zipf.writestr("ui_log.csv", data=ui_log)
+        # Create screenshot folder
+        zipf.mkdir("screenshots")
+        for key, img_bytes in screenshots.items():
+            zipf.writestr(f"screenshots/{key}.jpeg", data=img_bytes)
+
+    return StreamingResponse(iter([buffer.getvalue()]), media_type="application/zip")
 
 
 @router.get(
