@@ -104,3 +104,62 @@ async def test_download_nonexistent_raises():
 
     err_code = excinfo.value.response.get("Error", {}).get("Code", "")
     assert err_code in {"NoSuchKey", "404", "NotFound"}
+
+
+@pytest.mark.asyncio
+async def test_bulk_download_bytes_roundtrip_multiple_keys():
+    """
+    Upload multiple objects and bulk download them; assert mapping and contents.
+    """
+    payloads = {
+        "text1": b"bulk 1",
+        "text2": b"bulk 2",
+        "text3": b"bulk 3",
+    }
+
+    keys: list[str] = []
+    try:
+        # Upload three objects
+        for name, data in payloads.items():
+            key = await S3Client.upload_bytes(
+                data, content_type="application/octet-stream", bucket=S3_BUCKET
+            )
+            keys.append(key)
+
+        # Bulk download
+        downloaded_map = await S3Client.bulk_download_bytes(keys, bucket=S3_BUCKET)
+
+        # Verify we got all keys and contents match
+        assert set(downloaded_map.keys()) == set(keys)
+        for i, key in enumerate(keys, start=1):
+            assert downloaded_map[key] == payloads[f"text{i}"]
+    finally:
+        # Cleanup all uploaded objects
+        for key in keys:
+            await S3Client.delete_object(key, bucket=S3_BUCKET)
+
+
+@pytest.mark.asyncio
+async def test_bulk_delete_objects_removes_multiple_keys():
+    """
+    Upload multiple objects, bulk delete them, then verify each is gone.
+    """
+    payloads = [b"del 1", b"del 2", b"del 3"]
+    keys: list[str] = []
+
+    # Upload three objects
+    for data in payloads:
+        key = await S3Client.upload_bytes(
+            data, content_type="application/octet-stream", bucket=S3_BUCKET
+        )
+        keys.append(key)
+
+    # Bulk delete
+    await S3Client.bulk_delete_objects(keys, bucket=S3_BUCKET)
+
+    # Verify each download now fails
+    for key in keys:
+        with pytest.raises(bex.ClientError) as excinfo:
+            await S3Client.download_bytes(key, bucket=S3_BUCKET)
+        err_code = excinfo.value.response.get("Error", {}).get("Code", "")
+        assert err_code in {"NoSuchKey", "404", "NotFound"}

@@ -55,6 +55,27 @@ class S3Client:
         return file_bytes
 
     @staticmethod
+    async def bulk_download_bytes(
+        keys: list[str], bucket: str = S3_BUCKET
+    ) -> dict[str, bytes]:
+        """
+        Downloads multiple files from the specified S3 bucket using the given keys.
+
+        Args:
+            keys (list[str]): The S3 keys of the files to download.
+            bucket (str): The S3 bucket to download from. Defaults to S3_BUCKET.
+        Returns:
+            dict[str, bytes]: A dictionary mapping S3 keys to their downloaded file bytes.
+        """
+        result = {}
+        async with S3Client._client() as s3_client:  # pyright: ignore
+            for key in keys:
+                obj = await s3_client.get_object(Bucket=bucket, Key=key)
+                file_bytes = await obj["Body"].read()
+                result[key] = file_bytes
+        return result
+
+    @staticmethod
     async def delete_object(key: str, bucket: str = S3_BUCKET) -> None:
         """
         Deletes an object from the specified S3 bucket using the given key.
@@ -65,3 +86,16 @@ class S3Client:
         """
         async with S3Client._client() as s3_client:  # pyright: ignore
             await s3_client.delete_object(Bucket=bucket, Key=key)
+
+    @staticmethod
+    async def bulk_delete_objects(keys: list[str], bucket: str = S3_BUCKET) -> None:
+        """
+        Deletes multiple objects from the specified S3 bucket using the given keys.
+
+        Args:
+            keys (list[str]): The S3 keys of the files to delete.
+            bucket (str): The S3 bucket to delete from. Defaults to S3_BUCKET.
+        """
+        objects = [{"Key": key} for key in keys]
+        async with S3Client._client() as s3_client:  # pyright: ignore
+            await s3_client.delete_objects(Bucket=bucket, Delete={"Objects": objects})
