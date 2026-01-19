@@ -111,7 +111,7 @@ class AgentTrace(SQLModel, table=True):
                         else:
                             image_b = await S3Client.download_bytes(image_uuid)
                             if image_b:
-                                image_url = f"data:image/png;base64,{b64encode(image_b).decode()}"
+                                image_url = f"data:image/jpeg;base64,{b64encode(image_b).decode()}"
                                 log_msg += f"![Image]({image_url})\n"
                             else:
                                 log_msg += "_Image no longer available_\n"
@@ -276,7 +276,7 @@ class GUITrace(SQLModel, table=True):
     async def create(screenshot_b: bytes, **data):
         screenshot_key = await S3Client.upload_bytes(
             screenshot_b,
-            content_type="image/png",
+            content_type="image/jpeg",
         )
         return GUITrace(screenshot_key=screenshot_key, **data)
 
