@@ -116,9 +116,8 @@ Your role is to analyze the current state, understand what went wrong, create, a
 You will be given:
 1. The previous successful actions performed by the robot
 2. The action that was expected to be performed but failed (failedActivity, pay special attention to this)
-3. The current screenshot of the application
-4. Information about the overall process
-5. A list of variables used in the process, including the ones that may have already been used. If you need to use them, include their values in the plan.
+3. Information about the overall process
+4. A list of variables used in the process, including the ones that may have already been used. If you need to use them, include their values in the plan.
 
 Follow these guidelines:
 {
