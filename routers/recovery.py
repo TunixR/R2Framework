@@ -48,16 +48,16 @@ async def handle_robot_exception(websocket: WebSocket):
                 await websocket.close()
                 return
 
-            exception = RobotException(exception_details=data)
-            session.add(exception)
-            session.commit()
-            session.refresh(exception)
-
-            invocation_state = {
-                "websocket": websocket,
-                "robot_exception_id": exception.id,
-            }
             try:
+                exception = RobotException(exception_details=data)
+                session.add(exception)
+                session.commit()
+                session.refresh(exception)
+
+                invocation_state = {
+                    "websocket": websocket,
+                    "robot_exception_id": exception.id,
+                }
                 response = await agent(invocation_state=invocation_state, **data)
                 await websocket.send_json({"type": "done", "content": response})
                 await websocket.close()
