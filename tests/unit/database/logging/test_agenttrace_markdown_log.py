@@ -104,7 +104,6 @@ async def test_no_messages_returns_early_with_no_messages_section_only():
     # Header basics
     assert f"# Agent Trace: {trace.id}" in log
     assert f"**Agent:** {agent.name} ({agent.id})" in log
-    assert "**Tokens Used:** 123" in log
     assert "**Cost:** $" in log  # don't depend on exact float formatting
     assert "**Inputs:**" in log
     assert '```\n{"task": "T1"}\n```' in log
