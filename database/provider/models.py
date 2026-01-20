@@ -73,7 +73,7 @@ class Router(SQLModel, table=True):
         )
 
     def get_rates(self) -> Tuple[float, float]:
-        """Return the token rates for the router model."""
+        """Return the token rates for the router model. Per token"""
         if self.provider_type == self.Provider.OPENROUTER:
             headers = {"Authorization": f"Bearer {self.api_key}"}
             response = requests.get(
@@ -97,6 +97,15 @@ class Router(SQLModel, table=True):
         raise NotImplementedError(
             f"Router provider {self.provider_type} not yet implemented."
         )
+
+    def get_conversation_cost(self, input_tokens: int, output_tokens: int) -> float:
+        """Calculate the cost of a conversation based on input and output tokens."""
+        prompt_rate, completion_rate = self.get_rates()
+        if prompt_rate < 0 or completion_rate < 0:
+            return -1.0  # Unknown cost
+
+        total_cost = (input_tokens * prompt_rate) + (output_tokens * completion_rate)
+        return total_cost
 
 
 class RouterPublic(SQLModel):

@@ -60,9 +60,7 @@ class AgentTrace(SQLModel, table=True):
     # Each message is a dict with 'role' and 'content' keys
     messages: list[Dict[str, Any]] | None = Field(default=None, sa_type=JSONB)
 
-    tokens: int = Field(default=0)
-
-    conversion_rate: int = Field(default=0)  # cost per 1M tokens in cents
+    cost: float = Field(default=0.0)
 
     created_at: datetime = Field(
         default_factory=datetime.now,
@@ -74,12 +72,6 @@ class AgentTrace(SQLModel, table=True):
         nullable=True,
     )
 
-    @property
-    def cost(self) -> float:
-        return float(self.tokens * self.conversion_rate) / 1_000_000.0
-
-    # TODO: Use agent router on creation to fetch model conversion rate from router
-
     async def get_makdown_log(
         self, include_subtraces: bool = True, include_tool_traces: bool = True
     ) -> str:
@@ -87,7 +79,6 @@ class AgentTrace(SQLModel, table=True):
         log += f"**Agent:** {self.agent.name} ({self.agent.id})\n\n"
         log += f"**Created At:** {self.created_at}\n\n"
         log += f"**Finished At:** {self.finished_at}\n\n"
-        log += f"**Tokens Used:** {self.tokens}\n\n"
         log += f"**Cost:** ${self.cost:.6f}\n\n"
         log += f"**Inputs:**\n```\n{json.dumps(self.inputs)}\n```\n\n"
         log += "## Messages:\n"

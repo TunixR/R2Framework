@@ -222,7 +222,7 @@ class AgentLoggingHook(HookProvider):
         self.messages.append(message)
         self.update_trace()
 
-    def update_trace(self, finished: bool = False):
+    def update_trace(self, finished: bool = False, cost: float = 0.0):
         from database.general import general_engine
         from database.logging.models import AgentTrace
 
@@ -236,6 +236,7 @@ class AgentLoggingHook(HookProvider):
             trace.messages = self.messages
             if finished:
                 trace.finished_at = datetime.now()
+                trace.cost = cost
 
             session.add(trace)
             session.commit()

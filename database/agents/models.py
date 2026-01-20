@@ -412,15 +412,21 @@ class Agent(SQLModel, table=True):
             messages=messages,  # type: ignore This works fine
         )
 
+        input_tokens = 0
+        output_tokens = 0
+
         try:
             instruction = "\n".join(
                 [f"{arg.name}: {kwargs.get(arg.name)}" for arg in self.arguments]
             )
 
-            _ = await strands_agent.invoke_async(
+            mid = await strands_agent.invoke_async(
                 instruction,
                 invocation_state=invocation_state,
             )
+
+            input_tokens = mid.metrics.accumulated_usage.get("inputTokens", 0)
+            output_tokens = mid.metrics.accumulated_usage.get("outputTokens", 0)
 
             response: BaseModel = (
                 await strands_agent.invoke_async(
@@ -430,13 +436,17 @@ class Agent(SQLModel, table=True):
                 )
             ).structured_output
 
+            input_tokens = mid.metrics.accumulated_usage.get("inputTokens", 0)
+            output_tokens = mid.metrics.accumulated_usage.get("outputTokens", 0)
+
             return response.model_dump()
         except WebSocketDisconnect as _:
             raise
         except Exception as e:
             raise
         finally:
-            hooks[1].update_trace(finished=True)  # type: AgentLoggingHook
+            cost = self.router.get_conversation_cost(input_tokens, output_tokens)
+            hooks[1].update_trace(finished=True, cost=cost)  # type: AgentLoggingHook
 
     def __init__(self, **data: Any) -> None:
         super().__init__(**data)
