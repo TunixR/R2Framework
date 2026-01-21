@@ -85,6 +85,18 @@ services:
     depends_on:
       - swfs-s3
 
+  otel-collector:
+    image: otel/opentelemetry-collector
+    volumes:
+      - ./otel/otel-collector-config.yaml:/etc/otelcol/config.yaml
+    ports:
+      - 1888:1888 # pprof extension
+      - 8898:8888 # Prometheus metrics exposed by the Collector
+      - 8889:8889 # Prometheus exporter metrics
+      - 4317:4317 # OTLP gRPC receiver
+      - 4318:4318 # OTLP http receiver
+      - 55679:55679 # zprges extension
+
 volumes:
   db-data:
   pgadmin-data:

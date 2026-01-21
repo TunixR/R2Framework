@@ -8,6 +8,7 @@ scrape_configs:
     static_configs:
       - targets:
           - "prometheus:9090"
+          - "otel-collector:8889"
           - "swfs-master:9324"
           - "swfs-volume:9325"
           - "swfs-filer:9326"
