@@ -4,10 +4,10 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from scalar_fastapi import get_scalar_api_reference
 from strands.telemetry import StrandsTelemetry
 
-import database.general as database
 from routers.agents import router as agents_router
 from routers.auth import router as auth_router
 from routers.logging import router as logging_router
@@ -38,6 +38,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+FastAPIInstrumentor.instrument_app(app)
 
 app.include_router(logging_router)
 
