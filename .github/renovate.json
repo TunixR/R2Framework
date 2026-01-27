@@ -1,0 +1,30 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "lockFileMaintenance": {
+    "enabled": true
+  },
+  "extends": ["config:recommended", "mergeConfidence:age-confidence-badges"],
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["major"],
+      "groupName": "all major dependencies"
+    },
+    {
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "all minor / patch dependencies"
+    }
+  ],
+  "prHourlyLimit": 0,
+  "prConcurrentLimit": 0,
+  "labels": ["📦 Dependencies"],
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "groupName": "vulnerable",
+    "labels": ["🔒 Security", "📦 Dependencies"]
+  },
+  "rebaseWhen": "behind-base-branch",
+  "rangeStrategy": "pin",
+  "assignees": ["TunixR"],
+  "reviewers": ["TunixR"]
+}
