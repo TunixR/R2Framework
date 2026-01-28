@@ -4,7 +4,7 @@
 repos:
   # Ruff - Fast Python linter and formatter
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.2
+    rev: v0.14.14
     hooks:
       # Run Ruff linter to check for errors
       - id: ruff
@@ -18,7 +18,7 @@ repos:
 
   # Bandit - Security linter for Python
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.8.1
+    rev: 1.9.3
     hooks:
       - id: bandit
         name: bandit (security check)
@@ -33,7 +33,7 @@ repos:
         name: basedpyright (type checking)
         entry: bash -c 'uv run basedpyright'
         language: system
-        pass_filenames: true
+        pass_filenames: false
         types: [python]
         stages: [pre-commit]
       

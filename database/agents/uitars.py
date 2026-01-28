@@ -769,8 +769,6 @@ Variables: {variables}
         response = await agent.invoke_async(
             ""
         )  # Empty input since all context is in messages
-        _ = response.metrics.accumulated_usage.get("inputTokens", 0)
-        _ = response.metrics.accumulated_usage.get("outputTokens", 0)
 
         iteration = 0
 
@@ -861,8 +859,6 @@ Variables: {variables}
                 response = await agent.invoke_async(
                     new_messages  # type: ignore
                 )
-                _ = response.metrics.accumulated_usage.get("inputTokens", 0)
-                _ = response.metrics.accumulated_usage.get("outputTokens", 0)
             except WebSocketDisconnect as _:
                 raise
             except RuntimeError as _:

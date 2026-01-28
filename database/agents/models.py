@@ -442,7 +442,7 @@ class Agent(SQLModel, table=True):
             return response.model_dump()
         except WebSocketDisconnect as _:
             raise
-        except Exception as e:
+        except Exception:
             raise
         finally:
             cost = self.router.get_conversation_cost(input_tokens, output_tokens)
