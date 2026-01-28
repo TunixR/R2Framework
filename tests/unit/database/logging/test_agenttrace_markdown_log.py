@@ -38,7 +38,6 @@ def make_agent_trace(
     *,
     inputs: dict | None = None,
     messages: list[dict] | None = None,
-    tokens: int = 123,
     created_at: datetime | None = None,
     finished_at: datetime | None = None,
 ) -> AgentTrace:
@@ -48,7 +47,6 @@ def make_agent_trace(
         agent=agent,
         inputs=inputs or {"task": "do something"},
         messages=messages,
-        tokens=tokens,
         created_at=created_at or now,
         finished_at=finished_at or now,
     )

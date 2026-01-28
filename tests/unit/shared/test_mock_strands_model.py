@@ -223,7 +223,7 @@ async def test_stream_handles_tool_deltas():
                                 name="toolA", arguments='{"param": "value2"}'
                             ),
                             type="function",
-                        )
+                        ),
                     ],
                 ),
                 finish_reason=None,
@@ -254,8 +254,7 @@ async def test_stream_handles_tool_deltas():
     )
     assert (
         "contentBlockStart" in collected[3]
-        and collected[3]["contentBlockStart"]["start"]["toolUse"]["name"]
-        == "toolA"
+        and collected[3]["contentBlockStart"]["start"]["toolUse"]["name"] == "toolA"
     )
     assert (
         "contentBlockDelta" in collected[4]
@@ -265,8 +264,7 @@ async def test_stream_handles_tool_deltas():
     assert "contentBlockStop" in collected[5]
     assert (
         "contentBlockStart" in collected[6]
-        and collected[6]["contentBlockStart"]["start"]["toolUse"]["name"]
-        == "toolA"
+        and collected[6]["contentBlockStart"]["start"]["toolUse"]["name"] == "toolA"
     )
     assert (
         "contentBlockDelta" in collected[7]
@@ -275,7 +273,8 @@ async def test_stream_handles_tool_deltas():
     )
     assert "contentBlockStop" in collected[5]
     assert (
-        "messageStop" in collected[9] and collected[9]["messageStop"]["stopReason"] == "end_turn"
+        "messageStop" in collected[9]
+        and collected[9]["messageStop"]["stopReason"] == "end_turn"
     )
 
 

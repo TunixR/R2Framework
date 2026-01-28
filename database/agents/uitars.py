@@ -765,14 +765,10 @@ Variables: {variables}
     )
     agent = Agent(model=model, messages=messages, hooks=[hook])  # type: ignore
 
-    input_tokens = 0
-    output_tokens = 0
     try:
         response = await agent.invoke_async(
             ""
         )  # Empty input since all context is in messages
-        input_tokens = response.metrics.accumulated_usage.get("inputTokens", 0)
-        output_tokens = response.metrics.accumulated_usage.get("outputTokens", 0)
 
         iteration = 0
 
@@ -862,10 +858,6 @@ Variables: {variables}
 
                 response = await agent.invoke_async(
                     new_messages  # type: ignore
-                )
-                input_tokens = response.metrics.accumulated_usage.get("inputTokens", 0)
-                output_tokens = response.metrics.accumulated_usage.get(
-                    "outputTokens", 0
                 )
             except WebSocketDisconnect as _:
                 raise

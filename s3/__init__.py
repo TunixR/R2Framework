@@ -1,1 +1,1 @@
-from .utils import S3Client
+from .utils import S3Client as S3Client

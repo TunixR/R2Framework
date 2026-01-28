@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Dict, Tuple
 from uuid import UUID, uuid4
 
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import (
     Field,
     Relationship,
@@ -14,7 +14,6 @@ from sqlmodel import (
 from database.agents.models import Agent
 from database.tools.models import Tool
 from s3 import S3Client
-from settings import POSTGRES_DB
 
 
 class AgentTrace(SQLModel, table=True):

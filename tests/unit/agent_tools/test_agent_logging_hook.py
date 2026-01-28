@@ -154,7 +154,7 @@ async def test_register_gui_trace_raises_for_non_gui_agent():
 
 
 @pytest.mark.asyncio
-async def test_register_gui_trace_saves_gui_entry_when_gui_agent(mock_s3client_model):
+async def test_register_gui_trace_saves_gui_entry_when_gui_agent():
     hook = AgentLoggingHook(agent_id=uuid4(), invocation_state={}, is_gui_agent=True)
 
     await hook.register_gui_trace(
