@@ -39,6 +39,7 @@ import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from database.agents.models import *  # noqa: F401,F403
+from database.agents.models import Agent  # Explicit import for type hints
 from database.auth.models import *  # noqa: F401,F403
 from database.populators.agents import populate_agents
 from database.populators.routers import populate_routers
@@ -47,6 +48,7 @@ from database.populators.routers import populate_routers
 from database.populators.tools import populate_tools
 from database.provider.models import *  # noqa: F401,F403
 from database.tools.models import *  # noqa: F401,F403
+from database.tools.models import Tool  # Explicit import for type hints
 
 # Import all models so metadata is populated
 from modules.models import *  # noqa: F401,F403
