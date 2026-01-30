@@ -28,7 +28,7 @@ async def populate_db():
     for populator in populators.__all__:
         populator_func = getattr(populators, populator)
         if callable(populator_func):
-            populator_func(general_engine)
+            _ = populator_func(general_engine)
 
 
 async def drop_db_and_tables():

@@ -1,4 +1,5 @@
-from typing import Any, Dict, Sequence
+from collections.abc import Sequence
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
@@ -32,7 +33,7 @@ def get_agent(agent_id: UUID, session: SessionDep) -> Agent:
     status_code=status.HTTP_201_CREATED,
     summary="Create agent",
 )
-def create_agent(payload: Dict[str, Any], session: SessionDep) -> Agent:
+def create_agent(payload: dict[str, Any], session: SessionDep) -> Agent:
     try:
         agent = Agent(**payload)
     except Exception as e:
@@ -55,7 +56,7 @@ def create_agent(payload: Dict[str, Any], session: SessionDep) -> Agent:
 
 
 @router.patch("/{agent_id}", response_model=Agent, summary="Update agent")
-def update_agent(agent_id: UUID, payload: Dict[str, Any], session: SessionDep) -> Agent:
+def update_agent(agent_id: UUID, payload: dict[str, Any], session: SessionDep) -> Agent:
     agent = session.get(Agent, agent_id)
     if not agent:
         raise HTTPException(

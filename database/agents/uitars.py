@@ -53,12 +53,13 @@ import re
 import uuid
 from datetime import datetime
 from io import BytesIO
-from typing import List
+from typing import Any
 
 from fastapi import WebSocketDisconnect
 from PIL import Image
 from strands import Agent, ToolContext, tool
 from strands.models.openai import OpenAIModel
+from strands.types.content import ContentBlock, Messages
 
 from agent_tools.hooks import AgentLoggingHook
 from agent_tools.image import screenshot_bytes
@@ -225,7 +226,7 @@ def parse_action_to_structure_output(
     model_type="qwen25vl",
     max_pixels=16384 * 28 * 28,
     min_pixels=100 * 28 * 28,
-) -> List[dict]:
+) -> list[dict[str, Any]]:
     """
     将M模型的输出解析为结构化的action列表
     参数:
@@ -279,7 +280,6 @@ def parse_action_to_structure_output(
         elif len(thought_match.groups()) == 2:
             thought = thought_match.group(2).strip()
             reflection = thought_match.group(1).strip()
-    assert "Action:" in text
     action_str = text.split("Action: ")[-1]
 
     tmp_all_action = action_str.split(")\n\n")
@@ -326,6 +326,8 @@ def parse_action_to_structure_output(
 
         # import pdb; pdb.set_trace()
         action_inputs = {}
+        if not isinstance(params, dict):
+            continue
         for param_name, param in params.items():
             if param == "":
                 continue
@@ -545,10 +547,14 @@ def parsing_response_to_pyautogui_code(
             start_box = action_inputs.get("start_box")
             end_box = action_inputs.get("end_box")
             if start_box and end_box:
-                x1, y1, x2, y2 = eval(start_box)  # Assuming box is in [x1, y1, x2, y2]
+                x1, y1, x2, y2 = ast.literal_eval(
+                    start_box
+                )  # Assuming box is in [x1, y1, x2, y2]
                 sx = round(float((x1 + x2) / 2) * image_width, 3)
                 sy = round(float((y1 + y2) / 2) * image_height, 3)
-                x1, y1, x2, y2 = eval(end_box)  # Assuming box is in [x1, y1, x2, y2]
+                x1, y1, x2, y2 = ast.literal_eval(
+                    end_box
+                )  # Assuming box is in [x1, y1, x2, y2]
                 ex = round(float((x1 + x2) / 2) * image_width, 3)
                 ey = round(float((y1 + y2) / 2) * image_height, 3)
                 pyautogui_code += (
@@ -560,7 +566,9 @@ def parsing_response_to_pyautogui_code(
             # Parsing scroll action
             start_box = action_inputs.get("start_box")
             if start_box:
-                x1, y1, x2, y2 = eval(start_box)  # Assuming box is in [x1, y1, x2, y2]
+                x1, y1, x2, y2 = ast.literal_eval(
+                    start_box
+                )  # Assuming box is in [x1, y1, x2, y2]
                 x = round(float((x1 + x2) / 2) * image_width, 3)
                 y = round(float((y1 + y2) / 2) * image_height, 3)
 
@@ -593,8 +601,8 @@ def parsing_response_to_pyautogui_code(
             start_box = action_inputs.get("start_box")
             start_box = str(start_box)
             if start_box:
-                start_box = eval(start_box)
-                if not isinstance(start_box, List):
+                start_box = ast.literal_eval(start_box)
+                if not isinstance(start_box, list):
                     raise ValueError("start_box is not list of int")
                 if len(start_box) == 4:
                     x1, y1, x2, y2 = start_box  # Assuming box is in [x1, y1, x2, y2]
@@ -669,11 +677,11 @@ def add_box_token(input_string):
 )
 async def standalone_uitars(
     task: str,
-    action_history: list,
-    failed_activity: dict,
-    variables: dict,
+    action_history: list[str],
+    failed_activity: dict[str, Any],
+    variables: dict[str, Any],
     tool_context: ToolContext,
-) -> list:
+) -> list[list[ContentBlock]] | str:
     """
     This function is to be called by the ui_exception_handler tool to execute a recovery plan for a UI error.
 
@@ -725,14 +733,13 @@ Failed Action: {failed_activity}
 Variables: {variables}
 """
 
-    assert "websocket" in tool_context.invocation_state, (
-        "WebSocket must be provided in tool context"
-    )
+    if "websocket" not in tool_context.invocation_state:
+        raise ValueError("WebSocket must be provided in tool context")
     websocket = tool_context.invocation_state["websocket"]
     image = await screenshot_bytes(websocket)
     image_size = Image.open(BytesIO(image)).size
 
-    messages = [
+    messages: Messages = [
         {
             "role": "user",
             "content": [
@@ -742,7 +749,6 @@ Variables: {variables}
                     )
                 },
                 {
-                    "type": "image",
                     "image": {
                         "format": "jpeg",
                         "source": {"bytes": image},
@@ -765,21 +771,17 @@ Variables: {variables}
     )
     agent = Agent(model=model, messages=messages, hooks=[hook])  # type: ignore
 
-    input_tokens = 0
-    output_tokens = 0
     try:
         response = await agent.invoke_async(
             ""
         )  # Empty input since all context is in messages
-        input_tokens = response.metrics.accumulated_usage.get("inputTokens", 0)
-        output_tokens = response.metrics.accumulated_usage.get("outputTokens", 0)
 
         iteration = 0
 
         while True:
             iteration += 1
             if iteration > Config.MAX_ACTIONS_ALLOWED:
-                return [{"text": "Exceeded maximum allowed actions."}]
+                return "Exceeded maximum allowed actions."
 
             ui_tars_response = ""
             try:
@@ -845,12 +847,11 @@ Variables: {variables}
                 image = await screenshot_bytes(websocket)
                 image_size = Image.open(BytesIO(image)).size
 
-                new_messages = [
+                new_messages: Messages = [
                     {
                         "role": "user",
                         "content": [
                             {
-                                "type": "image",
                                 "image": {
                                     "format": "jpeg",
                                     "source": {"bytes": image},
@@ -862,10 +863,6 @@ Variables: {variables}
 
                 response = await agent.invoke_async(
                     new_messages  # type: ignore
-                )
-                input_tokens = response.metrics.accumulated_usage.get("inputTokens", 0)
-                output_tokens = response.metrics.accumulated_usage.get(
-                    "outputTokens", 0
                 )
             except WebSocketDisconnect as _:
                 raise
@@ -888,7 +885,7 @@ Variables: {variables}
     except RuntimeError as _:
         raise
     except Exception as e:
-        return [{"text": str(e)}]
+        return str(e)
     finally:
         cost = -1.0
         hook.update_trace(finished=True, cost=cost)

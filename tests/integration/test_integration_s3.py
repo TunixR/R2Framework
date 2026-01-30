@@ -12,7 +12,7 @@ async def _ensure_bucket_exists() -> None:
     """
     Ensure the S3 bucket exists, creating it if necessary.
     """
-    async with S3Client._client() as s3c:  # pyright: ignore
+    async with S3Client._client() as s3c:  # pyright: ignore[reportGeneralTypeIssues,reportPrivateUsage]
         try:
             await s3c.head_bucket(Bucket=S3_BUCKET)
         except bex.ClientError as e:
@@ -34,7 +34,7 @@ async def s3_ready():
       - Skips tests if S3 is not reachable.
     """
     try:
-        async with S3Client._client() as s3c:  # pyright: ignore
+        async with S3Client._client() as s3c:  # pyright: ignore[reportGeneralTypeIssues,reportPrivateUsage]
             # Basic connectivity check
             await s3c.list_buckets()
     except Exception as e:
@@ -85,7 +85,7 @@ async def test_delete_object_removes_key():
 
     # Verify download now fails
     with pytest.raises(bex.ClientError) as excinfo:
-        await S3Client.download_bytes(key, bucket=S3_BUCKET)
+        _ = await S3Client.download_bytes(key, bucket=S3_BUCKET)
 
     # Be flexible across providers (AWS S3, MinIO, LocalStack, etc.)
     err_code = excinfo.value.response.get("Error", {}).get("Code", "")
@@ -100,7 +100,7 @@ async def test_download_nonexistent_raises():
     random_key = str(uuid.uuid4())
 
     with pytest.raises(bex.ClientError) as excinfo:
-        await S3Client.download_bytes(random_key, bucket=S3_BUCKET)
+        _ = await S3Client.download_bytes(random_key, bucket=S3_BUCKET)
 
     err_code = excinfo.value.response.get("Error", {}).get("Code", "")
     assert err_code in {"NoSuchKey", "404", "NotFound"}
@@ -120,7 +120,7 @@ async def test_bulk_download_bytes_roundtrip_multiple_keys():
     keys: list[str] = []
     try:
         # Upload three objects
-        for name, data in payloads.items():
+        for _, data in payloads.items():
             key = await S3Client.upload_bytes(
                 data, content_type="application/octet-stream", bucket=S3_BUCKET
             )
@@ -160,6 +160,6 @@ async def test_bulk_delete_objects_removes_multiple_keys():
     # Verify each download now fails
     for key in keys:
         with pytest.raises(bex.ClientError) as excinfo:
-            await S3Client.download_bytes(key, bucket=S3_BUCKET)
+            _ = await S3Client.download_bytes(key, bucket=S3_BUCKET)
         err_code = excinfo.value.response.get("Error", {}).get("Code", "")
         assert err_code in {"NoSuchKey", "404", "NotFound"}

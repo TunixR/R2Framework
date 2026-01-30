@@ -2,26 +2,21 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
+from sqlalchemy import Engine
 from sqlmodel import Session, select
 
 from database.provider.models import Router
-
-try:
-    from settings import (
-        FREE_PROVIDER_API_KEY,
-        PROVIDER_API_BASE,
-        PROVIDER_API_KEY,
-        PROVIDER_GROUNDING_MODEL,
-        PROVIDER_MODEL,
-        PROVIDER_VISION_MODEL,
-        PROVIDER_VISION_TOOL_MODEL,
-    )
-except Exception:
-    raise ImportError(
-        "Failed to import settings. Ensure that the settings module is correctly configured."
-    )
+from settings import (
+    FREE_PROVIDER_API_KEY,
+    PROVIDER_API_BASE,
+    PROVIDER_API_KEY,
+    PROVIDER_GROUNDING_MODEL,
+    PROVIDER_MODEL,
+    PROVIDER_VISION_MODEL,
+    PROVIDER_VISION_TOOL_MODEL,
+)
 
 
 def _existing_router(
@@ -42,7 +37,7 @@ def _create_router(
     api_key: str,
     model_name: str,
     api_endpoint: str,
-    provider_type: Optional[Router.Provider] = None,
+    provider_type: Router.Provider | None = None,
 ) -> Router:
     """
     Create and persist a Router record.
@@ -60,7 +55,7 @@ def _create_router(
     return router
 
 
-def _load_json_config() -> Dict[str, Any]:
+def _load_json_config() -> dict[str, Any]:
     """
     Load router configuration from adjacent JSON file:
     database/populators/routers.json
@@ -103,7 +98,7 @@ def _resolve_token(value: str) -> str:
     return token_map.get(value, value)
 
 
-def _resolve_provider_type(name: Optional[str]) -> Optional[Router.Provider]:
+def _resolve_provider_type(name: str | None) -> Router.Provider | None:
     if not name:
         return None
     upper = name.upper()
@@ -113,7 +108,7 @@ def _resolve_provider_type(name: Optional[str]) -> Optional[Router.Provider]:
     raise ValueError(f"Unknown provider_type '{name}'.")
 
 
-def populate_routers(engine) -> None:
+def populate_routers(engine: Engine) -> None:
     """
     Populate Router entries based on JSON configuration.
     Skips creation if a router already exists for (model_name, api_endpoint).
@@ -138,7 +133,7 @@ def populate_routers(engine) -> None:
                 skipped += 1
                 continue
 
-            _create_router(
+            _ = _create_router(
                 session,
                 api_key=api_key,
                 model_name=model_name,

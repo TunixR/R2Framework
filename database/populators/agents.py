@@ -17,8 +17,9 @@ from __future__ import annotations
 import importlib
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
+from sqlalchemy import Engine
 from sqlmodel import Session, select
 
 from database.agents.models import (
@@ -30,21 +31,12 @@ from database.agents.models import (
 )
 from database.provider.models import Router
 from database.tools.models import Tool
-
-# Settings (fallbacks if not present) used to resolve routers if JSON uses placeholders
-try:
-    from settings import (
-        PROVIDER_GROUNDING_MODEL,
-        PROVIDER_MODEL,
-        PROVIDER_VISION_MODEL,
-        PROVIDER_VISION_TOOL_MODEL,
-    )
-except Exception:
-    # Fallback defaults (non-secure placeholders)
-    PROVIDER_MODEL = "gpt-4o-mini"
-    PROVIDER_VISION_MODEL = "gpt-4o-vision-mini"
-    PROVIDER_VISION_TOOL_MODEL = "gpt-4o-vision-tool"
-    PROVIDER_GROUNDING_MODEL = "gpt-4o-grounding"
+from settings import (
+    PROVIDER_GROUNDING_MODEL,
+    PROVIDER_MODEL,
+    PROVIDER_VISION_MODEL,
+    PROVIDER_VISION_TOOL_MODEL,
+)
 
 
 def _get_router_by_model(session: Session, model_name: str) -> Router:
@@ -78,8 +70,8 @@ def _argument(
 def _attach_tools(
     session: Session,
     agent: Agent,
-    tool_names: List[str],
-    limits: Optional[List[Optional[int]]],
+    tool_names: list[str],
+    limits: list[int | None] | None = None,
 ) -> None:
     """
     Attach tools (by name) to an Agent via AgentTool association.
@@ -89,8 +81,8 @@ def _attach_tools(
 
     if limits is not None and len(tool_names) != len(limits):
         raise ValueError(
-            f"[populate_agents] Tools/limits length mismatch for agent '{agent.name}': "
-            f"{len(tool_names)} tools vs {len(limits)} limits."
+            f"[populate_agents] Tools/limits length mismatch for agent '{agent.name}': \
+            {len(tool_names)} tools vs {len(limits)} limits."
         )
 
     for idx, tool_name in enumerate(tool_names):
@@ -123,7 +115,7 @@ def _create_agent(
     description: str,
     prompt: str | None,
     response_model: str | None,
-    args: List[Argument],
+    args: list[Argument],
     router: Router,
     agent_type: AgentType,
     input_type: Agent.InputType = Agent.InputType.TEXT,
@@ -153,7 +145,7 @@ def _create_agent(
 
 
 def _create_sub_agent(
-    session: Session, parent: Agent, child: Agent, limit: Optional[int]
+    session: Session, parent: Agent, child: Agent, limit: int | None = None
 ) -> None:
     """Create a SubAgent relationship if not present."""
     existing = session.exec(
@@ -195,7 +187,7 @@ def _resolve_agent_type(value: str) -> AgentType:
     return mapping[value]
 
 
-def _load_json_config() -> Dict[str, Any]:
+def _load_json_config() -> dict[str, Any]:
     """
     Load agent configuration from adjacent JSON file:
     database/populators/agents.json
@@ -265,13 +257,13 @@ def _import_prompt(prompt_import: str) -> str:
     return str(obj)
 
 
-def populate_agents(engine) -> None:
+def populate_agents(engine: Engine) -> None:
     """
     Populate the database with framework agents and their relationships from JSON.
     """
     cfg = _load_json_config()
-    agents_cfg: List[Dict[str, Any]] = cfg.get("agents", [])
-    subs_cfg: List[Dict[str, Any]] = cfg.get("sub_agents", [])
+    agents_cfg: list[dict[str, Any]] = cfg.get("agents", [])
+    subs_cfg: list[dict[str, Any]] = cfg.get("sub_agents", [])
 
     if not agents_cfg:
         print("[populate_agents] No agents found in JSON configuration.")
@@ -279,12 +271,12 @@ def populate_agents(engine) -> None:
 
     with Session(engine) as session:
         # Create agents
-        created_agents: Dict[str, Agent] = {}
+        created_agents: dict[str, Agent] = {}
 
         for item in agents_cfg:
             name = item["name"]
             description = item.get("description", "") or ""
-            prompt: Optional[str] = item.get("prompt")
+            prompt: str | None = item.get("prompt", None)
             prompt_import = item.get("prompt_import")
             if prompt_import and not prompt:
                 prompt = _import_prompt(prompt_import)

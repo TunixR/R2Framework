@@ -1,5 +1,5 @@
 import types
-from typing import Any, Callable, List, Literal, Tuple
+from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, ValidationError
 from strands.agent.agent import Agent
@@ -23,16 +23,16 @@ class FakeRegistry:
 
     def __init__(self):
         # Each entry: (event_type, callback)
-        self.callbacks: List[Tuple[Any, Callable]] = []
+        self.callbacks: list[tuple[Any, Callable]] = []  # pyright: ignore[reportMissingTypeArgument]
 
-    def add_callback(self, event_type: Any, callback: Callable):
+    def add_callback(self, event_type: Any, callback: Callable):  # pyright: ignore[reportMissingTypeArgument]
         self.callbacks.append((event_type, callback))
 
 
 class FakeBeforeInvocationEvent(BeforeInvocationEvent):
     """Fake event used to trigger hooks for the invocation start."""
 
-    def __init__(self):
+    def __init__(self):  # pyright: ignore[reportMissingSuperCall]
         self.agent = Agent()
 
 
@@ -45,7 +45,7 @@ class FakeBeforeToolCallEvent(BeforeToolCallEvent):
         cancel_tool: optional str message set by hook
     """
 
-    def __init__(self, tool_name: str, input_value: Any = None):
+    def __init__(self, tool_name: str, input_value: Any = None):  # pyright: ignore[reportMissingSuperCall]
         self.tool_use = {"name": tool_name, "input": input_value, "toolUseId": ""}
         self.cancel_tool = False
 
@@ -60,7 +60,7 @@ class FakeAfterToolCallEvent(AfterToolCallEvent):
         result: dict representing a tool result payload
     """
 
-    def __init__(
+    def __init__(  # pyright: ignore[reportMissingSuperCall]
         self,
         tool_name: str,
         exception: Exception | None,
@@ -79,7 +79,7 @@ class FakeMessageAddedEvent(MessageAddedEvent):
         message: dict with 'role' and 'content'
     """
 
-    def __init__(
+    def __init__(  # pyright: ignore[reportMissingSuperCall]
         self,
         role: Literal["user", "assistant"] = "assistant",
         content: list[ContentBlock] | None = None,
@@ -100,13 +100,13 @@ class SampleModel(BaseModel):
 def make_validation_error() -> ValidationError:
     try:
         # This will raise a ValidationError (value expects int, not str)
-        SampleModel(value="not-an-int")  # type: ignore
+        _ = SampleModel(value="not-an-int")  # pyright: ignore[reportArgumentType] Done on purpose
     except ValidationError as e:
         return e
     raise AssertionError("Expected ValidationError was not raised")
 
 
-def is_bound_method_of(obj: Any, fn: Callable) -> bool:
+def is_bound_method_of(obj: Any, fn: Callable) -> bool:  # pyright: ignore[reportMissingTypeArgument]
     """
     Utility to check a callback is a bound method of a given object instance.
     """

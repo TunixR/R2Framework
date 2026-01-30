@@ -39,6 +39,7 @@ import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from database.agents.models import *  # noqa: F401,F403
+from database.agents.models import Agent  # Explicit import for type hints
 from database.auth.models import *  # noqa: F401,F403
 from database.populators.agents import populate_agents
 from database.populators.routers import populate_routers
@@ -47,9 +48,7 @@ from database.populators.routers import populate_routers
 from database.populators.tools import populate_tools
 from database.provider.models import *  # noqa: F401,F403
 from database.tools.models import *  # noqa: F401,F403
-
-# Import all models so metadata is populated
-from modules.models import *  # noqa: F401,F403
+from database.tools.models import Tool  # Explicit import for type hints
 
 # ---------------------------------------------------------------------------
 # Test configuration constants
@@ -73,16 +72,15 @@ def _inject_test_env():
     """
     Inject environment variables expected by settings / populators.
     """
-    os.environ.setdefault("PROVIDER_API_KEY", FAKE_API_KEY)
-    os.environ.setdefault("FREE_PROVIDER_API_KEY", FAKE_FREE_API_KEY)
-    os.environ.setdefault("PROVIDER_API_BASE", FAKE_API_BASE)
-    os.environ.setdefault("PROVIDER_MODEL", FAKE_MODEL)
-    os.environ.setdefault("PROVIDER_VISION_MODEL", FAKE_VISION_MODEL)
-    os.environ.setdefault("PROVIDER_VISION_TOOL_MODEL", FAKE_VISION_TOOL_MODEL)
-    os.environ.setdefault("PROVIDER_GROUNDING_MODEL", FAKE_GROUNDING_MODEL)
-    # Scenario toggles
-    os.environ.setdefault("UI_ERROR_PLANNING", "true")
-    os.environ.setdefault("UI_MID_AGENT", "false")
+    _ = os.environ.setdefault("PROVIDER_API_KEY", FAKE_API_KEY)
+    _ = os.environ.setdefault("FREE_PROVIDER_API_KEY", FAKE_FREE_API_KEY)
+    _ = os.environ.setdefault("PROVIDER_API_BASE", FAKE_API_BASE)
+    _ = os.environ.setdefault("PROVIDER_MODEL", FAKE_MODEL)
+    _ = os.environ.setdefault("PROVIDER_VISION_MODEL", FAKE_VISION_MODEL)
+    _ = os.environ.setdefault("PROVIDER_VISION_TOOL_MODEL", FAKE_VISION_TOOL_MODEL)
+    _ = os.environ.setdefault("PROVIDER_GROUNDING_MODEL", FAKE_GROUNDING_MODEL)
+    _ = os.environ.setdefault("UI_ERROR_PLANNING", "true")
+    _ = os.environ.setdefault("UI_MID_AGENT", "false")
 
 
 @pytest.fixture(scope="session")
@@ -100,7 +98,7 @@ def engine():
 
 
 @pytest.fixture(autouse=True)
-def _setup_db_per_test(request, engine):
+def _setup_db_per_test(request, engine):  # pyright: ignore[reportMissingParameterType]
     """
     Automatically create all tables before each test and drop them afterward.
 
@@ -130,7 +128,7 @@ def _setup_db_per_test(request, engine):
 
 
 @pytest.fixture
-def db_session(engine) -> Session:
+def db_session(engine) -> Session:  # pyright: ignore[reportMissingParameterType]
     """
     Return a SQLModel Session bound to the test engine.
     """
@@ -144,7 +142,7 @@ def db_session(engine) -> Session:
 
 
 @pytest.fixture
-def gateway_agent(db_session) -> Agent:
+def gateway_agent(db_session) -> Agent:  # pyright: ignore[reportMissingParameterType]
     """
     Return the persisted Gateway Orchestrator agent (if present).
     """
@@ -156,7 +154,7 @@ def gateway_agent(db_session) -> Agent:
 
 
 @pytest.fixture
-def ui_exception_handler_agent(db_session) -> Agent:
+def ui_exception_handler_agent(db_session) -> Agent:  # pyright: ignore[reportMissingParameterType]
     """
     Return the persisted UI Exception Handler agent.
     """
@@ -168,7 +166,7 @@ def ui_exception_handler_agent(db_session) -> Agent:
 
 
 @pytest.fixture
-def all_tools(db_session) -> list[Tool]:
+def all_tools(db_session) -> list[Tool]:  # pyright: ignore[reportMissingParameterType]
     """
     Return all registered tools.
     """

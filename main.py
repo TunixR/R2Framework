@@ -5,7 +5,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from opentelemetry.instrumentation.asgi import OpenTelemetryMiddleware
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from scalar_fastapi import get_scalar_api_reference
 from strands.telemetry import StrandsTelemetry
 
@@ -18,13 +17,13 @@ from routers.tools import router as tools_router
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI):  # pyright: ignore[reportUnusedParameter]
     """
     Lifespan event handler to initialize and clean up the database connection.
     """
     strands_telemetry = StrandsTelemetry()
-    strands_telemetry.setup_otlp_exporter()  # Send traces to OTLP endpoint
-    strands_telemetry.setup_meter(
+    _ = strands_telemetry.setup_otlp_exporter()  # Send traces to OTLP endpoint
+    _ = strands_telemetry.setup_meter(
         enable_console_exporter=False, enable_otlp_exporter=True
     )  # Setup new meter provider and sets it as global
 

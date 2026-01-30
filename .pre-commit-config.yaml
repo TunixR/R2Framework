@@ -1,0 +1,38 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.14
+    hooks:
+      - id: ruff
+        name: ruff (linter)
+        args: [--fix]
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff (formatter)
+        types_or: [python, pyi]
+
+  # Security linter
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.3
+    hooks:
+      - id: bandit
+        name: bandit (security check)
+        args: [-c, pyproject.toml]
+        additional_dependencies: ["bandit[toml]"]
+
+  - repo: local
+    hooks:
+      - id: basedpyright
+        name: basedpyright (type checking)
+        entry: uv run basedpyright -p pyproject.toml --level error
+        language: system
+        pass_filenames: false
+        types: [python]
+        stages: [pre-commit]
+
+      - id: pytest-unit
+        name: pytest (unit tests only)
+        entry: uv run pytest tests/unit -q
+        language: system
+        pass_filenames: false
+        types: [python]
+        stages: [pre-commit]

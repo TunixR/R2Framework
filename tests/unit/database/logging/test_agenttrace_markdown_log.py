@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from typing import Any
 
 import pytest
 
@@ -6,7 +7,7 @@ from database.agents.models import Agent, AgentType
 from database.logging.models import AgentTrace, SubAgentTrace, ToolTrace
 from database.provider.models import Router
 from tests.unit.conftest.mock_s3_client_fixture import (
-    mock_s3client_model,  # noqa: F401 We need to import this fixture for it to activate
+    mock_s3client_model,  # pyright: ignore[reportUnusedImport] # noqa: F401 We need to import this fixture for it to activate
 )
 
 
@@ -36,9 +37,8 @@ def make_agent() -> Agent:
 def make_agent_trace(
     agent: Agent,
     *,
-    inputs: dict | None = None,
-    messages: list[dict] | None = None,
-    tokens: int = 123,
+    inputs: dict[str, Any] | None = None,
+    messages: list[dict[str, Any]] | None = None,
     created_at: datetime | None = None,
     finished_at: datetime | None = None,
 ) -> AgentTrace:
@@ -48,24 +48,31 @@ def make_agent_trace(
         agent=agent,
         inputs=inputs or {"task": "do something"},
         messages=messages,
-        tokens=tokens,
         created_at=created_at or now,
         finished_at=finished_at or now,
     )
 
 
-def make_tool(monkeypatch, name: str = "echo"):
+def make_tool(monkeypatch, name: str = "echo"):  # pyright: ignore[reportMissingParameterType]
     from database.tools.models import Tool as DBTool
 
     # Bypass validation in Tool.__init__ that imports a module
     monkeypatch.setattr(
-        DBTool, "get_tool_function", lambda self: object(), raising=True
+        DBTool,
+        "get_tool_function",
+        lambda self: object(),  # pyright: ignore[reportUnknownLambdaType]
+        raising=True,
     )
     return DBTool(name=name, description=f"{name} tool", fn_module="tests.fake:echo")
 
 
 def add_tool_trace(
-    agent_trace, tool, created_at, input_data, output, success: bool = True
+    agent_trace,  # pyright: ignore[reportMissingParameterType]
+    tool,  # pyright: ignore[reportMissingParameterType]
+    created_at,  # pyright: ignore[reportMissingParameterType]
+    input_data,  # pyright: ignore[reportMissingParameterType]
+    output,  # pyright: ignore[reportMissingParameterType]
+    success: bool = True,
 ):
     tt = ToolTrace(
         agent_trace_id=agent_trace.id,
@@ -81,7 +88,7 @@ def add_tool_trace(
     return tt
 
 
-def add_sub_trace(parent_trace, child_trace, monkeypatch):
+def add_sub_trace(parent_trace, child_trace, monkeypatch):  # pyright: ignore[reportMissingParameterType, reportUnusedParameter]
     sub = SubAgentTrace(
         session=None,
         parent_trace_id=parent_trace.id,
@@ -162,7 +169,9 @@ async def test_messages_are_rendered_in_log_after_bug_fix():
 )
 @pytest.mark.asyncio
 async def test_flags_control_presence_of_tool_and_sub_sections(
-    include_sub, include_tools, monkeypatch
+    include_sub,  # pyright: ignore[reportMissingParameterType]
+    include_tools,  # pyright: ignore[reportMissingParameterType]
+    monkeypatch,  # pyright: ignore[reportMissingParameterType]
 ):
     agent = make_agent()
 
@@ -186,7 +195,7 @@ async def test_flags_control_presence_of_tool_and_sub_sections(
 
     # Real ToolTrace using patched Tool validation
     tool = make_tool(monkeypatch, name="echo")
-    add_tool_trace(
+    _ = add_tool_trace(
         parent,
         tool=tool,
         created_at=t2,
@@ -205,7 +214,7 @@ async def test_flags_control_presence_of_tool_and_sub_sections(
         inputs={"task": "child"},
         created_at=t4,
     )
-    add_tool_trace(
+    _ = add_tool_trace(
         child,
         tool=tool,
         created_at=t5,

@@ -1,4 +1,4 @@
-from typing import Optional, Sequence
+from collections.abc import Sequence
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
@@ -21,16 +21,16 @@ class RouterCreate(SQLModel):
 
 
 class RouterUpdate(SQLModel):
-    api_key: Optional[str] = Field(
+    api_key: str | None = Field(
         default=None, description="API key for accessing the router service."
     )
-    model_name: Optional[str] = Field(
+    model_name: str | None = Field(
         default=None, description="Name of the model used by the router."
     )
-    api_endpoint: Optional[str] = Field(
+    api_endpoint: str | None = Field(
         default=None, description="API endpoint of the provider."
     )
-    provider_type: Optional[Router.Provider] = Field(
+    provider_type: Router.Provider | None = Field(
         default=None, description="The provider type backing this router."
     )
 

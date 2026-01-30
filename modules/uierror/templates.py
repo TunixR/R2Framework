@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Dict, Type
+from typing import override
 
 from pydantic import BaseModel, Field
 
@@ -15,6 +15,7 @@ class TemplateModel(BaseModel):
     class ConfigDict:
         extra = "forbid"
 
+    @override
     def __str__(self) -> str:  # pragma: no cover - simple serialization helper
         return json.dumps(self.model_dump(), indent=2, ensure_ascii=True)
 
@@ -130,10 +131,10 @@ class TemplateDefinition:
 
     name: str
     description: str
-    model: Type[TemplateModel]
+    model: type[TemplateModel]
 
 
-TEMPLATES: Dict[str, TemplateDefinition] = {
+TEMPLATES: dict[str, TemplateDefinition] = {
     "recovery_direct_report": TemplateDefinition(
         name="recovery_direct_report",
         description="Structured summary after executing direct UI recovery actions.",

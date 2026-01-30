@@ -24,7 +24,27 @@ dependencies = [
 ]
 
 [dependency-groups]
+dev = [
+    "bandit>=1.9.3",
+    "basedpyright>=1.37.2",
+    "ruff>=0.14.14",
+]
 temp = [
     "opencv-python>=4.12.0.88",
     "scikit-image>=0.25.2",
 ]
+
+[tool.bandit]
+exclude_dirs = ["tests", "migrations"]
+
+[tool.basedpyright]
+exclude = ["**/migrations", "**/.*", "**/__pycache__", "**/tests/unit/shared"]
+reportMissingTypeStubs = false
+reportUnknownParameterType = false
+reportUnknownVariableType = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportAny = false
+reportExplicitAny = false
+reportUnannotatedClassAttribute = false
+reportImportCycles = "warning"

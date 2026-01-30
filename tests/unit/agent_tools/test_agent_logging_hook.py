@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -12,12 +13,12 @@ from tests.unit.agent_tools._shared.fakes import (
 )
 
 from ..conftest.mock_s3_client_fixture import (
-    mock_s3client_model,  # noqa: F401 We need to import this fixture for it to activate
+    mock_s3client_model,  # pyright: ignore[reportUnusedImport] # noqa: F401
 )
 from ..shared.mock_session import (  # noqa: F401 We need to import these fixtures for them to activate
-    _STORE,
-    clear_store,
-    patched_dependencies,
+    _STORE,  # pyright: ignore[reportPrivateUsage]
+    clear_store,  # pyright: ignore[reportUnusedImport]
+    patched_dependencies,  # pyright: ignore[reportUnusedImport]
 )
 
 # ---------------------------------------------------------------------------
@@ -29,7 +30,7 @@ def test_register_hooks_adds_callbacks():
     registry = FakeRegistry()
     hook = AgentLoggingHook(agent_id=uuid4(), invocation_state={})
 
-    hook.register_hooks(registry)  # type: ignore[arg-type]
+    hook.register_hooks(registry)  # pyright: ignore[reportArgumentType]
 
     # Should have registered two callbacks
     assert len(registry.callbacks) == 2
@@ -63,7 +64,7 @@ def test_log_start_creates_agent_trace():
     assert trace.inputs == inputs
 
 
-def test_log_start_creates_subagent_when_parent_id(monkeypatch):
+def test_log_start_creates_subagent_when_parent_id(monkeypatch):  # pyright: ignore[reportUnusedParameter,reportMissingParameterType]
     """
     SubAgentTrace in models.py currently requires an 'engine' parameter in __init__,
     while the hook constructs it without engine. We monkeypatch the SubAgentTrace
@@ -115,11 +116,11 @@ def test_log_message_updates_trace_output_and_finished():
 
     # Minimal event objects carrying the required 'message' attribute
     class MsgEvt:
-        def __init__(self, message: dict):
+        def __init__(self, message: dict[str, Any]):
             self.message = message
 
-    hook.log_message(MsgEvt(assistant_msg))  # type: ignore[arg-type]
-    hook.log_message(MsgEvt(user_msg))  # type: ignore[arg-type]
+    hook.log_message(MsgEvt(assistant_msg))  # pyright: ignore[reportArgumentType]
+    hook.log_message(MsgEvt(user_msg))  # pyright: ignore[reportArgumentType]
 
     # Fetch and check AgentTrace after log_message calls
     trace: AgentTrace | None = _STORE.get(hook.agent_trace_id)  # type: ignore[assignment]
@@ -154,7 +155,7 @@ async def test_register_gui_trace_raises_for_non_gui_agent():
 
 
 @pytest.mark.asyncio
-async def test_register_gui_trace_saves_gui_entry_when_gui_agent(mock_s3client_model):
+async def test_register_gui_trace_saves_gui_entry_when_gui_agent():
     hook = AgentLoggingHook(agent_id=uuid4(), invocation_state={}, is_gui_agent=True)
 
     await hook.register_gui_trace(

@@ -13,7 +13,7 @@ IMAGE_SIMILARITY_THRESHOLD = 0.95  # Threshold for image similarity (0 to 1)
 
 
 @tool(description="Convert an image file to a base64-encoded string.")
-def image_to_base64(image_path: str) -> list:
+def image_to_base64(image_path: str) -> str:
     """
     Convert an image file to a base64-encoded string.
 
@@ -21,18 +21,13 @@ def image_to_base64(image_path: str) -> list:
         image_path (str): Path to the image file to convert to base64
 
     Returns:
-        Dictionary containing status and tool response:
-        {
-            "toolUseId": "unique_id",
-            "status": "success|error",
-            "content": [{"text": "base64 string or error message"}]
-        }
+        base64 string or error message
 
         Success: Returns the base64-encoded JPEG image as text.
         Error: Returns information about what went wrong.
     """
     if not image_path:
-        return [{"text": "image_path is required"}]
+        return "image_path is required"
 
     try:
         with open(image_path, "rb") as image_file:
@@ -47,16 +42,18 @@ def image_to_base64(image_path: str) -> list:
 
             encoded_string = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
-        return [{"text": encoded_string}]
+        return encoded_string
     except Exception as e:
-        return [{"text": f"Error reading/converting image: {str(e)}"}]
+        return str(e)
 
 
 @tool(
     description="Take a screenshot and return it as a base64-encoded string.",
     context=True,
 )
-async def take_screenshot(tool_context: ToolContext) -> list:
+async def take_screenshot(
+    tool_context: ToolContext,
+) -> list[dict[str, dict[str, str | dict[str, bytes]]]]:
     """
     Take a screenshot and return it as a base64-encoded string.
 
@@ -64,20 +61,17 @@ async def take_screenshot(tool_context: ToolContext) -> list:
         (no inputs required) - tool input can be empty
 
     Returns:
-        Dictionary containing status and tool response:
-        {
-            "toolUseId": "unique_id",
-            "status": "success|error",
-            "content": [{"image": {"format":"JPEG","source":{"bytes": b"..."}}}]
-        }
+        Dictionary containing Image:
+        {"image": {"format":"JPEG","source":{"bytes": b"..."}}}
 
         Success: Returns the screenshot bytes in the content as an image object.
         Error: Returns information about what went wrong.
     """
 
-    assert "websocket" in tool_context.invocation_state, (
-        "WebSocket connection is required in tool context for taking screenshot."
-    )
+    if "websocket" not in tool_context.invocation_state:
+        raise ValueError(
+            "WebSocket connection is required in tool context for taking screenshot."
+        )
     websocket = tool_context.invocation_state["websocket"]
 
     try:
