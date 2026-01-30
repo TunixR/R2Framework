@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import override
 
 from pydantic import BaseModel, Field
 
@@ -11,6 +12,7 @@ class TemplateModel(BaseModel):
     class ConfigDict:
         extra = "forbid"
 
+    @override
     def __str__(self) -> str:  # pragma: no cover - simple serialization helper
         return json.dumps(self.model_dump(), indent=2, ensure_ascii=True)
 

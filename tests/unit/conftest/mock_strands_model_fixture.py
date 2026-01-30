@@ -22,13 +22,13 @@ The fixture exposes the FakeOpenAIModel class so tests can inspect remaining
 responses or clear them between steps.
 """
 
-from typing import Any, List
+from typing import Any
 
 import pytest
 
 
 @pytest.fixture(autouse=False)
-def fake_openai_model(monkeypatch):
+def fake_openai_model(monkeypatch):  # pyright: ignore[reportMissingParameterType]
     """
     Patch strands.models.openai.OpenAIModel to use tests.shared.fake_openai_model.FakeOpenAIModel.
 
@@ -52,10 +52,10 @@ def fake_openai_model(monkeypatch):
     class _FixtureAPI:
         Model = MockStrandsModel
 
-        def set_responses(self, responses: List[Any]) -> None:
+        def set_responses(self, responses: list[Any]) -> None:
             MockStrandsModel.set_responses(responses)
 
-        def set_structured_outputs(self, responses: List[Any]) -> None:
+        def set_structured_outputs(self, responses: list[Any]) -> None:
             MockStrandsModel.set_structured_outputs(responses)
 
         def push_response(self, response: Any) -> None:

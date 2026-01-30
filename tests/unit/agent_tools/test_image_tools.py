@@ -1,6 +1,6 @@
 import asyncio
 from io import BytesIO
-from typing import Any, List
+from typing import Any, Literal
 
 import pytest
 from PIL import Image
@@ -16,7 +16,11 @@ from agent_tools.image import (
 # ---------------------------------------------------------------------------
 
 
-def make_test_image_bytes(color=(255, 0, 0), size=(16, 16), fmt="JPEG") -> bytes:
+def make_test_image_bytes(
+    color: tuple[int, int, int] = (255, 0, 0),
+    size: tuple[int, int] = (16, 16),
+    fmt: Literal["JPEG", "PNG"] = "JPEG",
+) -> bytes:
     """
     Create an in-memory image and return its encoded bytes.
     """
@@ -35,13 +39,13 @@ class FakeWebSocket:
     - receive_bytes: returns queued byte responses, optionally delayed
     """
 
-    def __init__(self, responses: List[bytes], delay: float = 0.0):
+    def __init__(self, responses: list[bytes], delay: float = 0.0):
         self._responses = list(responses)
         self._delay = delay
-        self.sent_messages: List[Any] = []
+        self.sent_messages: list[Any] = []
         self.closed = False
 
-    async def send_json(self, data):
+    async def send_json(self, data: Any):
         # Simulate send latency negligible for tests
         if self.closed:
             raise RuntimeError("WebSocket is closed")
@@ -66,7 +70,7 @@ class StubToolContext:
     Minimal stub matching the attribute usage inside take_screenshot.
     """
 
-    def __init__(self, websocket):
+    def __init__(self, websocket):  # pyright: ignore[reportMissingParameterType]
         self.invocation_state = {"websocket": websocket}
 
 
@@ -80,7 +84,7 @@ async def test_request_remote_screenshot_success():
     img_bytes = make_test_image_bytes()
     ws = FakeWebSocket([img_bytes])
 
-    received = await request_remote_screenshot(ws, timeout=0.5)  # type: ignore
+    received = await request_remote_screenshot(ws, timeout=0.5)  # pyright: ignore[reportArgumentType]
 
     # Validate bytes integrity
     assert received == img_bytes
@@ -100,7 +104,7 @@ async def test_request_remote_screenshot_timeout():
     ws = FakeWebSocket([img_bytes], delay=0.2)  # delay > timeout below
 
     with pytest.raises(TimeoutError) as e:
-        await request_remote_screenshot(ws, timeout=0.05)  # type: ignore
+        _ = await request_remote_screenshot(ws, timeout=0.05)  # pyright: ignore[reportArgumentType]
     assert "Timed out" in str(e.value)
 
 
@@ -116,7 +120,7 @@ async def test_request_remote_screenshot_unexpected_format():
     # We assert that a RuntimeError surfaces (not TimeoutError).
     with pytest.raises(RuntimeError) as e:
         # Use a generous timeout so underlying error is raised immediately
-        await request_remote_screenshot(ws, timeout=0.2)  # type: ignore
+        _ = await request_remote_screenshot(ws, timeout=0.2)  # pyright: ignore[reportArgumentType]
     assert "Unable to interpret client response" in str(e.value)
 
 
@@ -131,7 +135,7 @@ async def test_take_screenshot_success_structure_and_content():
     ws = FakeWebSocket([img_bytes])
     ctx = StubToolContext(ws)
 
-    result = await take_screenshot(ctx)  # type: ignore
+    result = await take_screenshot(ctx)  # pyright: ignore[reportArgumentType]
 
     # Expected list with single image dict
     assert isinstance(result, list) and len(result) == 1
@@ -140,6 +144,8 @@ async def test_take_screenshot_success_structure_and_content():
     image_obj = payload["image"]
     assert image_obj.get("format") == "JPEG"
     source = image_obj.get("source", {})
+    if not isinstance(source, dict):
+        pytest.fail("Expected 'source' to be a dict")
     returned_bytes = source.get("bytes")
     assert isinstance(returned_bytes, (bytes, bytearray))
     assert returned_bytes == img_bytes
@@ -156,7 +162,7 @@ async def test_take_screenshot_missing_websocket():
 
     bad_ctx = BadContext()
     with pytest.raises(AssertionError) as e:
-        await take_screenshot(bad_ctx)  # type: ignore
+        _ = await take_screenshot(bad_ctx)  # pyright: ignore[reportArgumentType]
     assert "WebSocket connection is required" in str(e.value)
 
 
@@ -166,7 +172,7 @@ async def test_take_screenshot_closed_websocket():
     await ws.close()  # Close before use
     ctx = StubToolContext(ws)
     with pytest.raises(Exception) as e:
-        await take_screenshot(ctx)  # type: ignore
+        _ = await take_screenshot(ctx)  # pyright: ignore[reportArgumentType]
     assert "Error taking screenshot: WebSocket is closed" in str(e.value)
 
 
@@ -181,5 +187,5 @@ async def test_take_screenshot_error_propagation_runtime():
     ctx = StubToolContext(ws)
 
     with pytest.raises(Exception) as e:
-        await take_screenshot(ctx)  # type: ignore
+        _ = await take_screenshot(ctx)  # pyright: ignore[reportArgumentType]
     assert "Error taking screenshot" in str(e.value)

@@ -1,7 +1,7 @@
 import enum
 import uuid
 from datetime import datetime
-from typing import Tuple
+from typing import Any, override
 
 import requests
 from sqlmodel import Column, Enum, Field, Relationship, SQLModel
@@ -49,7 +49,8 @@ class Router(SQLModel, table=True):
     )
 
     # Overrides get to not retun the api_key
-    def model_dump(self, *args, **kwargs):
+    @override
+    def model_dump(self, *args: Any, **kwargs: Any):
         data = super().model_dump(*args, **kwargs)
         data.pop("api_key", None)
         return data
@@ -72,7 +73,7 @@ class Router(SQLModel, table=True):
             f"Router provider {self.provider_type} not yet implemented."
         )
 
-    def get_rates(self) -> Tuple[float, float]:
+    def get_rates(self) -> tuple[float, float]:
         """Return the token rates for the router model. Per token"""
         if self.provider_type == self.Provider.OPENROUTER:
             headers = {"Authorization": f"Bearer {self.api_key}"}

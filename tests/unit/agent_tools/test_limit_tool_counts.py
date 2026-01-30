@@ -17,7 +17,7 @@ def test_register_hooks_adds_callbacks():
     registry = FakeRegistry()
     hooks = LimitToolCounts(max_tool_counts={"tool_a": 1})
 
-    hooks.register_hooks(registry)  # type: ignore[arg-type]
+    hooks.register_hooks(registry)  # pyright: ignore[reportArgumentType]
 
     # Should have registered three callbacks
     assert len(registry.callbacks) == 3
@@ -58,7 +58,7 @@ def test_intercept_tool_no_limit_for_unspecified_tool():
     hooks = LimitToolCounts(max_tool_counts={"limited_tool": 1})
 
     # Tool not specified in max_tool_counts should not be limited
-    for i in range(5):
+    for _ in range(5):
         evt = FakeBeforeToolCallEvent("unlimited_tool")
         hooks.intercept_tool(evt)
         assert not evt.cancel_tool

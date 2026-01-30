@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 from importlib import import_module
-from typing import Any, List, Optional
+from typing import Any
 
 from fastapi import WebSocketDisconnect
 from pydantic import BaseModel
@@ -12,7 +12,8 @@ from strands import Agent as StrandsAgent
 from strands import ToolContext, tool
 from strands.hooks import HookProvider
 from strands.tools.decorator import DecoratedFunctionTool
-from typing_extensions import Dict
+from strands.types.content import Messages
+from typing_extensions import override
 
 from agent_tools.hooks import AgentLoggingHook, LimitToolCounts, ToolLoggingHook
 from agent_tools.image import screenshot_bytes
@@ -47,10 +48,11 @@ class Argument(SQLModel, table=True):
         back_populates="arguments",
     )
 
+    @override
     def __str__(self) -> str:
         return f"{self.name}: {self.type} ({self.json_type}) - {self.description}"
 
-    def __init__(self, **data):
+    def __init__(self, **data: Any):
         super().__init__(**data)
         # Validate that the type is a valid Python type
         try:
@@ -117,7 +119,7 @@ class Agent(SQLModel, table=True):
     description: str = Field(..., description="Description of the agent.")
     prompt: str = Field(..., description="The prompt used to initialize the agent.")
     # Used to import the pydantic model at runtime
-    response_model: Optional[str] = Field(
+    response_model: str | None = Field(
         None,
         description="The module path where the agent's structured response model is located.",
     )
@@ -214,7 +216,7 @@ class Agent(SQLModel, table=True):
                 tool_limits[sa.child_agent.get_tool_name()] = sa.limit
         return LimitToolCounts(tool_limits)
 
-    def get_logging_hooks(self, invocation_state: Dict[str, Any]) -> List[HookProvider]:
+    def get_logging_hooks(self, invocation_state: dict[str, Any]) -> list[HookProvider]:
         agent_logging_hook = AgentLoggingHook(
             agent_id=self.id,
             invocation_state=invocation_state,
@@ -231,7 +233,7 @@ class Agent(SQLModel, table=True):
 
         return [agent_logging_hook, tool_logging_hook]
 
-    def as_tool(self) -> DecoratedFunctionTool:
+    def as_tool(self) -> DecoratedFunctionTool:  # pyright: ignore[reportMissingTypeArgument]
         """Dynamically creates the agent tool function for usage within other agents."""
 
         ## Temporary fix until polymorphism is supported by sqlmodel
@@ -246,7 +248,7 @@ class Agent(SQLModel, table=True):
         )
         async def agent_tool_function(
             tool_context: ToolContext,
-        ) -> str | Dict[str, Any]:
+        ) -> str | dict[str, Any]:
             if "websocket" not in tool_context.invocation_state:
                 raise ValueError(
                     "WebSocket must be provided in tool context invocation state."
@@ -263,7 +265,7 @@ class Agent(SQLModel, table=True):
 
         return agent_tool_function
 
-    def get_input_schema(self) -> Dict[str, Any]:
+    def get_input_schema(self) -> dict[str, Any]:
         """
         Dinamically computes the tool input schema override based on the agent's defined arguments.
 
@@ -301,7 +303,7 @@ class Agent(SQLModel, table=True):
         }
         return input_schema
 
-    def validate_input(self, *args, **kwargs) -> None:
+    def validate_input(self, *args: Any, **kwargs: Any) -> None:
         """
         Validate the input arguments against the agent's defined arguments.
         We expect all arguments to be provided either as keyword arguments.
@@ -346,33 +348,32 @@ class Agent(SQLModel, table=True):
             raise ValueError(
                 f"The class '{self.response_model}' is not a valid Pydantic model."
             )
-        return model_class  # type: ignore It returns type[BaseModel] but cannot be expressed in type hints without __future__ annotations, which mess up SQLModel
+        return model_class  # pyright: ignore[reportReturnType] It returns type[BaseModel] but cannot be expressed in type hints without __future__ annotations, which mess up SQLModel
 
     async def __call__(
-        self, invocation_state: dict[str, Any] = {}, *args, **kwargs
-    ) -> Dict[str, Any]:
+        self, invocation_state: dict[str, Any] | None = None, *args: Any, **kwargs: Any
+    ) -> dict[str, Any]:
         """
         Dinamically computes tools, subagents, output model and input validation. Calls the agent and returns the final structered response.
         """
+        if invocation_state is None:
+            invocation_state = {}
         self.validate_input(*args, **kwargs)
         invocation_state["inputs"] = {
             arg.name: kwargs.get(arg.name) for arg in self.arguments
         }
 
-        tools: list[DecoratedFunctionTool] = [
+        tools: list[DecoratedFunctionTool] = [  # pyright: ignore[reportMissingTypeArgument]
             t.get_tool_function() for t in self.get_tools()
         ]
-        sub_agent_tools: list[DecoratedFunctionTool] = [
+        sub_agent_tools: list[DecoratedFunctionTool] = [  # pyright: ignore[reportMissingTypeArgument]
             sa.as_tool() for sa in self.get_sub_agents()
         ]
 
-        messages = [
+        messages: Messages = [
             {
-                "role": "system",
+                "role": "user",
                 "content": [
-                    {
-                        "text": self.prompt,
-                    },
                     {
                         "image": {
                             "format": "jpeg",
@@ -409,6 +410,7 @@ class Agent(SQLModel, table=True):
             model=model,
             tools=tools + sub_agent_tools,
             hooks=hooks,
+            system_prompt=self.prompt,
             messages=messages,  # type: ignore This works fine
         )
 
@@ -428,10 +430,10 @@ class Agent(SQLModel, table=True):
             input_tokens = mid.metrics.accumulated_usage.get("inputTokens", 0)
             output_tokens = mid.metrics.accumulated_usage.get("outputTokens", 0)
 
-            response: BaseModel = (
+            response: BaseModel | None = (
                 await strands_agent.invoke_async(
                     "Given our conversation so far, please provide a report using structured output with the given tool.",
-                    structured_output_model=self.get_pydantic_response_model(),  # type: ignore It returns type[BaseModel] but cannot be expressed in type hints without __future__ annotations, which mess up SQLModel
+                    structured_output_model=self.get_pydantic_response_model(),  # pyright: ignore[reportArgumentType] It returns type[BaseModel] but cannot be expressed in type hints without __future__ annotations, which mess up SQLModel
                     invocation_state=invocation_state,
                 )
             ).structured_output
@@ -439,6 +441,8 @@ class Agent(SQLModel, table=True):
             input_tokens = mid.metrics.accumulated_usage.get("inputTokens", 0)
             output_tokens = mid.metrics.accumulated_usage.get("outputTokens", 0)
 
+            if response is None:
+                raise ValueError("Agent did not return a structured response.")
             return response.model_dump()
         except WebSocketDisconnect as _:
             raise
@@ -446,12 +450,19 @@ class Agent(SQLModel, table=True):
             raise
         finally:
             cost = self.router.get_conversation_cost(input_tokens, output_tokens)
-            hooks[1].update_trace(finished=True, cost=cost)  # type: AgentLoggingHook
+            agent_logging_hook: AgentLoggingHook | None = next(
+                filter(  # pyright: ignore[reportAssignmentType]
+                    lambda h: isinstance(h, AgentLoggingHook), hooks
+                ),
+                None,
+            )
+            if agent_logging_hook:
+                agent_logging_hook.update_trace(finished=True, cost=cost)
 
     def __init__(self, **data: Any) -> None:
         super().__init__(**data)
         # Validate that the response model can be imported successfully
-        self.get_pydantic_response_model()
+        _ = self.get_pydantic_response_model()
 
 
 # class GatewayAgent(Agent):
@@ -500,7 +511,7 @@ class SubAgent(SQLModel, table=True):
         },
     )
 
-    limit: Optional[int] = Field(
+    limit: int | None = Field(
         None,
         description="Optional limit on the number of times the sub-agent can be called by the parent agent.",
     )
@@ -510,7 +521,7 @@ class SubAgent(SQLModel, table=True):
         description="Timestamp of when the sub-agent association was created.",
     )
 
-    def __init__(self, **data):
+    def __init__(self, **data: Any):
         super().__init__(**data)
         if self.parent_agent_id == self.child_agent_id:
             raise ValueError("An agent cannot be a sub-agent of itself.")
@@ -538,7 +549,7 @@ class AgentTool(SQLModel, table=True):
         sa_relationship_kwargs={"lazy": "joined"},
     )
 
-    limit: Optional[int] = Field(
+    limit: int | None = Field(
         None,
         description="Optional limit on the number of times the tool can be called by the agent.",
     )

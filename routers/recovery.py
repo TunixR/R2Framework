@@ -89,6 +89,6 @@ async def handle_robot_exception(websocket: WebSocket):
             {keep, work}, return_when=asyncio.FIRST_COMPLETED
         )
         for task in pending:
-            task.cancel()
+            _ = task.cancel()
 
         return

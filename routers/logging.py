@@ -1,6 +1,6 @@
 import zipfile
+from collections.abc import Sequence
 from io import BytesIO
-from typing import Sequence
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Response, status

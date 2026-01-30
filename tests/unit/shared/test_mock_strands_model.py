@@ -1,4 +1,5 @@
-from typing import Any, AsyncGenerator, Literal, Optional, TypeVar, Union
+from collections.abc import AsyncGenerator
+from typing import Any, Literal, TypeVar
 
 import pytest
 from openai.types.chat import ChatCompletionChunk
@@ -8,6 +9,8 @@ from openai.types.chat.chat_completion_chunk import (
     ChoiceDeltaToolCall,
     ChoiceDeltaToolCallFunction,
 )
+from strands.types.content import Messages
+from strands.types.tools import ToolSpec
 
 from tests.unit.shared.mock_strands_model import MockStrandsModel
 
@@ -16,17 +19,24 @@ T = TypeVar("T")
 
 
 class DummyOutputModel:
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any):
         self.__dict__.update(kwargs)
 
 
-def make_messages() -> list[dict]:
+def make_messages() -> Messages:
     # The mock ignores inputs and only uses its internal stack. Provide a minimal structure.
-    return [{"role": "user", "content": "Hello"}]
+    return [{"role": "user", "content": [{"text": "Hello"}]}]
 
 
-def make_tool_specs() -> list[dict]:
-    return [{"name": "toolA", "description": "A test tool"}]
+def make_tool_specs() -> list[ToolSpec]:
+    return [
+        {
+            "name": "toolA",
+            "description": "A test tool",
+            "inputSchema": {},
+            "outputSchema": {},
+        }
+    ]
 
 
 def make_system_prompt() -> str:
@@ -35,9 +45,10 @@ def make_system_prompt() -> str:
 
 def build_chat_completion_chunk(
     content: str,
-    finish_reason: Optional[
-        Literal["stop", "length", "tool_calls", "content_filter", "function_call"]
-    ] = "stop",
+    finish_reason: Literal[
+        "stop", "length", "tool_calls", "content_filter", "function_call"
+    ]
+    | None = "stop",
 ) -> ChatCompletionChunk:
     return ChatCompletionChunk(
         id="chunk_1",
@@ -55,7 +66,7 @@ def build_chat_completion_chunk(
     )
 
 
-def make_structured_output(obj: Any) -> dict[str, Union[T, Any]]:
+def make_structured_output(obj: Any) -> dict[str, T | Any]:
     return {"output": obj}
 
 
@@ -68,8 +79,8 @@ def test_stack_push_and_remaining():
     MockStrandsModel.clear_responses()
     assert MockStrandsModel.remaining() == 0
 
-    MockStrandsModel.push_response({"r": 1})  # pyright:ignore
-    MockStrandsModel.push_response({"r": 2})  # pyright:ignore
+    MockStrandsModel.push_response({"r": 1})  # pyright:ignore[reportArgumentType]
+    MockStrandsModel.push_response({"r": 2})  # pyright:ignore[reportArgumentType]
     assert MockStrandsModel.remaining() == 2
 
     MockStrandsModel.clear_responses()
@@ -78,10 +89,10 @@ def test_stack_push_and_remaining():
 
 def test_set_responses_replaces_stack():
     MockStrandsModel.clear_responses()
-    MockStrandsModel.set_responses([{"r": 1}, {"r": 2}, {"r": 3}])  # pyright:ignore
+    MockStrandsModel.set_responses([{"r": 1}, {"r": 2}, {"r": 3}])  # pyright:ignore[reportArgumentType]
     assert MockStrandsModel.remaining() == 3
 
-    MockStrandsModel.set_responses([{"r": 42}])  # pyright:ignore
+    MockStrandsModel.set_responses([{"r": 42}])  # pyright: ignore[reportArgumentType]
     assert MockStrandsModel.remaining() == 1
 
 
@@ -99,8 +110,8 @@ async def test_stream_formats_chat_completion_chunk():
     model = MockStrandsModel()
 
     gen = model.stream(
-        messages=make_messages(),  # type: ignore[arg-type]
-        tool_specs=make_tool_specs(),  # type: ignore[arg-type]
+        messages=make_messages(),
+        tool_specs=make_tool_specs(),
         system_prompt=make_system_prompt(),
         tool_choice=None,
         extra="ignored",
@@ -156,7 +167,7 @@ async def test_stream_handles_multiple_choice_deltas():
     model = MockStrandsModel()
 
     gen = model.stream(
-        messages=make_messages(),  # type: ignore[arg-type]
+        messages=make_messages(),
         tool_specs=None,
         system_prompt=None,
         tool_choice=None,
@@ -235,8 +246,8 @@ async def test_stream_handles_tool_deltas():
     model = MockStrandsModel()
 
     gen = model.stream(
-        messages=make_messages(),  # type: ignore[arg-type]
-        tool_specs=make_tool_specs(),  # type: ignore[arg-type]
+        messages=make_messages(),
+        tool_specs=make_tool_specs(),
         system_prompt=None,
         tool_choice=None,
     )
@@ -295,7 +306,7 @@ async def test_structured_output_yields_preloaded_object():
 
     gen = model.structured_output(
         output_model=DummyOutputModel,  # type: ignore[type-var]
-        prompt=make_messages(),  # type: ignore[arg-type]
+        prompt=make_messages(),
         system_prompt="context",
         max_output_tokens=256,
     )
@@ -326,8 +337,8 @@ async def test_stream_raises_on_empty_stack():
     model = MockStrandsModel()
     with pytest.raises(AssertionError):
         # Consume the generator to trigger execution and the pop
-        async for _ in model.stream(  # type: ignore[arg-type]
-            messages=make_messages(),  # type: ignore[arg-type]
+        async for _ in model.stream(
+            messages=make_messages(),
             tool_specs=None,
             system_prompt=None,
         ):
@@ -339,9 +350,9 @@ async def test_structured_output_raises_on_empty_stack():
     MockStrandsModel.clear_responses()
     model = MockStrandsModel()
     with pytest.raises(AssertionError):
-        async for _ in model.structured_output(  # type: ignore[type-var, arg-type]
+        async for _ in model.structured_output(
             output_model=DummyOutputModel,
-            prompt=make_messages(),  # type: ignore[arg-type]
+            prompt=make_messages(),
             system_prompt=None,
         ):
             pass

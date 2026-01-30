@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 @router.get("/users", summary="List all users")
-def list_users() -> List[Dict[str, Any]]:
+def list_users() -> list[dict[str, Any]]:
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail="Auth models not yet defined. Implement once models are available.",
@@ -30,7 +30,7 @@ def list_users() -> List[Dict[str, Any]]:
 
 
 @router.get("/users/{user_id}", summary="Get user by ID")
-def get_user(user_id: UUID) -> Dict[str, Any]:
+def get_user(user_id: UUID) -> dict[str, Any]:
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail="Auth models not yet defined. Implement once models are available.",
@@ -42,7 +42,7 @@ def get_user(user_id: UUID) -> Dict[str, Any]:
     status_code=status.HTTP_201_CREATED,
     summary="Create user",
 )
-def create_user(payload: Dict[str, Any]) -> Dict[str, Any]:
+def create_user(payload: dict[str, Any]) -> dict[str, Any]:
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail="Auth models not yet defined. Implement once models are available.",
@@ -50,7 +50,7 @@ def create_user(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.put("/users/{user_id}", summary="Replace user")
-def replace_user(user_id: UUID, payload: Dict[str, Any]) -> Dict[str, Any]:
+def replace_user(user_id: UUID, payload: dict[str, Any]) -> dict[str, Any]:
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail="Auth models not yet defined. Implement once models are available.",
@@ -58,7 +58,7 @@ def replace_user(user_id: UUID, payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.patch("/users/{user_id}", summary="Update user")
-def update_user(user_id: UUID, payload: Dict[str, Any]) -> Dict[str, Any]:
+def update_user(user_id: UUID, payload: dict[str, Any]) -> dict[str, Any]:
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail="Auth models not yet defined. Implement once models are available.",
@@ -79,7 +79,7 @@ def delete_user(user_id: UUID) -> None:
 
 
 @router.get("/roles", summary="List all roles")
-def list_roles() -> List[Dict[str, Any]]:
+def list_roles() -> list[dict[str, Any]]:
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail="Auth models not yet defined. Implement once models are available.",
@@ -87,7 +87,7 @@ def list_roles() -> List[Dict[str, Any]]:
 
 
 @router.get("/roles/{role_id}", summary="Get role by ID")
-def get_role(role_id: UUID) -> Dict[str, Any]:
+def get_role(role_id: UUID) -> dict[str, Any]:
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail="Auth models not yet defined. Implement once models are available.",
@@ -99,7 +99,7 @@ def get_role(role_id: UUID) -> Dict[str, Any]:
     status_code=status.HTTP_201_CREATED,
     summary="Create role",
 )
-def create_role(payload: Dict[str, Any]) -> Dict[str, Any]:
+def create_role(payload: dict[str, Any]) -> dict[str, Any]:
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail="Auth models not yet defined. Implement once models are available.",
@@ -107,7 +107,7 @@ def create_role(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.put("/roles/{role_id}", summary="Replace role")
-def replace_role(role_id: UUID, payload: Dict[str, Any]) -> Dict[str, Any]:
+def replace_role(role_id: UUID, payload: dict[str, Any]) -> dict[str, Any]:
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail="Auth models not yet defined. Implement once models are available.",
@@ -115,7 +115,7 @@ def replace_role(role_id: UUID, payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.patch("/roles/{role_id}", summary="Update role")
-def update_role(role_id: UUID, payload: Dict[str, Any]) -> Dict[str, Any]:
+def update_role(role_id: UUID, payload: dict[str, Any]) -> dict[str, Any]:
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail="Auth models not yet defined. Implement once models are available.",

@@ -1,8 +1,9 @@
-import dotenv
 import os
 
+import dotenv
+
 # Load environment variables from .env file
-dotenv.load_dotenv()
+_ = dotenv.load_dotenv()
 
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
 POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))

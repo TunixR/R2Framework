@@ -1,11 +1,11 @@
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 from strands.types.tools import JSONSchema
 
 from database.agents.models import Agent, AgentType, Argument
 from database.logging.models import (
-    ToolTrace,  # noqa: F401 Needs to be imported to register with SQLModel
+    ToolTrace,  # pyright: ignore[reportUnusedImport] # noqa: F401 Needs to be imported to register with SQLModel
 )
 from database.provider.models import Router
 
@@ -71,7 +71,7 @@ def make_agent(router: Router) -> Agent:
     )
 
 
-def valid_kwargs() -> dict:
+def valid_kwargs() -> dict[str, Any]:
     return {
         "task": "Process invoice",
         "action_history": ["open_app", "login"],
@@ -178,7 +178,7 @@ def test_argument_incompatible_json_type():
 
 def test_get_input_schema_matches_arguments():
     agent = make_agent(make_router())
-    schema: Dict[str, Any] = agent.get_input_schema().get("json", {})
+    schema: dict[str, Any] = agent.get_input_schema().get("json", {})
     assert schema["type"] == "object"
     props = schema["properties"]
     required = set(schema["required"])
@@ -193,14 +193,14 @@ def test_get_input_schema_matches_arguments():
 def test_as_tool_reflects_agent_metadata():
     agent = make_agent(make_router())
     decorated = agent.as_tool()
-    assert decorated._tool_name == agent.get_tool_name()
-    assert decorated._tool_spec.get("description", "") == agent.description
+    assert decorated._tool_name == agent.get_tool_name()  # pyright: ignore[reportPrivateUsage]
+    assert decorated._tool_spec.get("description", "") == agent.description  # pyright: ignore[reportPrivateUsage]
     # Input schema from decoration should mirror dynamic schema
-    tool_schema = decorated._tool_spec.get("inputSchema", JSONSchema()).get("json", {})
+    tool_schema = decorated._tool_spec.get("inputSchema", JSONSchema()).get("json", {})  # pyright: ignore[reportPrivateUsage]
     agent_schema = agent.get_input_schema().get("json", {})
     assert tool_schema == agent_schema
     # We validate the input against the JSON schema in the agent
-    assert decorated._metadata.validate_input(valid_kwargs()) == {}
+    assert decorated._metadata.validate_input(valid_kwargs()) == {}  # pyright: ignore[reportPrivateUsage]
 
 
 # ---------------------------------------------------------------------------

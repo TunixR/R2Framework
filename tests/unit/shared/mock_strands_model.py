@@ -1,14 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncGenerator
 from typing import (
     Any,
-    AsyncGenerator,
-    List,
-    Optional,
-    Type,
     TypeVar,
-    Union,
     override,
 )
 
@@ -42,13 +38,13 @@ class MockStrandsModel(OpenAIModel):
     """
 
     # Class-level LIFO stack shared across all instances
-    _response_stack: List[ChatCompletionChunk] = []
-    _structured_output_stack: List[Any] = []
+    _response_stack: list[ChatCompletionChunk] = []
+    _structured_output_stack: list[Any] = []
 
-    def __init__(
+    def __init__(  # pyright: ignore[reportMissingSuperCall]
         self,
-        client_args: Optional[dict] = None,
-        model_id: Optional[str] = None,
+        client_args: dict[str, Any] | None = None,
+        model_id: str | None = None,
         **_: Any,
     ) -> None:
         # Store args for parity with real OpenAIModel constructor, though unused
@@ -75,7 +71,7 @@ class MockStrandsModel(OpenAIModel):
         cls._structured_output_stack.append(response)
 
     @classmethod
-    def set_responses(cls, responses: List[ChatCompletionChunk]) -> None:
+    def set_responses(cls, responses: list[ChatCompletionChunk]) -> None:
         """
         Replace the stack with the provided list of responses (LIFO semantics).
         The last item in the list will be returned first.
@@ -83,7 +79,7 @@ class MockStrandsModel(OpenAIModel):
         cls._response_stack = list(responses)
 
     @classmethod
-    def set_structured_outputs(cls, responses: List[Any]) -> None:
+    def set_structured_outputs(cls, responses: list[Any]) -> None:
         """
         Replace the structured output stack with the provided list of responses (LIFO semantics).
         The last item in the list will be returned first.
@@ -136,8 +132,8 @@ class MockStrandsModel(OpenAIModel):
     async def stream(
         self,
         messages: Messages,
-        tool_specs: Optional[list[ToolSpec]] = None,
-        system_prompt: Optional[str] = None,
+        tool_specs: list[ToolSpec] | None = None,
+        system_prompt: str | None = None,
         *,
         tool_choice: ToolChoice | None = None,
         **kwargs: Any,
@@ -213,11 +209,11 @@ class MockStrandsModel(OpenAIModel):
     @override
     async def structured_output(
         self,
-        output_model: Type[T],
+        output_model: type[T],
         prompt: Messages,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         **kwargs: Any,
-    ) -> AsyncGenerator[dict[str, Union[T, Any]], None]:
+    ) -> AsyncGenerator[dict[str, T | Any], None]:
         """
         Return the next preloaded response instead of making an API call.
         Tests can push either the structured object or a dict representing the structured output.

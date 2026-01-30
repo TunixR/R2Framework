@@ -19,7 +19,7 @@ def test_length_mismatch_raises_validation_error():
     future = ["a", "b", "c"]
     executed = [True, False]  # mismatched length
     with pytest.raises(ValidationError):
-        compute_continuation_activity(future, executed)
+        _ = compute_continuation_activity(future, executed)
 
 
 def test_empty_lists_return_zero():
@@ -56,7 +56,7 @@ def test_all_false_returns_zero():
         ),
     ],
 )
-def test_no_true_present_or_false_before_true(executed, expected_index):
+def test_no_true_present_or_false_before_true(executed, expected_index):  # pyright: ignore[reportMissingParameterType]
     future = [f"task{i}" for i in range(len(executed))]
     assert compute_continuation_activity(future, executed) == expected_index
 
@@ -76,7 +76,7 @@ def test_no_true_present_or_false_before_true(executed, expected_index):
         ([True, True, False, False], 2),
     ],
 )
-def test_first_false_after_last_true(executed, expected_index):
+def test_first_false_after_last_true(executed, expected_index):  # pyright: ignore[reportMissingParameterType]
     future = [f"task{i}" for i in range(len(executed))]
     assert compute_continuation_activity(future, executed) == expected_index
 

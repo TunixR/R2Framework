@@ -16,15 +16,16 @@ Notes:
 from __future__ import annotations
 
 import importlib
-from typing import Iterable
+from collections.abc import Iterable
 
+from sqlalchemy import Engine
 from sqlmodel import Session, select
 from strands.tools.decorator import DecoratedFunctionTool
 
 from database.tools.models import Tool
 
 
-def _gather_tool_functions() -> list[DecoratedFunctionTool]:
+def _gather_tool_functions() -> list[DecoratedFunctionTool]:  # pyright: ignore[reportMissingTypeArgument]
     """
     Collect all decorated tool functions that should be registered.
 
@@ -37,7 +38,7 @@ def _gather_tool_functions() -> list[DecoratedFunctionTool]:
         importlib.import_module("gateway.agent"),
     ]
 
-    tools: Iterable = [
+    tools: Iterable[DecoratedFunctionTool] = [  # pyright: ignore[reportMissingTypeArgument]
         fn
         for module in modules
         for fn in vars(module).values()
@@ -65,7 +66,7 @@ def _tool_exists(session: Session, name: str, fn_module: str) -> bool:
     return existing is not None
 
 
-def _compute_fn_module(fn: DecoratedFunctionTool) -> str:
+def _compute_fn_module(fn: DecoratedFunctionTool) -> str:  # pyright: ignore[reportMissingTypeArgument]
     """
     Build the fully qualified module path + function name for storage.
 
@@ -75,14 +76,14 @@ def _compute_fn_module(fn: DecoratedFunctionTool) -> str:
     Returns:
         String like 'package.subpackage.module.function_name'
     """
-    module_name = getattr(fn._tool_func, "__module__", None)
-    qualname = getattr(fn._tool_func, "__name__", None)
+    module_name = getattr(fn._tool_func, "__module__", None)  # pyright: ignore[reportPrivateUsage]
+    qualname = getattr(fn._tool_func, "__name__", None)  # pyright: ignore[reportPrivateUsage]
     if not module_name or not qualname:
         raise ValueError(f"Cannot compute module path for tool: {fn}")
     return f"{module_name}.{qualname}"
 
 
-def populate_tools(engine) -> None:
+def populate_tools(engine: Engine) -> None:
     """
     Populate the Tool table with all decorated tools defined across the framework.
 
@@ -104,8 +105,8 @@ def populate_tools(engine) -> None:
     with Session(engine) as session:
         for decorated in tool_functions:
             try:
-                name = decorated._tool_name
-                description = decorated._tool_spec.get(
+                name = decorated._tool_name  # pyright: ignore[reportPrivateUsage]
+                description = decorated._tool_spec.get(  # pyright: ignore[reportPrivateUsage]
                     "description", "No description provided."
                 )
                 fn_module = _compute_fn_module(decorated)

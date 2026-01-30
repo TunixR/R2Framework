@@ -2,7 +2,7 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def mock_s3client_model(monkeypatch):
+def mock_s3client_model(monkeypatch):  # pyright: ignore[reportMissingParameterType]
     import database.logging.models as logging_models_mod
     import s3 as s3_mod
     from s3 import utils as s3_utils

@@ -1,7 +1,7 @@
 import json
 from base64 import b64encode
 from datetime import datetime
-from typing import Any, Dict, Tuple
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy.dialects.postgresql import JSONB
@@ -51,13 +51,13 @@ class AgentTrace(SQLModel, table=True):
 
     tool_traces: list["ToolTrace"] = Relationship(back_populates="agent_trace")
 
-    inputs: Dict = Field(
+    inputs: dict[str, Any] = Field(
         sa_type=JSONB,
     )
 
     # Input and output messages exchanged with the LLM
     # Each message is a dict with 'role' and 'content' keys
-    messages: list[Dict[str, Any]] | None = Field(default=None, sa_type=JSONB)
+    messages: list[dict[str, Any]] | None = Field(default=None, sa_type=JSONB)
 
     cost: float = Field(default=0.0)
 
@@ -83,7 +83,7 @@ class AgentTrace(SQLModel, table=True):
         log += "## Messages:\n"
 
         timestamped_logs: list[
-            Tuple[datetime, str]
+            tuple[datetime, str]
         ] = []  # We will use this to later sort messages by timestamp
         # Sorry. Dict moment
         if self.messages:
@@ -197,7 +197,7 @@ class RobotException(SQLModel, table=True):
         primary_key=True,
     )
 
-    exception_details: Dict = Field(
+    exception_details: dict[str, Any] = Field(
         sa_type=JSONB,
         nullable=True,
     )
@@ -245,7 +245,7 @@ class GUITrace(SQLModel, table=True):
     )  # Screenshot name identifier in the configured S3 bucket
 
     action_type: str = Field(default="")  # e.g., "click", "input", etc.
-    action_content: Dict = Field(
+    action_content: dict[str, Any] = Field(
         sa_type=JSONB,
         default={},
     )  # Details about the action performed
@@ -263,14 +263,14 @@ class GUITrace(SQLModel, table=True):
     )
 
     @staticmethod
-    async def create(screenshot_b: bytes, **data):
+    async def create(screenshot_b: bytes, **data: Any):
         screenshot_key = await S3Client.upload_bytes(
             screenshot_b,
             content_type="image/jpeg",
         )
         return GUITrace(screenshot_key=screenshot_key, **data)
 
-    def __init__(self, **data):
+    def __init__(self, **data: Any):
         super().__init__(**data)
         if not self.agent_trace_id:
             raise ValueError("GUITrace must be associated with an AgentTrace.")
@@ -295,7 +295,7 @@ class ToolTrace(SQLModel, table=True):
     tool_id: UUID = Field(foreign_key="tool.id")
     tool: Tool = Relationship(back_populates="traces")
 
-    input: Dict = Field(
+    input: dict[str, Any] = Field(
         sa_type=JSONB,
         default={},
     )

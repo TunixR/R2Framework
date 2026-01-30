@@ -32,7 +32,7 @@ class S3Client:
             str: The S3 key of the uploaded file.
         """
         key = str(uuid.uuid4())
-        async with S3Client._client() as s3_client:  # pyright: ignore
+        async with S3Client._client() as s3_client:  # pyright: ignore[reportGeneralTypeIssues]
             await s3_client.put_object(
                 Bucket=bucket, Key=key, Body=file_bytes, ContentType=content_type
             )
@@ -49,7 +49,7 @@ class S3Client:
         Returns:
             bytes: The downloaded file bytes.
         """
-        async with S3Client._client() as s3_client:  # pyright: ignore
+        async with S3Client._client() as s3_client:  # pyright: ignore[reportGeneralTypeIssues]
             obj = await s3_client.get_object(Bucket=bucket, Key=key)
             file_bytes = await obj["Body"].read()
         return file_bytes
@@ -68,7 +68,7 @@ class S3Client:
             dict[str, bytes]: A dictionary mapping S3 keys to their downloaded file bytes.
         """
         result = {}
-        async with S3Client._client() as s3_client:  # pyright: ignore
+        async with S3Client._client() as s3_client:  # pyright: ignore[reportGeneralTypeIssues]
             for key in keys:
                 obj = await s3_client.get_object(Bucket=bucket, Key=key)
                 file_bytes = await obj["Body"].read()
@@ -84,7 +84,7 @@ class S3Client:
             key (str): The S3 key of the file to delete.
             bucket (str): The S3 bucket to delete from. Defaults to S3_BUCKET.
         """
-        async with S3Client._client() as s3_client:  # pyright: ignore
+        async with S3Client._client() as s3_client:  # pyright: ignore[reportGeneralTypeIssues]
             await s3_client.delete_object(Bucket=bucket, Key=key)
 
     @staticmethod
@@ -97,5 +97,5 @@ class S3Client:
             bucket (str): The S3 bucket to delete from. Defaults to S3_BUCKET.
         """
         objects = [{"Key": key} for key in keys]
-        async with S3Client._client() as s3_client:  # pyright: ignore
+        async with S3Client._client() as s3_client:  # pyright: ignore[reportGeneralTypeIssues]
             await s3_client.delete_objects(Bucket=bucket, Delete={"Objects": objects})

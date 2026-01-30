@@ -1,3 +1,5 @@
+from typing import Any
+
 from sqlalchemy import Connection, event
 from sqlmodel import (
     Session,
@@ -10,7 +12,7 @@ from s3.utils import S3Client
 
 @event.listens_for(SubAgentTrace, "before_insert")
 @event.listens_for(SubAgentTrace, "before_update")
-def _validate_sub_agent_trace(_, connection: Connection, target: SubAgentTrace) -> None:
+def _validate_sub_agent_trace(_, connection: Connection, target: SubAgentTrace) -> None:  # pyright: ignore[reportUnusedFunction]
     if target.parent_trace_id == target.child_trace_id:
         raise ValueError("A trace cannot be a sub-trace of itself.")
 
@@ -41,6 +43,6 @@ def _validate_sub_agent_trace(_, connection: Connection, target: SubAgentTrace) 
 
 
 @event.listens_for(GUITrace, "before_delete")
-async def _cascade_delete_gui_trace_screenshot(_, _2, target: GUITrace):
+async def _cascade_delete_gui_trace_screenshot(_, __: Any, target: GUITrace):  # pyright: ignore[reportUnusedFunction,reportUnusedParameter]
     if target.screenshot_key:
         await S3Client.delete_object(target.screenshot_key)

@@ -1,12 +1,12 @@
 import sys
 from types import SimpleNamespace
-from typing import Any, Dict, List
+from typing import Any
 from uuid import UUID
 
 import pytest
 
 # Global in-memory store to simulate persistence across Session instances
-_STORE: Dict[UUID, Any] = {}
+_STORE: dict[UUID, Any] = {}
 
 
 class MockSession:
@@ -15,14 +15,14 @@ class MockSession:
     supports retrieval via get(model_class, id) without touching a real database.
     """
 
-    def __init__(self, *args, **kwargs):
-        self.added: List[Any] = []
+    def __init__(self, *args: Any, **kwargs: Any):
+        self.added: list[Any] = []
         self.commit_count: int = 0
 
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_type, exc, tb):
+    def __exit__(self, exc_type, exc, tb):  # pyright: ignore[reportMissingParameterType]
         return False
 
     def add(self, obj: Any):
@@ -32,20 +32,20 @@ class MockSession:
     def commit(self):
         self.commit_count += 1
 
-    def exec(self, query: Any):
+    def exec(self, _query: Any):
         raise NotImplementedError(
             "MockSession.exec is not implemented. You must spy on it to change behavior during testing."
         )
 
-    def get(self, model_class, id: UUID):
+    def get(self, _, id: UUID):
         return _STORE.get(id)
 
-    def refresh(self, obj: Any):
+    def refresh(self, _: Any):
         pass
 
 
 @pytest.fixture(autouse=True)
-def patched_dependencies(monkeypatch):
+def patched_dependencies(monkeypatch):  # pyright: ignore[reportMissingParameterType]
     """
     Patch dependencies used by AgentLoggingHook so no real DB is touched:
     - Patch Session inside agent_tools.hooks to MockSession

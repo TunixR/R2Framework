@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from importlib import import_module
-from typing import Callable
+from typing import Any, Callable
 
 from sqlmodel import Field, Relationship, SQLModel
 from strands.tools.decorator import DecoratedFunctionTool
@@ -37,7 +37,7 @@ class Tool(SQLModel, table=True):
         description="Timestamp of when the tool was last updated.",
     )
 
-    def get_tool_function(self) -> DecoratedFunctionTool:
+    def get_tool_function(self) -> DecoratedFunctionTool:  # pyright: ignore[reportMissingTypeArgument]
         """Dynamically import and return the tool function."""
         module_path, function_name = self.fn_module.rsplit(".", 1)
         try:
@@ -45,7 +45,7 @@ class Tool(SQLModel, table=True):
         except Exception as e:
             raise ImportError(f"Could not import module '{module_path}': {e}")
         try:
-            fn: Callable = getattr(module, function_name)
+            fn: Callable = getattr(module, function_name)  # pyright: ignore[reportMissingTypeArgument]
         except Exception as e:
             raise ImportError(
                 f"Could not find function '{function_name}' in module '{module_path}': {e}"
@@ -58,7 +58,7 @@ class Tool(SQLModel, table=True):
         return fn
 
     # Override validation to check the tool can be imported and fn exists
-    def __init__(self, **data):
+    def __init__(self, **data: Any):
         super().__init__(**data)
         # Validate that the function can be imported successfully
-        self.get_tool_function()
+        _ = self.get_tool_function()

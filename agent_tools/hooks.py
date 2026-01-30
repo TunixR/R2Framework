@@ -1,7 +1,7 @@
 from copy import deepcopy
 from datetime import datetime
 from threading import Lock
-from typing import Any, Dict, override
+from typing import Any, override
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
@@ -33,12 +33,15 @@ class LimitToolCounts(HookProvider):
         self._lock = Lock()
 
     @override
-    def register_hooks(self, registry: HookRegistry, **kwargs) -> None:
+    def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
         registry.add_callback(BeforeInvocationEvent, self.reset_counts)
         registry.add_callback(BeforeToolCallEvent, self.intercept_tool)
         registry.add_callback(AfterToolCallEvent, self.intercept_response)
 
-    def reset_counts(self, event: BeforeInvocationEvent) -> None:
+    def reset_counts(
+        self,
+        event: BeforeInvocationEvent,  # pyright: ignore[reportUnusedParameter]
+    ) -> None:
         with self._lock:
             self.tool_counts = {}
 
@@ -90,7 +93,7 @@ class ToolLoggingHook(HookProvider):
         self.trace_id: UUID
 
     @override
-    def register_hooks(self, registry: HookRegistry, **kwargs) -> None:
+    def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
         registry.add_callback(BeforeToolCallEvent, self.log_tool_call)
         registry.add_callback(AfterToolCallEvent, self.log_tool_response)
 
@@ -147,7 +150,7 @@ class AgentLoggingHook(HookProvider):
     def __init__(
         self,
         agent_id: UUID,
-        invocation_state: dict,
+        invocation_state: dict[str, Any],
         parent_trace_id: UUID | None = None,
         is_gui_agent: bool = False,
     ):
@@ -166,15 +169,15 @@ class AgentLoggingHook(HookProvider):
         # We generate here the id for the agent trace so we can reference it outside
         self.agent_trace_id = uuid4()
         self.created = False
-        self.messages: list[dict] = []
+        self.messages: list[dict[str, Any]] = []
         self.created: bool = False
 
     @override
-    def register_hooks(self, registry: HookRegistry, **kwargs) -> None:
+    def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
         registry.add_callback(BeforeInvocationEvent, self.log_start)
         registry.add_callback(MessageAddedEvent, self.log_message)
 
-    def log_start(self, event: BeforeInvocationEvent) -> None:
+    def log_start(self, event: BeforeInvocationEvent) -> None:  # pyright: ignore[reportUnusedParameter]
         # Skip if already logged, can happen if multiple invocations are made
         if self.created:
             return
@@ -213,9 +216,9 @@ class AgentLoggingHook(HookProvider):
         }
 
         for part in message["content"]:
-            if part.get("image", None):
+            if isinstance(part, dict) and part.get("image", None):
                 part[
-                    "image"
+                    "image"  # pyright: ignore[reportGeneralTypeIssues]
                 ] = {}  # We reset the dict to remove the possibly large data
                 part["image"]["uuid"] = "<uuid_pending>"
 
@@ -244,7 +247,7 @@ class AgentLoggingHook(HookProvider):
     async def register_gui_trace(
         self,
         action_type: str,
-        action_content: Dict[str, Any],
+        action_content: dict[str, Any],
         screenshot_bytes: bytes,
         started_at: datetime,
         finished_at: datetime,

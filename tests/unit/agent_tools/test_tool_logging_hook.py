@@ -10,9 +10,9 @@ from tests.unit.agent_tools._shared.fakes import (
 )
 
 from ..shared.mock_session import (  # noqa: F401 We need to import these fixtures for them to activate
-    _STORE,
-    clear_store,
-    patched_dependencies,
+    _STORE,  # pyright: ignore[reportPrivateUsage]
+    clear_store,  # pyright: ignore[reportUnusedImport]
+    patched_dependencies,  # pyright: ignore[reportUnusedImport]
 )
 
 

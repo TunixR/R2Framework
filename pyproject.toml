@@ -35,19 +35,16 @@ temp = [
 ]
 
 [tool.bandit]
-# Bandit security configuration
 exclude_dirs = ["tests", "migrations"]
-skips = ["B101", "B307", "B113"]  # Skip assert_used in test files, eval() usage, requests without timeout
 
 [tool.basedpyright]
-# Basedpyright configuration for type checking
-typeCheckingMode = "basic"
+exclude = ["**/migrations", "**/.*", "**/__pycache__", "**/tests/unit/shared"]
 reportMissingTypeStubs = false
 reportUnknownParameterType = false
 reportUnknownVariableType = false
 reportUnknownMemberType = false
 reportUnknownArgumentType = false
-reportMissingTypeArgument = false
-reportArgumentType = "error"
-reportAttributeAccessIssue = "error"
-reportCallIssue = "error"
+reportAny = false
+reportExplicitAny = false
+reportUnannotatedClassAttribute = false
+reportImportCycles = "warning"
