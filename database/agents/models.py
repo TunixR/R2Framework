@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 from importlib import import_module
-from typing import Any
+from typing import Any, override
 
 from fastapi import WebSocketDisconnect
 from pydantic import BaseModel
@@ -13,7 +13,6 @@ from strands import ToolContext, tool
 from strands.hooks import HookProvider
 from strands.tools.decorator import DecoratedFunctionTool
 from strands.types.content import Messages
-from typing_extensions import override
 
 from agent_tools.hooks import AgentLoggingHook, LimitToolCounts, ToolLoggingHook
 from agent_tools.image import screenshot_bytes
@@ -48,6 +47,26 @@ class Argument(SQLModel, table=True):
         back_populates="arguments",
     )
 
+    @property
+    def python_type(self) -> type:  # pyright: ignore[reportInvalidTypeForm]
+        match self.type:
+            case "str":
+                return str
+            case "int":
+                return int
+            case "float":
+                return float
+            case "bool":
+                return bool
+            case "list":
+                return list
+            case "dict":
+                return dict
+            case "None":
+                return None
+            case _:
+                raise ValueError(f"Unsupported type: {self.type}")
+
     @override
     def __str__(self) -> str:
         return f"{self.name}: {self.type} ({self.json_type}) - {self.description}"
@@ -55,30 +74,32 @@ class Argument(SQLModel, table=True):
     def __init__(self, **data: Any):
         super().__init__(**data)
         # Validate that the type is a valid Python type
-        try:
-            eval(self.type)
-        except Exception as e:
+        valid_python_types = {
+            "str",
+            "int",
+            "float",
+            "bool",
+            "list",
+            "dict",
+            "None",
+        }
+        if self.type not in valid_python_types:
             raise ValueError(
-                f"Invalid type '{self.type}' for argument '{self.name}': {e}"
+                f"Invalid type '{self.type}' for argument '{self.name}': Must be one of {valid_python_types}."
             )
 
-        try:
-            valid_json_types = {
-                "string",
-                "number",
-                "integer",
-                "boolean",
-                "array",
-                "object",
-                "null",
-            }
-            if self.json_type not in valid_json_types:
-                raise ValueError(
-                    f"Invalid JSON type '{self.json_type}' for argument '{self.name}'. Must be one of {valid_json_types}."
-                )
-        except Exception as e:
+        valid_json_types = {
+            "string",
+            "number",
+            "integer",
+            "boolean",
+            "array",
+            "object",
+            "null",
+        }
+        if self.json_type not in valid_json_types:
             raise ValueError(
-                f"Invalid JSON type '{self.json_type}' for argument '{self.name}': {e}"
+                f"Invalid JSON type '{self.json_type}' for argument '{self.name}'. Must be one of {valid_json_types}."
             )
 
         # Check python type and json type compatibility
@@ -89,6 +110,7 @@ class Argument(SQLModel, table=True):
             "bool": "boolean",
             "list": "array",
             "dict": "object",
+            "None": "null",
         }
         if self.type in type_mapping:
             expected_json_type = type_mapping[self.type]
@@ -322,8 +344,8 @@ class Agent(SQLModel, table=True):
             if value is None:
                 raise ValueError(f"Missing required argument: {arg.name}")
 
-            expected_type = eval(arg.type)
-            if not isinstance(value, expected_type):
+            expected_type = arg.python_type
+            if expected_type and not isinstance(value, expected_type):
                 raise TypeError(
                     f"Argument '{arg.name}' expected type '{arg.type}', got '{type(value).__name__}'."
                 )

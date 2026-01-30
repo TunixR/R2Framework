@@ -280,7 +280,6 @@ def parse_action_to_structure_output(
         elif len(thought_match.groups()) == 2:
             thought = thought_match.group(2).strip()
             reflection = thought_match.group(1).strip()
-    assert "Action:" in text
     action_str = text.split("Action: ")[-1]
 
     tmp_all_action = action_str.split(")\n\n")
@@ -548,10 +547,14 @@ def parsing_response_to_pyautogui_code(
             start_box = action_inputs.get("start_box")
             end_box = action_inputs.get("end_box")
             if start_box and end_box:
-                x1, y1, x2, y2 = eval(start_box)  # Assuming box is in [x1, y1, x2, y2]
+                x1, y1, x2, y2 = ast.literal_eval(
+                    start_box
+                )  # Assuming box is in [x1, y1, x2, y2]
                 sx = round(float((x1 + x2) / 2) * image_width, 3)
                 sy = round(float((y1 + y2) / 2) * image_height, 3)
-                x1, y1, x2, y2 = eval(end_box)  # Assuming box is in [x1, y1, x2, y2]
+                x1, y1, x2, y2 = ast.literal_eval(
+                    end_box
+                )  # Assuming box is in [x1, y1, x2, y2]
                 ex = round(float((x1 + x2) / 2) * image_width, 3)
                 ey = round(float((y1 + y2) / 2) * image_height, 3)
                 pyautogui_code += (
@@ -563,7 +566,9 @@ def parsing_response_to_pyautogui_code(
             # Parsing scroll action
             start_box = action_inputs.get("start_box")
             if start_box:
-                x1, y1, x2, y2 = eval(start_box)  # Assuming box is in [x1, y1, x2, y2]
+                x1, y1, x2, y2 = ast.literal_eval(
+                    start_box
+                )  # Assuming box is in [x1, y1, x2, y2]
                 x = round(float((x1 + x2) / 2) * image_width, 3)
                 y = round(float((y1 + y2) / 2) * image_height, 3)
 
@@ -596,7 +601,7 @@ def parsing_response_to_pyautogui_code(
             start_box = action_inputs.get("start_box")
             start_box = str(start_box)
             if start_box:
-                start_box = eval(start_box)
+                start_box = ast.literal_eval(start_box)
                 if not isinstance(start_box, list):
                     raise ValueError("start_box is not list of int")
                 if len(start_box) == 4:
@@ -728,9 +733,8 @@ Failed Action: {failed_activity}
 Variables: {variables}
 """
 
-    assert "websocket" in tool_context.invocation_state, (
-        "WebSocket must be provided in tool context"
-    )
+    if "websocket" not in tool_context.invocation_state:
+        raise ValueError("WebSocket must be provided in tool context")
     websocket = tool_context.invocation_state["websocket"]
     image = await screenshot_bytes(websocket)
     image_size = Image.open(BytesIO(image)).size

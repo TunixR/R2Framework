@@ -78,7 +78,7 @@ class Router(SQLModel, table=True):
         if self.provider_type == self.Provider.OPENROUTER:
             headers = {"Authorization": f"Bearer {self.api_key}"}
             response = requests.get(
-                "https://openrouter.ai/api/v1/models", headers=headers
+                "https://openrouter.ai/api/v1/models", headers=headers, timeout=10
             )
 
             if response.status_code == 200:

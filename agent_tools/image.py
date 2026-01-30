@@ -68,9 +68,10 @@ async def take_screenshot(
         Error: Returns information about what went wrong.
     """
 
-    assert "websocket" in tool_context.invocation_state, (
-        "WebSocket connection is required in tool context for taking screenshot."
-    )
+    if "websocket" not in tool_context.invocation_state:
+        raise ValueError(
+            "WebSocket connection is required in tool context for taking screenshot."
+        )
     websocket = tool_context.invocation_state["websocket"]
 
     try:

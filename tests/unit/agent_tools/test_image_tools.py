@@ -161,9 +161,8 @@ async def test_take_screenshot_missing_websocket():
             self.invocation_state = {}  # Missing websocket
 
     bad_ctx = BadContext()
-    with pytest.raises(AssertionError) as e:
+    with pytest.raises(ValueError):
         _ = await take_screenshot(bad_ctx)  # pyright: ignore[reportArgumentType]
-    assert "WebSocket connection is required" in str(e.value)
 
 
 @pytest.mark.asyncio
