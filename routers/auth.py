@@ -12,9 +12,11 @@ User operations: Login, See self, Delete self, Edit self, Change own password, L
 """
 
 from collections.abc import Sequence
+from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Header, status
+from sqlmodel import select
 
 from database.auth.models import (
     User,
@@ -22,56 +24,165 @@ from database.auth.models import (
     UserLogin,
     UserPasswordChange,
     UserPublic,
+    UserRole,
     UserSession,
     UserUpdate,
+)
+from database.auth.utils import (
+    get_session_expiry,
+    hash_password,
+    is_session_valid,
+    verify_password,
 )
 from database.general import SessionDep
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
-# Placeholder for authentication dependency
-# TODO: Implement proper authentication and authorization
-def get_current_user() -> User:
-    """Get the currently authenticated user."""
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Authentication not yet implemented",
-    )
+# Authentication dependencies
+
+
+def get_current_user(
+    session: SessionDep,
+    authorization: str = Header(None),
+) -> User:
+    """
+    Get the currently authenticated user from session token.
+    
+    Expects Authorization header with format: Bearer <session_id>
+    """
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+    
+    try:
+        # Parse Bearer token
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication scheme",
+            )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization header",
+        )
+    
+    # Find session by ID
+    try:
+        session_id = UUID(token)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session token",
+        )
+    
+    user_session = session.get(UserSession, session_id)
+    if not user_session:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session",
+        )
+    
+    # Check if session is still valid
+    if not is_session_valid(user_session.valid_until):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired",
+        )
+    
+    # Get user from session
+    user = user_session.user
+    if not user.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is disabled",
+        )
+    
+    return user
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
     """Require admin role for the current user."""
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Authorization not yet implemented",
-    )
+    if current_user.role != UserRole.ADMINISTRATOR:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator role required",
+        )
+    return current_user
 
 
 # Authentication endpoints
 
 
-@router.post("/login", response_model=UserPublic, summary="User login")
-def login(credentials: UserLogin, session: SessionDep) -> UserPublic:
+@router.post("/login", response_model=dict, summary="User login")
+def login(credentials: UserLogin, session: SessionDep) -> dict:
     """
     Authenticate a user and create a session.
-    Returns the user information (without password).
+    Returns the user information (without password) and session token.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Login not yet implemented",
+    # Find user by username
+    statement = select(User).where(User.username == credentials.username)
+    user = session.exec(statement).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+        )
+    
+    # Verify password
+    if not verify_password(credentials.password, user.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+        )
+    
+    # Check if user is enabled
+    if not user.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is disabled",
+        )
+    
+    # Create session
+    user_session = UserSession(
+        user=user,
+        valid_until=get_session_expiry(hours=24),
     )
+    session.add(user_session)
+    session.commit()
+    session.refresh(user_session)
+    
+    # Return user info and session token
+    return {
+        "user": UserPublic.model_validate(user),
+        "session_token": str(user_session.id),
+        "valid_until": user_session.valid_until.isoformat(),
+    }
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, summary="User logout")
-def logout(current_user: User = Depends(get_current_user)) -> None:
+def logout(
+    session: SessionDep,
+    current_user: User = Depends(get_current_user),
+    authorization: str = Header(None),
+) -> None:
     """
     Logout the current user by invalidating their session.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Logout not yet implemented",
-    )
+    # Extract session ID from authorization header
+    _, token = authorization.split()
+    session_id = UUID(token)
+    
+    # Find and delete session
+    user_session = session.get(UserSession, session_id)
+    if user_session:
+        session.delete(user_session)
+        session.commit()
 
 
 # User CRUD endpoints (admin operations)
@@ -92,10 +203,29 @@ def create_user(
     Create a new user. Requires admin role.
     Password will be hashed before storage.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Create user not yet implemented",
+    # Check if username already exists
+    statement = select(User).where(User.username == user_data.username)
+    existing_user = session.exec(statement).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already exists",
+        )
+    
+    # Hash password and create user
+    hashed_password = hash_password(user_data.password)
+    new_user = User(
+        username=user_data.username,
+        password=hashed_password,
+        role=user_data.role,
+        enabled=user_data.enabled,
     )
+    
+    session.add(new_user)
+    session.commit()
+    session.refresh(new_user)
+    
+    return UserPublic.model_validate(new_user)
 
 
 @router.get(
@@ -110,10 +240,8 @@ def list_users(
     """
     List all users. Requires admin role.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="List users not yet implemented",
-    )
+    users = session.exec(select(User)).all()
+    return [UserPublic.model_validate(user) for user in users]
 
 
 @router.get(
@@ -130,10 +258,16 @@ def search_users(
     """
     Search users by username or enabled status. Requires admin role.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Search users not yet implemented",
-    )
+    statement = select(User)
+    
+    if username is not None:
+        statement = statement.where(User.username.contains(username))
+    
+    if enabled is not None:
+        statement = statement.where(User.enabled == enabled)
+    
+    users = session.exec(statement).all()
+    return [UserPublic.model_validate(user) for user in users]
 
 
 @router.get("/users/me", response_model=UserPublic, summary="Get current user")
@@ -143,10 +277,7 @@ def get_current_user_info(
     """
     Get information about the currently authenticated user.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Get current user not yet implemented",
-    )
+    return UserPublic.model_validate(current_user)
 
 
 @router.get(
@@ -162,10 +293,13 @@ def get_user(
     """
     Get user by ID. Requires admin role.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Get user not yet implemented",
-    )
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    return UserPublic.model_validate(user)
 
 
 @router.patch(
@@ -183,10 +317,36 @@ def update_user(
     Update user information. Requires admin role.
     Can update username, enabled status, and role.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Update user not yet implemented",
-    )
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    
+    # Check if new username already exists
+    if user_data.username and user_data.username != user.username:
+        statement = select(User).where(User.username == user_data.username)
+        existing_user = session.exec(statement).first()
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username already exists",
+            )
+        user.username = user_data.username
+    
+    if user_data.enabled is not None:
+        user.enabled = user_data.enabled
+    
+    if user_data.role is not None:
+        user.role = user_data.role
+    
+    user.updated_at = datetime.now()
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    
+    return UserPublic.model_validate(user)
 
 
 @router.patch("/users/me", response_model=UserPublic, summary="Update current user")
@@ -197,12 +357,32 @@ def update_current_user(
 ) -> UserPublic:
     """
     Update current user's own information.
-    Users can only update their username.
+    Users can only update their username (not role or enabled status).
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Update current user not yet implemented",
-    )
+    if user_data.role is not None or user_data.enabled is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot modify role or enabled status",
+        )
+    
+    if user_data.username:
+        # Check if new username already exists
+        if user_data.username != current_user.username:
+            statement = select(User).where(User.username == user_data.username)
+            existing_user = session.exec(statement).first()
+            if existing_user:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Username already exists",
+                )
+            current_user.username = user_data.username
+    
+    current_user.updated_at = datetime.now()
+    session.add(current_user)
+    session.commit()
+    session.refresh(current_user)
+    
+    return UserPublic.model_validate(current_user)
 
 
 @router.delete(
@@ -218,10 +398,21 @@ def delete_user(
     """
     Delete a user. Requires admin role.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Delete user not yet implemented",
-    )
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    
+    # Delete user's sessions first
+    statement = select(UserSession).where(UserSession.user_id == user_id)
+    sessions = session.exec(statement).all()
+    for user_session in sessions:
+        session.delete(user_session)
+    
+    session.delete(user)
+    session.commit()
 
 
 @router.delete(
@@ -236,10 +427,14 @@ def delete_current_user(
     """
     Delete current user's own account.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Delete current user not yet implemented",
-    )
+    # Delete user's sessions first
+    statement = select(UserSession).where(UserSession.user_id == current_user.id)
+    sessions = session.exec(statement).all()
+    for user_session in sessions:
+        session.delete(user_session)
+    
+    session.delete(current_user)
+    session.commit()
 
 
 # Password management endpoints
@@ -260,10 +455,18 @@ def change_user_password(
     Change a user's password. Requires admin role.
     Admin does not need to provide current password.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Change user password not yet implemented",
-    )
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    
+    # Hash new password and update
+    user.password = hash_password(password_data.new_password)
+    user.updated_at = datetime.now()
+    session.add(user)
+    session.commit()
 
 
 @router.post(
@@ -280,10 +483,24 @@ def change_own_password(
     Change current user's own password.
     Requires current password for verification.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Change own password not yet implemented",
-    )
+    if not password_data.current_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is required",
+        )
+    
+    # Verify current password
+    if not verify_password(password_data.current_password, current_user.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect",
+        )
+    
+    # Hash new password and update
+    current_user.password = hash_password(password_data.new_password)
+    current_user.updated_at = datetime.now()
+    session.add(current_user)
+    session.commit()
 
 
 # User enable/disable endpoints
@@ -302,10 +519,20 @@ def enable_user(
     """
     Enable a user account. Requires admin role.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Enable user not yet implemented",
-    )
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    
+    user.enabled = True
+    user.updated_at = datetime.now()
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    
+    return UserPublic.model_validate(user)
 
 
 @router.post(
@@ -321,7 +548,17 @@ def disable_user(
     """
     Disable a user account. Requires admin role.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Disable user not yet implemented",
-    )
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    
+    user.enabled = False
+    user.updated_at = datetime.now()
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    
+    return UserPublic.model_validate(user)
