@@ -252,7 +252,7 @@ def list_users(
 def search_users(
     username: str | None = None,
     enabled: bool | None = None,
-    session: SessionDep = None,
+    session: SessionDep,
     current_user: User = Depends(require_admin),
 ) -> Sequence[UserPublic]:
     """
