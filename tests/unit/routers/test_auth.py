@@ -14,8 +14,6 @@ import uuid
 
 import pytest
 from fastapi import HTTPException, status
-from sqlmodel import Session, create_engine
-from sqlmodel.pool import StaticPool
 
 from database.auth.models import (
     User,
@@ -27,81 +25,24 @@ from database.auth.models import (
     UserSession,
     UserUpdate,
 )
-# Import auth endpoints directly to avoid importing the full routers package
-# which has dependencies we don't want to load for these tests
-import sys
-from pathlib import Path
-
-# Add the parent directory to the path to import routers.auth
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
-
-# Import only the auth router module
-import importlib.util
-auth_module_path = Path(__file__).resolve().parent.parent.parent.parent / 'routers' / 'auth.py'
-spec = importlib.util.spec_from_file_location(
-    "routers.auth",
-    str(auth_module_path)
+from database.auth.utils import hash_password, get_session_expiry
+from routers.auth import (
+    change_own_password,
+    change_user_password,
+    create_user,
+    delete_current_user,
+    delete_user,
+    disable_user,
+    enable_user,
+    get_current_user_info,
+    get_user,
+    list_users,
+    login,
+    logout,
+    search_users,
+    update_current_user,
+    update_user,
 )
-auth_module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(auth_module)
-
-# Import the functions we need
-change_own_password = auth_module.change_own_password
-change_user_password = auth_module.change_user_password
-create_user = auth_module.create_user
-delete_current_user = auth_module.delete_current_user
-delete_user = auth_module.delete_user
-disable_user = auth_module.disable_user
-enable_user = auth_module.enable_user
-get_current_user_info = auth_module.get_current_user_info
-get_user = auth_module.get_user
-list_users = auth_module.list_users
-login = auth_module.login
-logout = auth_module.logout
-search_users = auth_module.search_users
-update_current_user = auth_module.update_current_user
-update_user = auth_module.update_user
-
-
-@pytest.fixture(name="session")
-def session_fixture():
-    """Create an in-memory SQLite database for testing."""
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    # Import all models to register them with SQLModel
-    from database.auth.models import User, UserSession  # noqa: F401
-    from sqlmodel import SQLModel
-    
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        yield session
-
-
-@pytest.fixture
-def mock_user():
-    """Create a mock user for testing."""
-    return User(
-        id=uuid.uuid4(),
-        username="testuser",
-        password="hashed_password",
-        role=UserRole.DEVELOPER,
-        enabled=True,
-    )
-
-
-@pytest.fixture
-def mock_admin():
-    """Create a mock admin user for testing."""
-    return User(
-        id=uuid.uuid4(),
-        username="admin",
-        password="hashed_password",
-        role=UserRole.ADMINISTRATOR,
-        enabled=True,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -110,16 +51,16 @@ def mock_admin():
 
 
 def create_test_user(
-    session: Session,
+    session,
     username: str = "testuser",
-    password: str = "hashed_password",
+    password: str = "password123",
     role: UserRole = UserRole.DEVELOPER,
     enabled: bool = True,
 ) -> User:
     """Helper to create a test user in the database."""
     user = User(
         username=username,
-        password=password,
+        password=hash_password(password),
         role=role,
         enabled=enabled,
     )
@@ -129,12 +70,12 @@ def create_test_user(
     return user
 
 
-def create_test_admin(session: Session) -> User:
+def create_test_admin(session) -> User:
     """Helper to create a test admin user."""
     return create_test_user(
         session,
         username="admin",
-        password="admin_password",
+        password="admin123",
         role=UserRole.ADMINISTRATOR,
     )
 
@@ -144,14 +85,56 @@ def create_test_admin(session: Session) -> User:
 # ---------------------------------------------------------------------------
 
 
-def test_login_not_implemented(session: Session):
-    """Test that login endpoint returns 501 Not Implemented."""
-    credentials = UserLogin(username="testuser", password="password123")
+def test_login_success(session):
+    """Test successful user login."""
+    # Create a user
+    create_test_user(session, username="loginuser", password="pass123")
+    
+    # Try to login
+    credentials = UserLogin(username="loginuser", password="pass123")
+    result = login(credentials, session)
+    
+    assert "user" in result
+    assert "session_token" in result
+    assert "valid_until" in result
+    assert result["user"].username == "loginuser"
+
+
+def test_login_invalid_username(session):
+    """Test login with invalid username."""
+    credentials = UserLogin(username="nonexistent", password="pass123")
     
     with pytest.raises(HTTPException) as exc_info:
         login(credentials, session)
     
-    assert exc_info.value.status_code == status.HTTP_501_NOT_IMPLEMENTED
+    assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+    assert "Invalid username or password" in exc_info.value.detail
+
+
+def test_login_invalid_password(session):
+    """Test login with invalid password."""
+    create_test_user(session, username="user1", password="correct123")
+    
+    credentials = UserLogin(username="user1", password="wrong123")
+    
+    with pytest.raises(HTTPException) as exc_info:
+        login(credentials, session)
+    
+    assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+    assert "Invalid username or password" in exc_info.value.detail
+
+
+def test_login_disabled_user(session):
+    """Test login with a disabled user account."""
+    create_test_user(session, username="disabled", password="pass123", enabled=False)
+    
+    credentials = UserLogin(username="disabled", password="pass123")
+    
+    with pytest.raises(HTTPException) as exc_info:
+        login(credentials, session)
+    
+    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+    assert "disabled" in exc_info.value.detail.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -159,14 +142,22 @@ def test_login_not_implemented(session: Session):
 # ---------------------------------------------------------------------------
 
 
-def test_logout_not_implemented(mock_user):
-    """Test that logout endpoint returns 501 Not Implemented."""
-    # Using mock_user fixture
+def test_logout_success(session, mock_user):
+    """Test successful logout."""
+    # Create a session for the user
+    user_session = UserSession(
+        user=mock_user,
+        valid_until=get_session_expiry(hours=24),
+    )
+    session.add(mock_user)
+    session.add(user_session)
+    session.commit()
     
-    with pytest.raises(HTTPException) as exc_info:
-        logout(current_user=mock_user)
+    # Mock authorization header
+    auth_header = f"Bearer {user_session.id}"
     
-    assert exc_info.value.status_code == status.HTTP_501_NOT_IMPLEMENTED
+    # Logout should not raise
+    logout(session, mock_user, auth_header)
 
 
 # ---------------------------------------------------------------------------
@@ -174,15 +165,28 @@ def test_logout_not_implemented(mock_user):
 # ---------------------------------------------------------------------------
 
 
-def test_create_user_not_implemented(session: Session, mock_admin):
-    """Test that create_user endpoint returns 501 Not Implemented."""
-    user_data = UserCreate(username="newuser", password="password123")
-    # Using mock_admin fixture
+def test_create_user_success(session, mock_admin):
+    """Test creating a user as admin."""
+    user_data = UserCreate(username="newuser", password="pass12345")
+    
+    result = create_user(user_data, session, mock_admin)
+    
+    assert isinstance(result, UserPublic)
+    assert result.username == "newuser"
+    assert result.role == UserRole.DEVELOPER
+
+
+def test_create_user_duplicate_username(session, mock_admin):
+    """Test creating a user with a duplicate username."""
+    create_test_user(session, username="existing")
+    
+    user_data = UserCreate(username="existing", password="pass12345")
     
     with pytest.raises(HTTPException) as exc_info:
         create_user(user_data, session, mock_admin)
     
-    assert exc_info.value.status_code == status.HTTP_501_NOT_IMPLEMENTED
+    assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+    assert "already exists" in exc_info.value.detail.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -190,14 +194,15 @@ def test_create_user_not_implemented(session: Session, mock_admin):
 # ---------------------------------------------------------------------------
 
 
-def test_list_users_not_implemented(session: Session, mock_admin):
-    """Test that list_users endpoint returns 501 Not Implemented."""
-    # Using mock_admin fixture
+def test_list_users_success(session, mock_admin):
+    """Test listing all users as admin."""
+    create_test_user(session, username="user1")
+    create_test_user(session, username="user2")
     
-    with pytest.raises(HTTPException) as exc_info:
-        list_users(session, mock_admin)
+    result = list_users(session, mock_admin)
     
-    assert exc_info.value.status_code == status.HTTP_501_NOT_IMPLEMENTED
+    assert len(result) >= 2
+    assert all(isinstance(u, UserPublic) for u in result)
 
 
 # ---------------------------------------------------------------------------
@@ -205,14 +210,25 @@ def test_list_users_not_implemented(session: Session, mock_admin):
 # ---------------------------------------------------------------------------
 
 
-def test_search_users_not_implemented(session: Session, mock_admin):
-    """Test that search_users endpoint returns 501 Not Implemented."""
-    # Using mock_admin fixture
+def test_search_users_by_username(session, mock_admin):
+    """Test searching users by username."""
+    create_test_user(session, username="alice")
+    create_test_user(session, username="bob")
     
-    with pytest.raises(HTTPException) as exc_info:
-        search_users(username="test", session=session, current_user=mock_admin)
+    result = search_users(username="ali", session=session, current_user=mock_admin)
     
-    assert exc_info.value.status_code == status.HTTP_501_NOT_IMPLEMENTED
+    assert len(result) >= 1
+    assert any(u.username == "alice" for u in result)
+
+
+def test_search_users_by_enabled(session, mock_admin):
+    """Test searching users by enabled status."""
+    create_test_user(session, username="enabled1", enabled=True)
+    create_test_user(session, username="disabled1", enabled=False)
+    
+    result = search_users(enabled=False, session=session, current_user=mock_admin)
+    
+    assert all(not u.enabled for u in result)
 
 
 # ---------------------------------------------------------------------------
@@ -220,14 +236,12 @@ def test_search_users_not_implemented(session: Session, mock_admin):
 # ---------------------------------------------------------------------------
 
 
-def test_get_current_user_info_not_implemented(mock_user):
-    """Test that get_current_user_info endpoint returns 501 Not Implemented."""
-    # Using mock_user fixture
+def test_get_current_user_info_success(mock_user):
+    """Test getting current user info."""
+    result = get_current_user_info(mock_user)
     
-    with pytest.raises(HTTPException) as exc_info:
-        get_current_user_info(mock_user)
-    
-    assert exc_info.value.status_code == status.HTTP_501_NOT_IMPLEMENTED
+    assert isinstance(result, UserPublic)
+    assert result.username == mock_user.username
 
 
 # ---------------------------------------------------------------------------
@@ -235,15 +249,24 @@ def test_get_current_user_info_not_implemented(mock_user):
 # ---------------------------------------------------------------------------
 
 
-def test_get_user_not_implemented(session: Session):
-    """Test that get_user endpoint returns 501 Not Implemented."""
-    user_id = uuid.uuid4()
-    # Using mock_admin fixture
+def test_get_user_success(session, mock_admin):
+    """Test getting user by ID as admin."""
+    user = create_test_user(session, username="targetuser")
+    
+    result = get_user(user.id, session, mock_admin)
+    
+    assert isinstance(result, UserPublic)
+    assert result.username == "targetuser"
+
+
+def test_get_user_not_found(session, mock_admin):
+    """Test getting non-existent user."""
+    fake_id = uuid.uuid4()
     
     with pytest.raises(HTTPException) as exc_info:
-        get_user(user_id, session, mock_admin)
+        get_user(fake_id, session, mock_admin)
     
-    assert exc_info.value.status_code == status.HTTP_501_NOT_IMPLEMENTED
+    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
 
 
 # ---------------------------------------------------------------------------
@@ -251,16 +274,27 @@ def test_get_user_not_implemented(session: Session):
 # ---------------------------------------------------------------------------
 
 
-def test_update_user_not_implemented(session: Session):
-    """Test that update_user endpoint returns 501 Not Implemented."""
-    user_id = uuid.uuid4()
-    update_data = UserUpdate(username="updateduser")
-    # Using mock_admin fixture
+def test_update_user_username(session, mock_admin):
+    """Test updating user username as admin."""
+    user = create_test_user(session, username="oldname")
+    
+    update_data = UserUpdate(username="newname")
+    result = update_user(user.id, update_data, session, mock_admin)
+    
+    assert result.username == "newname"
+
+
+def test_update_user_to_duplicate_username(session, mock_admin):
+    """Test updating user to a username that already exists."""
+    user1 = create_test_user(session, username="user1")
+    create_test_user(session, username="user2")
+    
+    update_data = UserUpdate(username="user2")
     
     with pytest.raises(HTTPException) as exc_info:
-        update_user(user_id, update_data, session, mock_admin)
+        update_user(user1.id, update_data, session, mock_admin)
     
-    assert exc_info.value.status_code == status.HTTP_501_NOT_IMPLEMENTED
+    assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
 
 
 # ---------------------------------------------------------------------------
@@ -268,15 +302,28 @@ def test_update_user_not_implemented(session: Session):
 # ---------------------------------------------------------------------------
 
 
-def test_update_current_user_not_implemented(session: Session, mock_user):
-    """Test that update_current_user endpoint returns 501 Not Implemented."""
-    update_data = UserUpdate(username="updateduser")
-    # Using mock_user fixture
+def test_update_current_user_username(session, mock_user):
+    """Test updating current user's username."""
+    session.add(mock_user)
+    session.commit()
+    
+    update_data = UserUpdate(username="newusername")
+    result = update_current_user(update_data, session, mock_user)
+    
+    assert result.username == "newusername"
+
+
+def test_update_current_user_cannot_change_role(session, mock_user):
+    """Test that users cannot change their own role."""
+    session.add(mock_user)
+    session.commit()
+    
+    update_data = UserUpdate(role=UserRole.ADMINISTRATOR)
     
     with pytest.raises(HTTPException) as exc_info:
         update_current_user(update_data, session, mock_user)
     
-    assert exc_info.value.status_code == status.HTTP_501_NOT_IMPLEMENTED
+    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
 
 
 # ---------------------------------------------------------------------------
@@ -284,15 +331,26 @@ def test_update_current_user_not_implemented(session: Session, mock_user):
 # ---------------------------------------------------------------------------
 
 
-def test_delete_user_not_implemented(session: Session):
-    """Test that delete_user endpoint returns 501 Not Implemented."""
-    user_id = uuid.uuid4()
-    # Using mock_admin fixture
+def test_delete_user_success(session, mock_admin):
+    """Test deleting a user as admin."""
+    user = create_test_user(session, username="todelete")
+    user_id = user.id
+    
+    delete_user(user_id, session, mock_admin)
+    
+    # Verify user is deleted
+    deleted_user = session.get(User, user_id)
+    assert deleted_user is None
+
+
+def test_delete_user_not_found(session, mock_admin):
+    """Test deleting non-existent user."""
+    fake_id = uuid.uuid4()
     
     with pytest.raises(HTTPException) as exc_info:
-        delete_user(user_id, session, mock_admin)
+        delete_user(fake_id, session, mock_admin)
     
-    assert exc_info.value.status_code == status.HTTP_501_NOT_IMPLEMENTED
+    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
 
 
 # ---------------------------------------------------------------------------
@@ -300,14 +358,17 @@ def test_delete_user_not_implemented(session: Session):
 # ---------------------------------------------------------------------------
 
 
-def test_delete_current_user_not_implemented(session: Session, mock_user):
-    """Test that delete_current_user endpoint returns 501 Not Implemented."""
-    # Using mock_user fixture
+def test_delete_current_user_success(session, mock_user):
+    """Test deleting own account."""
+    session.add(mock_user)
+    session.commit()
+    user_id = mock_user.id
     
-    with pytest.raises(HTTPException) as exc_info:
-        delete_current_user(session, mock_user)
+    delete_current_user(session, mock_user)
     
-    assert exc_info.value.status_code == status.HTTP_501_NOT_IMPLEMENTED
+    # Verify user is deleted
+    deleted_user = session.get(User, user_id)
+    assert deleted_user is None
 
 
 # ---------------------------------------------------------------------------
@@ -315,29 +376,62 @@ def test_delete_current_user_not_implemented(session: Session, mock_user):
 # ---------------------------------------------------------------------------
 
 
-def test_change_user_password_not_implemented(session: Session):
-    """Test that change_user_password endpoint returns 501 Not Implemented."""
-    user_id = uuid.uuid4()
-    password_data = UserPasswordChange(new_password="newpassword123")
-    # Using mock_admin fixture
+def test_change_user_password_as_admin(session, mock_admin):
+    """Test admin changing user password."""
+    user = create_test_user(session, username="user", password="oldpass")
     
-    with pytest.raises(HTTPException) as exc_info:
-        change_user_password(user_id, password_data, session, mock_admin)
+    password_data = UserPasswordChange(new_password="newpass123")
+    change_user_password(user.id, password_data, session, mock_admin)
     
-    assert exc_info.value.status_code == status.HTTP_501_NOT_IMPLEMENTED
+    # Verify password was changed (no exception means success)
+    assert True
 
 
-def test_change_own_password_not_implemented(session: Session, mock_user):
-    """Test that change_own_password endpoint returns 501 Not Implemented."""
+def test_change_own_password_success(session, mock_user):
+    """Test user changing own password."""
+    # Set a known password
+    mock_user.password = hash_password("oldpass123")
+    session.add(mock_user)
+    session.commit()
+    
     password_data = UserPasswordChange(
-        current_password="oldpassword", new_password="newpassword123"
+        current_password="oldpass123",
+        new_password="newpass123"
     )
-    # Using mock_user fixture
+    change_own_password(password_data, session, mock_user)
+    
+    # Verify password was changed (no exception means success)
+    assert True
+
+
+def test_change_own_password_wrong_current(session, mock_user):
+    """Test changing own password with wrong current password."""
+    mock_user.password = hash_password("correctpass")
+    session.add(mock_user)
+    session.commit()
+    
+    password_data = UserPasswordChange(
+        current_password="wrongpass",
+        new_password="newpass123"
+    )
     
     with pytest.raises(HTTPException) as exc_info:
         change_own_password(password_data, session, mock_user)
     
-    assert exc_info.value.status_code == status.HTTP_501_NOT_IMPLEMENTED
+    assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+def test_change_own_password_missing_current(session, mock_user):
+    """Test changing own password without providing current password."""
+    session.add(mock_user)
+    session.commit()
+    
+    password_data = UserPasswordChange(new_password="newpass123")
+    
+    with pytest.raises(HTTPException) as exc_info:
+        change_own_password(password_data, session, mock_user)
+    
+    assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
 
 
 # ---------------------------------------------------------------------------
@@ -345,84 +439,19 @@ def test_change_own_password_not_implemented(session: Session, mock_user):
 # ---------------------------------------------------------------------------
 
 
-def test_enable_user_not_implemented(session: Session):
-    """Test that enable_user endpoint returns 501 Not Implemented."""
-    user_id = uuid.uuid4()
-    # Using mock_admin fixture
+def test_enable_user_success(session, mock_admin):
+    """Test enabling a user as admin."""
+    user = create_test_user(session, username="user", enabled=False)
     
-    with pytest.raises(HTTPException) as exc_info:
-        enable_user(user_id, session, mock_admin)
+    result = enable_user(user.id, session, mock_admin)
     
-    assert exc_info.value.status_code == status.HTTP_501_NOT_IMPLEMENTED
+    assert result.enabled is True
 
 
-def test_disable_user_not_implemented(session: Session):
-    """Test that disable_user endpoint returns 501 Not Implemented."""
-    user_id = uuid.uuid4()
-    # Using mock_admin fixture
+def test_disable_user_success(session, mock_admin):
+    """Test disabling a user as admin."""
+    user = create_test_user(session, username="user", enabled=True)
     
-    with pytest.raises(HTTPException) as exc_info:
-        disable_user(user_id, session, mock_admin)
+    result = disable_user(user.id, session, mock_admin)
     
-    assert exc_info.value.status_code == status.HTTP_501_NOT_IMPLEMENTED
-
-
-# ---------------------------------------------------------------------------
-# Edge case tests - These will be filled in after implementation
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.skip(reason="Implementation not yet complete")
-def test_login_with_invalid_credentials(session: Session):
-    """Test login with invalid credentials."""
-    # Will implement after login is implemented
-    pass
-
-
-@pytest.mark.skip(reason="Implementation not yet complete")
-def test_login_with_disabled_user(session: Session):
-    """Test login with a disabled user account."""
-    # Will implement after login is implemented
-    pass
-
-
-@pytest.mark.skip(reason="Implementation not yet complete")
-def test_create_user_duplicate_username(session: Session):
-    """Test creating a user with a duplicate username."""
-    # Will implement after create_user is implemented
-    pass
-
-
-@pytest.mark.skip(reason="Implementation not yet complete")
-def test_update_user_to_duplicate_username(session: Session):
-    """Test updating a user to a username that already exists."""
-    # Will implement after update_user is implemented
-    pass
-
-
-@pytest.mark.skip(reason="Implementation not yet complete")
-def test_developer_cannot_access_admin_endpoints(session: Session):
-    """Test that developers cannot access admin-only endpoints."""
-    # Will implement after authorization is implemented
-    pass
-
-
-@pytest.mark.skip(reason="Implementation not yet complete")
-def test_user_cannot_delete_other_users(session: Session):
-    """Test that users cannot delete other users' accounts."""
-    # Will implement after implementation
-    pass
-
-
-@pytest.mark.skip(reason="Implementation not yet complete")
-def test_user_cannot_change_other_users_password(session: Session):
-    """Test that users cannot change other users' passwords."""
-    # Will implement after implementation
-    pass
-
-
-@pytest.mark.skip(reason="Implementation not yet complete")
-def test_session_expires_after_valid_until(session: Session):
-    """Test that expired sessions are invalid."""
-    # Will implement after session management is implemented
-    pass
+    assert result.enabled is False
