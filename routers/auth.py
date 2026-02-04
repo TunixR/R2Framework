@@ -15,7 +15,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlmodel import select
 
 from database.auth.models import (
@@ -38,49 +38,44 @@ from middlewares.auth import get_current_user, require_admin
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
-# Authentication endpoints
-
-
 @router.post("/login", response_model=dict, summary="User login")
-def login(credentials: UserLogin, session: SessionDep) -> dict:
+def login(credentials: UserLogin, session: SessionDep) -> dict[str, str | UserPublic]:
     """
     Authenticate a user and create a session.
     Returns the user information (without password) and session token.
     """
-    # Find user by username
     statement = select(User).where(User.username == credentials.username)
     user = session.exec(statement).first()
-    
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
         )
-    
+
     # Verify password
     if not verify_password(credentials.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
         )
-    
+
     # Check if user is enabled
     if not user.enabled:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is disabled",
         )
-    
+
     # Create session
-    user_session = UserSession(
+    user_session = UserSession(  # pyright: ignore[reportCallIssue]
         user=user,
         valid_until=get_session_expiry(hours=24),
     )
     session.add(user_session)
     session.commit()
     session.refresh(user_session)
-    
-    # Return user info and session token
+
     return {
         "user": UserPublic.model_validate(user),
         "session_token": str(user_session.id),
@@ -91,7 +86,7 @@ def login(credentials: UserLogin, session: SessionDep) -> dict:
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, summary="User logout")
 def logout(
     session: SessionDep,
-    current_user: User = Depends(get_current_user),
+    _current_user: User = Depends(get_current_user),
     authorization: str = Header(None),
 ) -> None:
     """
@@ -100,7 +95,7 @@ def logout(
     # Extract session ID from authorization header
     _, token = authorization.split()
     session_id = UUID(token)
-    
+
     # Find and delete session
     user_session = session.get(UserSession, session_id)
     if user_session:
@@ -120,7 +115,7 @@ def logout(
 def create_user(
     user_data: UserCreate,
     session: SessionDep,
-    current_user: User = Depends(require_admin),
+    _current_user: User = Depends(require_admin),
 ) -> UserPublic:
     """
     Create a new user. Requires admin role.
@@ -134,7 +129,7 @@ def create_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Username already exists",
         )
-    
+
     # Hash password and create user
     hashed_password = hash_password(user_data.password)
     new_user = User(
@@ -143,11 +138,11 @@ def create_user(
         role=user_data.role,
         enabled=user_data.enabled,
     )
-    
+
     session.add(new_user)
     session.commit()
     session.refresh(new_user)
-    
+
     return UserPublic.model_validate(new_user)
 
 
@@ -158,12 +153,12 @@ def create_user(
 )
 def list_users(
     session: SessionDep,
-    current_user: User = Depends(require_admin),
+    _current_user: User = Depends(require_admin),
 ) -> Sequence[UserPublic]:
     """
     List all users. Requires admin role.
     """
-    users = session.exec(select(User)).all()
+    users = session.exec(select(User)).unique().all()
     return [UserPublic.model_validate(user) for user in users]
 
 
@@ -173,23 +168,23 @@ def list_users(
     summary="Search users (Admin only)",
 )
 def search_users(
+    session: SessionDep,
     username: str | None = None,
     enabled: bool | None = None,
-    session: SessionDep,
-    current_user: User = Depends(require_admin),
+    _current_user: User = Depends(require_admin),
 ) -> Sequence[UserPublic]:
     """
     Search users by username or enabled status. Requires admin role.
     """
     statement = select(User)
-    
+
     if username is not None:
-        statement = statement.where(User.username.contains(username))
-    
+        statement = statement.where(User.username.contains(username))  # pyright: ignore[reportAttributeAccessIssue] supported by sqlalchemy
+
     if enabled is not None:
         statement = statement.where(User.enabled == enabled)
-    
-    users = session.exec(statement).all()
+
+    users = session.exec(statement).unique().all()
     return [UserPublic.model_validate(user) for user in users]
 
 
@@ -211,7 +206,7 @@ def get_current_user_info(
 def get_user(
     user_id: UUID,
     session: SessionDep,
-    current_user: User = Depends(require_admin),
+    _current_user: User = Depends(require_admin),
 ) -> UserPublic:
     """
     Get user by ID. Requires admin role.
@@ -234,7 +229,7 @@ def update_user(
     user_id: UUID,
     user_data: UserUpdate,
     session: SessionDep,
-    current_user: User = Depends(require_admin),
+    _current_user: User = Depends(require_admin),
 ) -> UserPublic:
     """
     Update user information. Requires admin role.
@@ -246,7 +241,7 @@ def update_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    
+
     # Check if new username already exists
     if user_data.username and user_data.username != user.username:
         statement = select(User).where(User.username == user_data.username)
@@ -257,18 +252,18 @@ def update_user(
                 detail="Username already exists",
             )
         user.username = user_data.username
-    
+
     if user_data.enabled is not None:
         user.enabled = user_data.enabled
-    
+
     if user_data.role is not None:
         user.role = user_data.role
-    
+
     user.updated_at = datetime.now()
     session.add(user)
     session.commit()
     session.refresh(user)
-    
+
     return UserPublic.model_validate(user)
 
 
@@ -287,7 +282,7 @@ def update_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot modify role or enabled status",
         )
-    
+
     if user_data.username:
         # Check if new username already exists
         if user_data.username != current_user.username:
@@ -299,12 +294,12 @@ def update_current_user(
                     detail="Username already exists",
                 )
             current_user.username = user_data.username
-    
+
     current_user.updated_at = datetime.now()
     session.add(current_user)
     session.commit()
     session.refresh(current_user)
-    
+
     return UserPublic.model_validate(current_user)
 
 
@@ -316,7 +311,7 @@ def update_current_user(
 def delete_user(
     user_id: UUID,
     session: SessionDep,
-    current_user: User = Depends(require_admin),
+    _current_user: User = Depends(require_admin),
 ) -> None:
     """
     Delete a user. Requires admin role.
@@ -327,13 +322,13 @@ def delete_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    
+
     # Delete user's sessions first
     statement = select(UserSession).where(UserSession.user_id == user_id)
     sessions = session.exec(statement).all()
     for user_session in sessions:
         session.delete(user_session)
-    
+
     session.delete(user)
     session.commit()
 
@@ -355,7 +350,7 @@ def delete_current_user(
     sessions = session.exec(statement).all()
     for user_session in sessions:
         session.delete(user_session)
-    
+
     session.delete(current_user)
     session.commit()
 
@@ -372,7 +367,7 @@ def change_user_password(
     user_id: UUID,
     password_data: UserPasswordChange,
     session: SessionDep,
-    current_user: User = Depends(require_admin),
+    _current_user: User = Depends(require_admin),
 ) -> None:
     """
     Change a user's password. Requires admin role.
@@ -384,7 +379,7 @@ def change_user_password(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    
+
     # Hash new password and update
     user.password = hash_password(password_data.new_password)
     user.updated_at = datetime.now()
@@ -411,14 +406,14 @@ def change_own_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is required",
         )
-    
+
     # Verify current password
     if not verify_password(password_data.current_password, current_user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Current password is incorrect",
         )
-    
+
     # Hash new password and update
     current_user.password = hash_password(password_data.new_password)
     current_user.updated_at = datetime.now()
@@ -437,7 +432,7 @@ def change_own_password(
 def enable_user(
     user_id: UUID,
     session: SessionDep,
-    current_user: User = Depends(require_admin),
+    _current_user: User = Depends(require_admin),
 ) -> UserPublic:
     """
     Enable a user account. Requires admin role.
@@ -448,13 +443,13 @@ def enable_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    
+
     user.enabled = True
     user.updated_at = datetime.now()
     session.add(user)
     session.commit()
     session.refresh(user)
-    
+
     return UserPublic.model_validate(user)
 
 
@@ -466,7 +461,7 @@ def enable_user(
 def disable_user(
     user_id: UUID,
     session: SessionDep,
-    current_user: User = Depends(require_admin),
+    _current_user: User = Depends(require_admin),
 ) -> UserPublic:
     """
     Disable a user account. Requires admin role.
@@ -477,11 +472,11 @@ def disable_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    
+
     user.enabled = False
     user.updated_at = datetime.now()
     session.add(user)
     session.commit()
     session.refresh(user)
-    
+
     return UserPublic.model_validate(user)

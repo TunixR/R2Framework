@@ -12,7 +12,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from pydantic import ConfigDict
+from pydantic import SecretStr
 from sqlalchemy import Column
 from sqlmodel import Enum, Field, Relationship, SQLModel
 
@@ -27,7 +27,7 @@ class UserRole(str, enum.Enum):
 class User(SQLModel, table=True):
     """
     Main user model for authentication and authorization.
-    
+
     Attributes:
         id: Unique identifier for the user
         username: Unique username for login
@@ -87,8 +87,6 @@ class UserPublic(SQLModel):
     Used for API responses.
     """
 
-    model_config = ConfigDict(from_attributes=True)
-
     id: uuid.UUID
     username: str
     enabled: bool
@@ -100,7 +98,7 @@ class UserPublic(SQLModel):
 class UserSession(SQLModel, table=True):
     """
     Session management for authenticated users.
-    
+
     Attributes:
         id: Unique session identifier
         user_id: Foreign key to the user
@@ -134,7 +132,7 @@ class UserCreate(SQLModel):
     """Schema for creating a new user."""
 
     username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=8)
+    password: SecretStr = Field(..., min_length=8)
     role: UserRole = Field(default=UserRole.DEVELOPER)
     enabled: bool = Field(default=True)
 
@@ -150,12 +148,14 @@ class UserUpdate(SQLModel):
 class UserPasswordChange(SQLModel):
     """Schema for changing user password."""
 
-    current_password: str | None = Field(None, description="Current password (required for self)")
-    new_password: str = Field(..., min_length=8)
+    current_password: SecretStr | None = Field(
+        None, description="Current password (required for self)"
+    )
+    new_password: SecretStr = Field(..., min_length=8)
 
 
 class UserLogin(SQLModel):
     """Schema for user login."""
 
     username: str
-    password: str
+    password: SecretStr
