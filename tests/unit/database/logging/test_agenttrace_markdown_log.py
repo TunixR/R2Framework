@@ -6,7 +6,7 @@ import pytest
 from database.agents.models import Agent, AgentType
 from database.logging.models import AgentTrace, SubAgentTrace, ToolTrace
 from database.provider.models import Router
-from tests.unit.conftest.mock_s3_client_fixture import (
+from tests.unit.fixtures.mock_s3_client_fixture import (
     mock_s3client_model,  # pyright: ignore[reportUnusedImport] # noqa: F401 We need to import this fixture for it to activate
 )
 
