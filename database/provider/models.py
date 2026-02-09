@@ -116,3 +116,38 @@ class RouterPublic(SQLModel):
     provider_type: Router.Provider
     created_at: datetime
     updated_at: datetime
+
+
+class RouterCreate(SQLModel):
+    """Schema for creating a new router."""
+
+    api_key: str = Field(description="API key for accessing the router service.")
+    model_name: str = Field(description="Name of the model used by the router.")
+    api_endpoint: str = Field(description="API endpoint of the provider.")
+    provider_type: Router.Provider = Field(
+        default=Router.Provider.OPENROUTER,
+        description="The provider type backing this router.",
+    )
+
+
+class RouterUpdate(SQLModel):
+    """Schema for updating an existing router."""
+
+    api_key: str | None = Field(
+        default=None, description="API key for accessing the router service."
+    )
+    model_name: str | None = Field(
+        default=None, description="Name of the model used by the router."
+    )
+    api_endpoint: str | None = Field(
+        default=None, description="API endpoint of the provider."
+    )
+    provider_type: Router.Provider | None = Field(
+        default=None, description="The provider type backing this router."
+    )
+
+
+class RouterDelete(SQLModel):
+    """Schema representing a router deletion request."""
+
+    id: uuid.UUID
