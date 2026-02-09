@@ -1,54 +1,25 @@
-"""
+"""tests.unit.fixtures.session_fixture
+
 Session fixture for unit tests.
 
-Provides a clean in-memory SQLite database session for each test.
+CI/unit tests should be runnable without external services. If Docker is
+available, we keep the option to run against a disposable Postgres container;
+otherwise we fall back to an in-memory SQLite database.
 """
 
-import subprocess
-import time
-
-import psycopg2
 import pytest
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
 POSTGRES_CONTAINER = "test-postgres"
 
 
-def start_postgres():
-    _ = subprocess.run(
-        [
-            "docker",
-            "run",
-            "--rm",
-            "-d",
-            "--name",
-            POSTGRES_CONTAINER,
-            "-e",
-            "POSTGRES_PASSWORD=postgres",
-            "-e",
-            "POSTGRES_DB=testdb",
-            "-p",
-            "54329:5432",
-            "postgres:16",
-        ],
-        check=True,
-    )
-
-    for _ in range(30):
-        try:
-            psycopg2.connect(
-                "postgresql://postgres:postgres@localhost:54329/testdb"
-            ).close()
-            print("Postgres is up and running")
-            return
-        except Exception:
-            time.sleep(0.5)
-
-    raise RuntimeError("Postgres did not start")
-
-
-def stop_postgres():
-    _ = subprocess.run(["docker", "stop", POSTGRES_CONTAINER], check=False)
+@compiles(JSONB, "sqlite")
+def _compile_jsonb_sqlite(_type, _compiler, **_kw):  # pyright: ignore[reportUnusedFunction, reportMissingParameterType]
+    # SQLite doesn't support JSONB; map to generic JSON.
+    return "JSON"
 
 
 @pytest.fixture(autouse=True)
@@ -72,11 +43,12 @@ def session_fixture():
 
     This fixture provides a clean database session for each test.
     """
-    start_postgres()
     engine = create_engine(
-        "postgresql+psycopg2://postgres:postgres@localhost:54329/testdb"
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
+
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         yield session
-    stop_postgres()
