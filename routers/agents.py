@@ -5,8 +5,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import select
 
-from database.auth.models import User
 from database.agents.models import Agent, AgentCreate, AgentUpdate
+from database.auth.models import User
 from database.general import SessionDep
 from middlewares.auth import get_current_user, require_admin
 
@@ -76,7 +76,7 @@ def update_agent(
             detail="Agent not found",
         )
 
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    for key, value in payload.model_dump(exclude_unset=True, exclude_none=True).items():
         try:
             setattr(agent, key, value)
         except Exception as e:
