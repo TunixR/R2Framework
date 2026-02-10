@@ -46,7 +46,7 @@ def _create_router(
         api_key=api_key,
         model_name=model_name,
         api_endpoint=api_endpoint,
-        provider_type=provider_type or Router.Provider.OPENAI,
+        provider_type=provider_type or Router.Provider.OPENROUTER,
     )
     session.add(router)
     session.commit()
@@ -67,7 +67,7 @@ def _load_json_config() -> dict[str, Any]:
           "model_name": "$PROVIDER_MODEL" | "$PROVIDER_VISION_MODEL" | "$PROVIDER_VISION_TOOL_MODEL" | "$PROVIDER_GROUNDING_MODEL" | "literal-model-name",
           "api_key": "$FREE_PROVIDER_API_KEY" | "$PROVIDER_API_KEY" | "literal-api-key",
           "api_endpoint": "$PROVIDER_API_BASE" | "https://api.example.com/v1",
-          "provider_type": "OPENAI"  // optional, defaults to OPENAI
+          "provider_type": "OPENROUTER"  // optional, defaults to OPENROUTER
         }
       ]
     }
@@ -103,6 +103,8 @@ def _resolve_provider_type(name: str | None) -> Router.Provider | None:
         return None
     upper = name.upper()
     # Extend here if more providers are supported in Router.Provider enum
+    if upper == "OPENROUTER":
+        return Router.Provider.OPENROUTER
     if upper == "OPENAI":
         return Router.Provider.OPENAI
     raise ValueError(f"Unknown provider_type '{name}'.")
