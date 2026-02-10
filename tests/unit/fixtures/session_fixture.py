@@ -1,12 +1,3 @@
-"""tests.unit.fixtures.session_fixture
-
-Session fixture for unit tests.
-
-CI/unit tests should be runnable without external services. If Docker is
-available, we keep the option to run against a disposable Postgres container;
-otherwise we fall back to an in-memory SQLite database.
-"""
-
 import pytest
 from sqlalchemy import Engine
 from sqlalchemy.dialects.postgresql import JSONB
