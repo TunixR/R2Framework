@@ -487,6 +487,57 @@ class Agent(SQLModel, table=True):
         _ = self.get_pydantic_response_model()
 
 
+class AgentCreate(SQLModel):
+    """Schema for creating a new agent."""
+
+    name: str = Field(description="Name of the agent.")
+    description: str = Field(description="Description of the agent.")
+    prompt: str = Field(description="The prompt used to initialize the agent.")
+    response_model: str | None = Field(
+        default=None,
+        description="Optional module path for the agent's structured response model.",
+    )
+    input_type: Agent.InputType = Field(
+        default=Agent.InputType.TEXT,
+        description="The type of input the agent can process.",
+    )
+    enabled: bool = Field(default=True, description="Whether the agent is enabled.")
+    router_id: uuid.UUID = Field(
+        description="Foreign key to the router used by the agent."
+    )
+    type: AgentType = Field(
+        default=AgentType.Agent,
+        description="The type of the agent.",
+    )
+
+
+class AgentUpdate(SQLModel):
+    """Schema for updating an existing agent."""
+
+    name: str | None = Field(default=None, description="Name of the agent.")
+    description: str | None = Field(
+        default=None, description="Description of the agent."
+    )
+    prompt: str | None = Field(
+        default=None, description="The prompt used to initialize the agent."
+    )
+    response_model: str | None = Field(
+        default=None,
+        description="Optional module path for the agent's structured response model.",
+    )
+    input_type: Agent.InputType | None = Field(
+        default=None,
+        description="The type of input the agent can process.",
+    )
+    enabled: bool | None = Field(
+        default=None, description="Whether the agent is enabled."
+    )
+    router_id: uuid.UUID | None = Field(
+        default=None, description="Foreign key to the router used by the agent."
+    )
+    type: AgentType | None = Field(default=None, description="The type of the agent.")
+
+
 # class GatewayAgent(Agent):
 #     id: uuid.UUID = Field(
 #         ...,

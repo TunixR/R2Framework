@@ -1,23 +1,32 @@
 from collections.abc import Sequence
-from typing import Any
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import select
 
-from database.agents.models import Agent
+from database.auth.models import User
+from database.agents.models import Agent, AgentCreate, AgentUpdate
 from database.general import SessionDep
+from middlewares.auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/agents", tags=["Agents"])
 
 
 @router.get("/", response_model=Sequence[Agent], summary="List all agents")
-def list_agents(session: SessionDep) -> Sequence[Agent]:
+def list_agents(
+    session: SessionDep,
+    _current_user: Annotated[User, Depends(get_current_user)],
+) -> Sequence[Agent]:
     return session.exec(select(Agent)).unique().all()
 
 
 @router.get("/{agent_id}", response_model=Agent, summary="Get agent by ID")
-def get_agent(agent_id: UUID, session: SessionDep) -> Agent:
+def get_agent(
+    agent_id: UUID,
+    session: SessionDep,
+    _current_user: Annotated[User, Depends(get_current_user)],
+) -> Agent:
     agent = session.get(Agent, agent_id)
     if not agent:
         raise HTTPException(
@@ -33,14 +42,12 @@ def get_agent(agent_id: UUID, session: SessionDep) -> Agent:
     status_code=status.HTTP_201_CREATED,
     summary="Create agent",
 )
-def create_agent(payload: dict[str, Any], session: SessionDep) -> Agent:
-    try:
-        agent = Agent(**payload)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid agent payload: {str(e)}",
-        )
+def create_agent(
+    payload: AgentCreate,
+    session: SessionDep,
+    _current_user: Annotated[User, Depends(require_admin)],
+) -> Agent:
+    agent = Agent(**payload.model_dump())
 
     session.add(agent)
     try:
@@ -56,7 +63,12 @@ def create_agent(payload: dict[str, Any], session: SessionDep) -> Agent:
 
 
 @router.patch("/{agent_id}", response_model=Agent, summary="Update agent")
-def update_agent(agent_id: UUID, payload: dict[str, Any], session: SessionDep) -> Agent:
+def update_agent(
+    agent_id: UUID,
+    payload: AgentUpdate,
+    session: SessionDep,
+    _current_user: Annotated[User, Depends(require_admin)],
+) -> Agent:
     agent = session.get(Agent, agent_id)
     if not agent:
         raise HTTPException(
@@ -64,10 +76,7 @@ def update_agent(agent_id: UUID, payload: dict[str, Any], session: SessionDep) -
             detail="Agent not found",
         )
 
-    for key, value in payload.items():
-        # Skip None values in patch semantics
-        if value is None:
-            continue
+    for key, value in payload.model_dump(exclude_unset=True).items():
         try:
             setattr(agent, key, value)
         except Exception as e:
@@ -94,7 +103,11 @@ def update_agent(agent_id: UUID, payload: dict[str, Any], session: SessionDep) -
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete agent",
 )
-def delete_agent(agent_id: UUID, session: SessionDep) -> None:
+def delete_agent(
+    agent_id: UUID,
+    session: SessionDep,
+    _current_user: Annotated[User, Depends(require_admin)],
+) -> None:
     agent = session.get(Agent, agent_id)
     if not agent:
         raise HTTPException(
