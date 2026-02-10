@@ -2,19 +2,18 @@ import uuid
 
 from fastapi import status
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from database.auth.models import (
     User,
     UserCreate,
-    UserLogin,
     UserPasswordChange,
     UserPublic,
     UserRole,
     UserSession,
     UserUpdate,
 )
-from database.auth.utils import hash_password
+from security.utils import hash_password
 from tests.unit.shared.auth_helpers import make_auth_headers, make_user_session
 
 # ---------------------------------------------------------------------------
@@ -51,22 +50,22 @@ def test_login_success(session: Session, client: TestClient):
     """Test successful user login."""
     _ = create_test_user(session, username="loginuser", password="pass123")
 
-    credentials = UserLogin(username="loginuser", password="pass123")
-    response = client.post("/auth/login", json=credentials.model_dump(mode="json"))
+    response = client.post(
+        "/auth/login",
+        data={"username": "loginuser", "password": "pass123"},
+    )
 
     assert response.status_code == status.HTTP_200_OK
     payload = response.json()
-    assert "user" in payload
-    assert "session_token" in payload
-    assert "valid_until" in payload
-    user_public = UserPublic.model_validate(payload["user"])
-    assert user_public.username == "loginuser"
+    assert payload["token_type"] == "bearer"
+    assert payload["access_token"]
 
 
 def test_login_invalid_username(client: TestClient):
     """Test login with invalid username."""
     response = client.post(
-        "/auth/login", json={"username": "nonexistent", "password": "pass123"}
+        "/auth/login",
+        data={"username": "nonexistent", "password": "pass123"},
     )
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -77,8 +76,10 @@ def test_login_invalid_password(session: Session, client: TestClient):
     """Test login with invalid password."""
     _ = create_test_user(session, username="user1", password="correct123")
 
-    credentials = UserLogin(username="user1", password="wrong123")
-    response = client.post("/auth/login", json=credentials.model_dump(mode="json"))
+    response = client.post(
+        "/auth/login",
+        data={"username": "user1", "password": "wrong123"},
+    )
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
     assert "invalid username or password" in response.json()["detail"].lower()
@@ -90,8 +91,10 @@ def test_login_disabled_user(session: Session, client: TestClient):
         session, username="disabled", password="pass123", enabled=False
     )
 
-    credentials = UserLogin(username="disabled", password="pass123")
-    response = client.post("/auth/login", json=credentials.model_dump(mode="json"))
+    response = client.post(
+        "/auth/login",
+        data={"username": "disabled", "password": "pass123"},
+    )
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
     assert "disabled" in response.json()["detail"].lower()
@@ -104,13 +107,23 @@ def test_login_disabled_user(session: Session, client: TestClient):
 
 def test_logout_success(session: Session, mock_user: User, client: TestClient):
     """Test successful logout."""
-    headers = make_auth_headers(mock_user, session)
+    login_response = client.post(
+        "/auth/login",
+        data={"username": mock_user.username, "password": "password123"},
+    )
+    assert login_response.status_code == status.HTTP_200_OK
+    token = login_response.json()["access_token"]
 
-    response = client.post("/auth/logout", headers=headers)
+    response = client.post(
+        "/auth/logout",
+        headers={"Authorization": f"Bearer {token}"},
+    )
 
     assert response.status_code == status.HTTP_204_NO_CONTENT
-    token = headers["Authorization"].split()[1]
-    assert session.get(UserSession, uuid.UUID(token)) is None
+    sessions = session.exec(
+        select(UserSession).where(UserSession.user_id == mock_user.id)
+    ).all()
+    assert sessions == []
 
 
 # ---------------------------------------------------------------------------
@@ -356,7 +369,8 @@ def test_delete_user_with_sessions_success(
 ):
     """Test deleting a user as admin."""
     user = create_test_user(session, username="todelete")
-    _ = make_user_session(user)
+    session.add(make_user_session(user))
+    session.commit()
     user_id = user.id
 
     headers = make_auth_headers(mock_admin, session)
@@ -420,7 +434,8 @@ def test_change_user_password_as_admin(
     assert response.status_code == status.HTTP_204_NO_CONTENT
 
     login_response = client.post(
-        "/auth/login", json={"username": "user", "password": "newpass123"}
+        "/auth/login",
+        data={"username": "user", "password": "newpass123"},
     )
     assert login_response.status_code == status.HTTP_200_OK
 
@@ -447,7 +462,8 @@ def test_change_own_password_success(
     assert response.status_code == status.HTTP_204_NO_CONTENT
 
     login_response = client.post(
-        "/auth/login", json={"username": mock_user.username, "password": "newpass123"}
+        "/auth/login",
+        data={"username": mock_user.username, "password": "newpass123"},
     )
     assert login_response.status_code == status.HTTP_200_OK
 

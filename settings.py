@@ -30,3 +30,7 @@ S3_URL = os.getenv("S3_URL", "http://localhost:8333")
 S3_BUCKET = os.getenv("S3_BUCKET", "gateway")
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "your_access_key")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "your_secret_key")
+
+SECRET_KEY = os.getenv("SECRET_KEY", "your_secret_key")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
