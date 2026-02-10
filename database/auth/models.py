@@ -12,7 +12,6 @@ import enum
 import uuid
 from datetime import datetime
 
-from pydantic import SecretStr
 from sqlalchemy import Column
 from sqlmodel import Enum, Field, Relationship, SQLModel
 
@@ -132,7 +131,7 @@ class UserCreate(SQLModel):
     """Schema for creating a new user."""
 
     username: str = Field(..., min_length=3, max_length=50)
-    password: SecretStr = Field(..., min_length=8)
+    password: str = Field(..., min_length=8)
     role: UserRole = Field(default=UserRole.DEVELOPER)
     enabled: bool = Field(default=True)
 
@@ -148,14 +147,14 @@ class UserUpdate(SQLModel):
 class UserPasswordChange(SQLModel):
     """Schema for changing user password."""
 
-    current_password: SecretStr | None = Field(
+    current_password: str | None = Field(
         None, description="Current password (required for self)"
     )
-    new_password: SecretStr = Field(..., min_length=8)
+    new_password: str = Field(..., min_length=8)
 
 
 class UserLogin(SQLModel):
     """Schema for user login."""
 
     username: str
-    password: SecretStr
+    password: str

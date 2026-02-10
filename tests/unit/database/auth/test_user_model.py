@@ -48,12 +48,12 @@ def test_user_create_schema():
     """Test UserCreate schema validation."""
     user_data = UserCreate(
         username="newuser",
-        password="password123",  # pyright: ignore[reportArgumentType]
+        password="password123",
         role=UserRole.DEVELOPER,
     )
 
     assert user_data.username == "newuser"
-    assert user_data.password.get_secret_value() == "password123"
+    assert user_data.password == "password123"
     assert user_data.role == UserRole.DEVELOPER
     assert user_data.enabled is True
 
@@ -63,7 +63,7 @@ def test_user_create_schema_validation_username_too_short():
     with pytest.raises(ValidationError):
         _ = UserCreate(
             username="ab",  # Too short (min 3)
-            password="password123",  # pyright: ignore[reportArgumentType]
+            password="password123",
         )
 
 
@@ -72,7 +72,7 @@ def test_user_create_schema_validation_password_too_short():
     with pytest.raises(ValidationError):
         _ = UserCreate(
             username="validuser",
-            password="short",  # Too short (min 8) # pyright: ignore[reportArgumentType]
+            password="short",  # Too short (min 8)
         )
 
 
@@ -85,6 +85,6 @@ def test_user_password_change_schema_validation():
     """Test UserPasswordChange schema validation for short password."""
     with pytest.raises(ValidationError):
         _ = UserPasswordChange(
-            current_password="currentpass",  # pyright: ignore[reportArgumentType]
-            new_password="short",  # Too short (min 8) # pyright: ignore[reportArgumentType]
+            current_password="currentpass",
+            new_password="short",  # Too short (min 8)
         )

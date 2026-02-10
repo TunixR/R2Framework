@@ -1,12 +1,10 @@
-from datetime import datetime, timedelta
-
 from fastapi import status
 from fastapi.testclient import TestClient
-from httpx import Headers
 from sqlmodel import Session
 
-from database.auth.models import User, UserSession
+from database.auth.models import User
 from database.provider.models import Router, RouterCreate, RouterPublic, RouterUpdate
+from tests.unit.shared.auth_helpers import make_auth_headers
 
 
 def make_router_create() -> RouterCreate:
@@ -24,26 +22,6 @@ def persist_router(session: Session) -> Router:
     session.commit()
     session.refresh(router_obj)
     return router_obj
-
-
-def make_user_session(user: User) -> UserSession:
-    return UserSession(
-        user_id=user.id,
-        valid_until=datetime.now() + timedelta(hours=1),
-    )
-
-
-def persist_user_session(session: Session, user: User) -> UserSession:
-    user_session = make_user_session(user)
-    session.add(user_session)
-    session.commit()
-    session.refresh(user_session)
-    return user_session
-
-
-def make_auth_headers(user: User, session: Session) -> Headers:
-    user_session = persist_user_session(session, user)
-    return Headers({"Authorization": f"Bearer {user_session.id}"})
 
 
 ##############################
@@ -144,6 +122,7 @@ def test_router_admin_create_does_not_leak_api_key(
     )
     obj = RouterPublic.model_validate_json(response.content)
 
+    assert response.status_code == status.HTTP_201_CREATED
     assert not hasattr(obj, "api_key")
 
 
