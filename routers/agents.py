@@ -5,8 +5,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import select
 
+<<<<<<< HEAD
 from database.agents.models import Agent, AgentCreate, AgentUpdate
 from database.auth.models import User
+=======
+from database.auth.models import User
+from database.agents.models import Agent, AgentCreate, AgentUpdate
+>>>>>>> fc0f5fc (feat: Added auth to existing agent endpoints)
 from database.general import SessionDep
 from middlewares.auth import get_current_user, require_admin
 
