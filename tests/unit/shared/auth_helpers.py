@@ -23,7 +23,6 @@ def persist_user_session(
     user_session = make_user_session(user, valid_duration)
     session.add(user_session)
     session.commit()
-    session.refresh(user_session)
     return user_session
 
 

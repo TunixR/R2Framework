@@ -1,4 +1,5 @@
 import uuid
+from functools import lru_cache
 
 from fastapi import status
 from fastapi.testclient import TestClient
@@ -16,6 +17,15 @@ from database.auth.models import (
 from security.utils import hash_password
 from tests.unit.shared.auth_helpers import make_auth_headers, make_user_session
 
+
+@lru_cache(maxsize=None)
+def _hash_password_cached(password: str) -> str:
+    return hash_password(password)
+
+
+DEFAULT_TEST_PASSWORD = "password123"
+DEFAULT_HASHED_PASSWORD = _hash_password_cached(DEFAULT_TEST_PASSWORD)
+
 # ---------------------------------------------------------------------------
 # Helper functions for tests
 # ---------------------------------------------------------------------------
@@ -24,14 +34,20 @@ from tests.unit.shared.auth_helpers import make_auth_headers, make_user_session
 def create_test_user(
     session: Session,
     username: str = "testuser",
-    password: str = "password123",
+    password: str = DEFAULT_TEST_PASSWORD,
     role: UserRole = UserRole.DEVELOPER,
     enabled: bool = True,
+    *,
+    hash_password_value: bool = False,
 ) -> User:
     """Helper to create a test user in the database."""
     user = User(
         username=username,
-        password=hash_password(password),
+        password=(
+            _hash_password_cached(password)
+            if hash_password_value
+            else DEFAULT_HASHED_PASSWORD
+        ),
         role=role,
         enabled=enabled,
     )
@@ -48,7 +64,12 @@ def create_test_user(
 
 def test_login_success(session: Session, client: TestClient):
     """Test successful user login."""
-    _ = create_test_user(session, username="loginuser", password="pass123")
+    _ = create_test_user(
+        session,
+        username="loginuser",
+        password="pass123",
+        hash_password_value=True,
+    )
 
     response = client.post(
         "/auth/login",
@@ -74,7 +95,12 @@ def test_login_invalid_username(client: TestClient):
 
 def test_login_invalid_password(session: Session, client: TestClient):
     """Test login with invalid password."""
-    _ = create_test_user(session, username="user1", password="correct123")
+    _ = create_test_user(
+        session,
+        username="user1",
+        password="correct123",
+        hash_password_value=True,
+    )
 
     response = client.post(
         "/auth/login",
@@ -88,7 +114,11 @@ def test_login_invalid_password(session: Session, client: TestClient):
 def test_login_disabled_user(session: Session, client: TestClient):
     """Test login with a disabled user account."""
     _ = create_test_user(
-        session, username="disabled", password="pass123", enabled=False
+        session,
+        username="disabled",
+        password="pass123",
+        enabled=False,
+        hash_password_value=True,
     )
 
     response = client.post(
