@@ -13,4 +13,6 @@ pytest_plugins = [
     "tests.unit.fixtures.auth_fixtures",
     "tests.unit.fixtures.mock_s3_client_fixture",
     "tests.unit.fixtures.mock_strands_model_fixture",
+    "tests.unit.fixtures.router_fixtures",
+    "tests.unit.fixtures.agent_fixtures",
 ]
