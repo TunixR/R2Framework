@@ -132,7 +132,7 @@ def test_router_admin_update_does_not_leak_api_key(
     obj = RouterPublic.model_validate_json(response.content)
 
     assert obj.model_name == "new-model"
-    assert not hasattr(response, "api_key")
+    assert not hasattr(obj, "api_key")
 
 
 def test_router_admin_create_does_not_leak_api_key(
