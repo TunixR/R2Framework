@@ -1,7 +1,7 @@
 import uuid
 
-import pytest
-from fastapi import HTTPException, status
+from fastapi import status
+from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from database.auth.models import (
@@ -14,24 +14,8 @@ from database.auth.models import (
     UserSession,
     UserUpdate,
 )
-from database.auth.utils import get_session_expiry, hash_password
-from routers.auth import (
-    change_own_password,
-    change_user_password,
-    create_user,
-    delete_current_user,
-    delete_user,
-    disable_user,
-    enable_user,
-    get_current_user_info,
-    get_user,
-    list_users,
-    login,
-    logout,
-    search_users,
-    update_current_user,
-    update_user,
-)
+from database.auth.utils import hash_password
+from tests.unit.shared.auth_helpers import make_auth_headers, make_user_session
 
 # ---------------------------------------------------------------------------
 # Helper functions for tests
@@ -63,59 +47,54 @@ def create_test_user(
 # ---------------------------------------------------------------------------
 
 
-def test_login_success(session: Session):
+def test_login_success(session: Session, client: TestClient):
     """Test successful user login."""
-    # Create a user
     _ = create_test_user(session, username="loginuser", password="pass123")
 
-    # Try to login
-    credentials = UserLogin(username="loginuser", password="pass123")  # pyright: ignore[reportArgumentType]
-    result = login(credentials, session)
+    credentials = UserLogin(username="loginuser", password="pass123")
+    response = client.post("/auth/login", json=credentials.model_dump(mode="json"))
 
-    assert "user" in result
-    assert "session_token" in result
-    assert "valid_until" in result
-    assert isinstance(result["user"], UserPublic)
-    assert result["user"].username == "loginuser"
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+    assert "user" in payload
+    assert "session_token" in payload
+    assert "valid_until" in payload
+    user_public = UserPublic.model_validate(payload["user"])
+    assert user_public.username == "loginuser"
 
 
-def test_login_invalid_username(session: Session):
+def test_login_invalid_username(client: TestClient):
     """Test login with invalid username."""
-    credentials = UserLogin(username="nonexistent", password="pass123")  # pyright: ignore[reportArgumentType]
+    response = client.post(
+        "/auth/login", json={"username": "nonexistent", "password": "pass123"}
+    )
 
-    with pytest.raises(HTTPException) as exc_info:
-        _ = login(credentials, session)
-
-    assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-    assert "Invalid username or password" in exc_info.value.detail
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert "invalid username or password" in response.json()["detail"].lower()
 
 
-def test_login_invalid_password(session: Session):
+def test_login_invalid_password(session: Session, client: TestClient):
     """Test login with invalid password."""
     _ = create_test_user(session, username="user1", password="correct123")
 
-    credentials = UserLogin(username="user1", password="wrong123")  # pyright: ignore[reportArgumentType]
+    credentials = UserLogin(username="user1", password="wrong123")
+    response = client.post("/auth/login", json=credentials.model_dump(mode="json"))
 
-    with pytest.raises(HTTPException) as exc_info:
-        _ = login(credentials, session)
-
-    assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-    assert "Invalid username or password" in exc_info.value.detail
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert "invalid username or password" in response.json()["detail"].lower()
 
 
-def test_login_disabled_user(session: Session):
+def test_login_disabled_user(session: Session, client: TestClient):
     """Test login with a disabled user account."""
     _ = create_test_user(
         session, username="disabled", password="pass123", enabled=False
     )
 
-    credentials = UserLogin(username="disabled", password="pass123")  # pyright: ignore[reportArgumentType]
+    credentials = UserLogin(username="disabled", password="pass123")
+    response = client.post("/auth/login", json=credentials.model_dump(mode="json"))
 
-    with pytest.raises(HTTPException) as exc_info:
-        _ = login(credentials, session)
-
-    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-    assert "disabled" in exc_info.value.detail.lower()
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert "disabled" in response.json()["detail"].lower()
 
 
 # ---------------------------------------------------------------------------
@@ -123,22 +102,15 @@ def test_login_disabled_user(session: Session):
 # ---------------------------------------------------------------------------
 
 
-def test_logout_success(session: Session, mock_user: User):
+def test_logout_success(session: Session, mock_user: User, client: TestClient):
     """Test successful logout."""
-    # Create a session for the user
-    user_session = UserSession(  # pyright: ignore[reportCallIssue]
-        user=mock_user,
-        valid_until=get_session_expiry(hours=24),
-    )
-    session.add(mock_user)
-    session.add(user_session)
-    session.commit()
+    headers = make_auth_headers(mock_user, session)
 
-    # Mock authorization header
-    auth_header = f"Bearer {user_session.id}"
+    response = client.post("/auth/logout", headers=headers)
 
-    # Logout should not raise
-    logout(session, mock_user, auth_header)
+    assert response.status_code == status.HTTP_204_NO_CONTENT
+    token = headers["Authorization"].split()[1]
+    assert session.get(UserSession, uuid.UUID(token)) is None
 
 
 # ---------------------------------------------------------------------------
@@ -146,28 +118,39 @@ def test_logout_success(session: Session, mock_user: User):
 # ---------------------------------------------------------------------------
 
 
-def test_create_user_success(session: Session, mock_admin: User):
+def test_create_user_success(session: Session, mock_admin: User, client: TestClient):
     """Test creating a user as admin."""
-    user_data = UserCreate(username="newuser", password="pass12345")  # pyright: ignore[reportArgumentType]
+    headers = make_auth_headers(mock_admin, session)
 
-    result = create_user(user_data, session, mock_admin)
+    payload = UserCreate(username="newuser", password="pass12345")
+    response = client.post(
+        "/auth/users",
+        json=payload.model_dump(mode="json"),
+        headers=headers,
+    )
 
-    assert isinstance(result, UserPublic)
+    assert response.status_code == status.HTTP_201_CREATED
+    result = UserPublic.model_validate_json(response.content)
     assert result.username == "newuser"
     assert result.role == UserRole.DEVELOPER
 
 
-def test_create_user_duplicate_username(session: Session, mock_admin: User):
+def test_create_user_duplicate_username(
+    session: Session, mock_admin: User, client: TestClient
+):
     """Test creating a user with a duplicate username."""
     _ = create_test_user(session, username="existing")
 
-    user_data = UserCreate(username="existing", password="pass12345")  # pyright: ignore[reportArgumentType]
+    headers = make_auth_headers(mock_admin, session)
+    payload = UserCreate(username="existing", password="pass12345")
+    response = client.post(
+        "/auth/users",
+        json=payload.model_dump(mode="json"),
+        headers=headers,
+    )
 
-    with pytest.raises(HTTPException) as exc_info:
-        _ = create_user(user_data, session, mock_admin)
-
-    assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-    assert "already exists" in exc_info.value.detail.lower()
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "already exists" in response.json()["detail"].lower()
 
 
 # ---------------------------------------------------------------------------
@@ -175,15 +158,17 @@ def test_create_user_duplicate_username(session: Session, mock_admin: User):
 # ---------------------------------------------------------------------------
 
 
-def test_list_users_success(session: Session, mock_admin: User):
+def test_list_users_success(session: Session, mock_admin: User, client: TestClient):
     """Test listing all users as admin."""
     _ = create_test_user(session, username="user1")
     _ = create_test_user(session, username="user2")
 
-    result = list_users(session, mock_admin)
+    headers = make_auth_headers(mock_admin, session)
+    response = client.get("/auth/users", headers=headers)
 
-    assert len(result) >= 2
-    assert all(isinstance(u, UserPublic) for u in result)
+    assert response.status_code == status.HTTP_200_OK
+    users = [UserPublic.model_validate(u) for u in response.json()]
+    assert len(users) >= 2
 
 
 # ---------------------------------------------------------------------------
@@ -191,25 +176,38 @@ def test_list_users_success(session: Session, mock_admin: User):
 # ---------------------------------------------------------------------------
 
 
-def test_search_users_by_username(session: Session, mock_admin: User):
+def test_search_users_by_username(
+    session: Session, mock_admin: User, client: TestClient
+):
     """Test searching users by username."""
     _ = create_test_user(session, username="alice")
     _ = create_test_user(session, username="bob")
 
-    result = search_users(username="ali", session=session, _current_user=mock_admin)
+    headers = make_auth_headers(mock_admin, session)
+    response = client.get(
+        "/auth/users/search", params={"username": "ali"}, headers=headers
+    )
 
-    assert len(result) >= 1
-    assert any(u.username == "alice" for u in result)
+    assert response.status_code == status.HTTP_200_OK
+    users = [UserPublic.model_validate(u) for u in response.json()]
+    assert any(u.username == "alice" for u in users)
 
 
-def test_search_users_by_enabled(session: Session, mock_admin: User):
+def test_search_users_by_enabled(
+    session: Session, mock_admin: User, client: TestClient
+):
     """Test searching users by enabled status."""
     _ = create_test_user(session, username="enabled1", enabled=True)
     _ = create_test_user(session, username="disabled1", enabled=False)
 
-    result = search_users(enabled=False, session=session, _current_user=mock_admin)
+    headers = make_auth_headers(mock_admin, session)
+    response = client.get(
+        "/auth/users/search", params={"enabled": "false"}, headers=headers
+    )
 
-    assert all(not u.enabled for u in result)
+    assert response.status_code == status.HTTP_200_OK
+    users = [UserPublic.model_validate(u) for u in response.json()]
+    assert all(not u.enabled for u in users)
 
 
 # ---------------------------------------------------------------------------
@@ -217,11 +215,15 @@ def test_search_users_by_enabled(session: Session, mock_admin: User):
 # ---------------------------------------------------------------------------
 
 
-def test_get_current_user_info_success(mock_user: User):
+def test_get_current_user_info_success(
+    session: Session, mock_user: User, client: TestClient
+):
     """Test getting current user info."""
-    result = get_current_user_info(mock_user)
+    headers = make_auth_headers(mock_user, session)
+    response = client.get("/auth/users/me", headers=headers)
 
-    assert isinstance(result, UserPublic)
+    assert response.status_code == status.HTTP_200_OK
+    result = UserPublic.model_validate_json(response.content)
     assert result.username == mock_user.username
 
 
@@ -230,24 +232,26 @@ def test_get_current_user_info_success(mock_user: User):
 # ---------------------------------------------------------------------------
 
 
-def test_get_user_success(session: Session, mock_admin: User):
+def test_get_user_success(session: Session, mock_admin: User, client: TestClient):
     """Test getting user by ID as admin."""
     user = create_test_user(session, username="targetuser")
 
-    result = get_user(user.id, session, mock_admin)
+    headers = make_auth_headers(mock_admin, session)
+    response = client.get(f"/auth/users/{user.id}", headers=headers)
 
-    assert isinstance(result, UserPublic)
+    assert response.status_code == status.HTTP_200_OK
+    result = UserPublic.model_validate_json(response.content)
     assert result.username == "targetuser"
 
 
-def test_get_user_not_found(session: Session, mock_admin: User):
+def test_get_user_not_found(session: Session, mock_admin: User, client: TestClient):
     """Test getting non-existent user."""
     fake_id = uuid.uuid4()
 
-    with pytest.raises(HTTPException) as exc_info:
-        _ = get_user(fake_id, session, mock_admin)
+    headers = make_auth_headers(mock_admin, session)
+    response = client.get(f"/auth/users/{fake_id}", headers=headers)
 
-    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+    assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
 # ---------------------------------------------------------------------------
@@ -255,27 +259,39 @@ def test_get_user_not_found(session: Session, mock_admin: User):
 # ---------------------------------------------------------------------------
 
 
-def test_update_user_username(session: Session, mock_admin: User):
+def test_update_user_username(session: Session, mock_admin: User, client: TestClient):
     """Test updating user username as admin."""
     user = create_test_user(session, username="oldname")
 
+    headers = make_auth_headers(mock_admin, session)
     update_data = UserUpdate(username="newname")
-    result = update_user(user.id, update_data, session, mock_admin)
+    response = client.patch(
+        f"/auth/users/{user.id}",
+        json=update_data.model_dump(exclude_unset=True, mode="json"),
+        headers=headers,
+    )
 
+    assert response.status_code == status.HTTP_200_OK
+    result = UserPublic.model_validate_json(response.content)
     assert result.username == "newname"
 
 
-def test_update_user_to_duplicate_username(session: Session, mock_admin: User):
+def test_update_user_to_duplicate_username(
+    session: Session, mock_admin: User, client: TestClient
+):
     """Test updating user to a username that already exists."""
     user1 = create_test_user(session, username="user1")
     _ = create_test_user(session, username="user2")
 
+    headers = make_auth_headers(mock_admin, session)
     update_data = UserUpdate(username="user2")
+    response = client.patch(
+        f"/auth/users/{user1.id}",
+        json=update_data.model_dump(exclude_unset=True, mode="json"),
+        headers=headers,
+    )
 
-    with pytest.raises(HTTPException) as exc_info:
-        _ = update_user(user1.id, update_data, session, mock_admin)
-
-    assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
 # ---------------------------------------------------------------------------
@@ -283,28 +299,36 @@ def test_update_user_to_duplicate_username(session: Session, mock_admin: User):
 # ---------------------------------------------------------------------------
 
 
-def test_update_current_user_username(session: Session, mock_user: User):
+def test_update_current_user_username(
+    session: Session, mock_user: User, client: TestClient
+):
     """Test updating current user's username."""
-    session.add(mock_user)
-    session.commit()
-
+    headers = make_auth_headers(mock_user, session)
     update_data = UserUpdate(username="newusername")
-    result = update_current_user(update_data, session, mock_user)
+    response = client.patch(
+        "/auth/users/me",
+        json=update_data.model_dump(exclude_unset=True, mode="json"),
+        headers=headers,
+    )
 
+    assert response.status_code == status.HTTP_200_OK
+    result = UserPublic.model_validate_json(response.content)
     assert result.username == "newusername"
 
 
-def test_update_current_user_cannot_change_role(session: Session, mock_user: User):
+def test_update_current_user_cannot_change_role(
+    session: Session, mock_user: User, client: TestClient
+):
     """Test that users cannot change their own role."""
-    session.add(mock_user)
-    session.commit()
-
+    headers = make_auth_headers(mock_user, session)
     update_data = UserUpdate(role=UserRole.ADMINISTRATOR)  # pyright: ignore[reportCallIssue]
+    response = client.patch(
+        "/auth/users/me",
+        json=update_data.model_dump(exclude_unset=True, mode="json"),
+        headers=headers,
+    )
 
-    with pytest.raises(HTTPException) as exc_info:
-        _ = update_current_user(update_data, session, mock_user)
-
-    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+    assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 # ---------------------------------------------------------------------------
@@ -312,26 +336,47 @@ def test_update_current_user_cannot_change_role(session: Session, mock_user: Use
 # ---------------------------------------------------------------------------
 
 
-def test_delete_user_success(session: Session, mock_admin: User):
+def test_delete_user_success(session: Session, mock_admin: User, client: TestClient):
     """Test deleting a user as admin."""
     user = create_test_user(session, username="todelete")
     user_id = user.id
 
-    delete_user(user_id, session, mock_admin)
+    headers = make_auth_headers(mock_admin, session)
+    response = client.delete(f"/auth/users/{user_id}", headers=headers)
 
-    # Verify user is deleted
+    assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    session.expire_all()
     deleted_user = session.get(User, user_id)
     assert deleted_user is None
 
 
-def test_delete_user_not_found(session: Session, mock_admin: User):
+def test_delete_user_with_sessions_success(
+    session: Session, mock_admin: User, client: TestClient
+):
+    """Test deleting a user as admin."""
+    user = create_test_user(session, username="todelete")
+    _ = make_user_session(user)
+    user_id = user.id
+
+    headers = make_auth_headers(mock_admin, session)
+    response = client.delete(f"/auth/users/{user_id}", headers=headers)
+
+    assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    session.expire_all()
+    deleted_user = session.get(User, user_id)
+    assert deleted_user is None
+
+
+def test_delete_user_not_found(session: Session, mock_admin: User, client: TestClient):
     """Test deleting non-existent user."""
     fake_id = uuid.uuid4()
 
-    with pytest.raises(HTTPException) as exc_info:
-        delete_user(fake_id, session, mock_admin)
+    headers = make_auth_headers(mock_admin, session)
+    response = client.delete(f"/auth/users/{fake_id}", headers=headers)
 
-    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+    assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
 # ---------------------------------------------------------------------------
@@ -339,15 +384,17 @@ def test_delete_user_not_found(session: Session, mock_admin: User):
 # ---------------------------------------------------------------------------
 
 
-def test_delete_current_user_success(session: Session, mock_user: User):
+def test_delete_current_user_success(
+    session: Session, mock_user: User, client: TestClient
+):
     """Test deleting own account."""
-    session.add(mock_user)
-    session.commit()
     user_id = mock_user.id
+    headers = make_auth_headers(mock_user, session)
+    response = client.delete("/auth/users/me", headers=headers)
 
-    delete_current_user(session, mock_user)
+    assert response.status_code == status.HTTP_204_NO_CONTENT
 
-    # Verify user is deleted
+    session.expire_all()
     deleted_user = session.get(User, user_id)
     assert deleted_user is None
 
@@ -357,62 +404,88 @@ def test_delete_current_user_success(session: Session, mock_user: User):
 # ---------------------------------------------------------------------------
 
 
-def test_change_user_password_as_admin(session: Session, mock_admin: User):
+def test_change_user_password_as_admin(
+    session: Session, mock_admin: User, client: TestClient
+):
     """Test admin changing user password."""
     user = create_test_user(session, username="user", password="oldpass")
 
-    password_data = UserPasswordChange(new_password="newpass123")  # pyright: ignore[reportCallIssue]
-    change_user_password(user.id, password_data, session, mock_admin)
+    headers = make_auth_headers(mock_admin, session)
+    payload = UserPasswordChange(current_password=None, new_password="newpass123")
+    response = client.post(
+        f"/auth/users/{user.id}/password",
+        json=payload.model_dump(mode="json"),
+        headers=headers,
+    )
+    assert response.status_code == status.HTTP_204_NO_CONTENT
 
-    # Verify password was changed (no exception means success)
-    assert True
+    login_response = client.post(
+        "/auth/login", json={"username": "user", "password": "newpass123"}
+    )
+    assert login_response.status_code == status.HTTP_200_OK
 
 
-def test_change_own_password_success(session: Session, mock_user: User):
+def test_change_own_password_success(
+    session: Session, mock_user: User, client: TestClient
+):
     """Test user changing own password."""
     # Set a known password
     mock_user.password = hash_password("oldpass123")
     session.add(mock_user)
     session.commit()
 
-    password_data = UserPasswordChange(
-        current_password="oldpass123",  # pyright: ignore[reportArgumentType]
-        new_password="newpass123",  # pyright: ignore[reportArgumentType]
+    headers = make_auth_headers(mock_user, session)
+    payload = UserPasswordChange(
+        current_password="oldpass123", new_password="newpass123"
     )
-    change_own_password(password_data, session, mock_user)
+    response = client.post(
+        "/auth/users/me/password",
+        json=payload.model_dump(mode="json"),
+        headers=headers,
+    )
 
-    # Verify password was changed (no exception means success)
-    assert True
+    assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    login_response = client.post(
+        "/auth/login", json={"username": mock_user.username, "password": "newpass123"}
+    )
+    assert login_response.status_code == status.HTTP_200_OK
 
 
-def test_change_own_password_wrong_current(session: Session, mock_user: User):
+def test_change_own_password_wrong_current(
+    session: Session, mock_user: User, client: TestClient
+):
     """Test changing own password with wrong current password."""
     mock_user.password = hash_password("correctpass")
     session.add(mock_user)
     session.commit()
 
-    password_data = UserPasswordChange(
-        current_password="wrongpass",  # pyright: ignore[reportArgumentType]
-        new_password="newpass123",  # pyright: ignore[reportArgumentType]
+    headers = make_auth_headers(mock_user, session)
+    payload = UserPasswordChange(
+        current_password="wrongpass", new_password="newpass123"
+    )
+    response = client.post(
+        "/auth/users/me/password",
+        json=payload.model_dump(mode="json"),
+        headers=headers,
     )
 
-    with pytest.raises(HTTPException) as exc_info:
-        change_own_password(password_data, session, mock_user)
-
-    assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
-def test_change_own_password_missing_current(session: Session, mock_user: User):
+def test_change_own_password_missing_current(
+    session: Session, mock_user: User, client: TestClient
+):
     """Test changing own password without providing current password."""
-    session.add(mock_user)
-    session.commit()
+    headers = make_auth_headers(mock_user, session)
+    payload = UserPasswordChange(current_password=None, new_password="newpass123")
+    response = client.post(
+        "/auth/users/me/password",
+        json=payload.model_dump(mode="json"),
+        headers=headers,
+    )
 
-    password_data = UserPasswordChange(new_password="newpass123")  # pyright: ignore[reportCallIssue]
-
-    with pytest.raises(HTTPException) as exc_info:
-        change_own_password(password_data, session, mock_user)
-
-    assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
 # ---------------------------------------------------------------------------
@@ -420,19 +493,25 @@ def test_change_own_password_missing_current(session: Session, mock_user: User):
 # ---------------------------------------------------------------------------
 
 
-def test_enable_user_success(session: Session, mock_admin: User):
+def test_enable_user_success(session: Session, mock_admin: User, client: TestClient):
     """Test enabling a user as admin."""
     user = create_test_user(session, username="user", enabled=False)
 
-    result = enable_user(user.id, session, mock_admin)
+    headers = make_auth_headers(mock_admin, session)
+    response = client.post(f"/auth/users/{user.id}/enable", headers=headers)
 
+    assert response.status_code == status.HTTP_200_OK
+    result = UserPublic.model_validate_json(response.content)
     assert result.enabled is True
 
 
-def test_disable_user_success(session: Session, mock_admin: User):
+def test_disable_user_success(session: Session, mock_admin: User, client: TestClient):
     """Test disabling a user as admin."""
     user = create_test_user(session, username="user", enabled=True)
 
-    result = disable_user(user.id, session, mock_admin)
+    headers = make_auth_headers(mock_admin, session)
+    response = client.post(f"/auth/users/{user.id}/disable", headers=headers)
 
+    assert response.status_code == status.HTTP_200_OK
+    result = UserPublic.model_validate_json(response.content)
     assert result.enabled is False

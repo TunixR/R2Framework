@@ -220,6 +220,42 @@ def get_user(
     return UserPublic.model_validate(user)
 
 
+@router.patch("/users/me", response_model=UserPublic, summary="Update current user")
+def update_current_user(
+    user_data: UserUpdate,
+    session: SessionDep,
+    current_user: User = Depends(get_current_user),
+) -> UserPublic:
+    """
+    Update current user's own information.
+    Users can only update their username (not role or enabled status).
+    """
+    if user_data.role is not None or user_data.enabled is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot modify role or enabled status",
+        )
+
+    if user_data.username:
+        # Check if new username already exists
+        if user_data.username != current_user.username:
+            statement = select(User).where(User.username == user_data.username)
+            existing_user = session.exec(statement).first()
+            if existing_user:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Username already exists",
+                )
+            current_user.username = user_data.username
+
+    current_user.updated_at = datetime.now()
+    session.add(current_user)
+    session.commit()
+    session.refresh(current_user)
+
+    return UserPublic.model_validate(current_user)
+
+
 @router.patch(
     "/users/{user_id}",
     response_model=UserPublic,
@@ -267,40 +303,26 @@ def update_user(
     return UserPublic.model_validate(user)
 
 
-@router.patch("/users/me", response_model=UserPublic, summary="Update current user")
-def update_current_user(
-    user_data: UserUpdate,
+@router.delete(
+    "/users/me",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete current user",
+)
+def delete_current_user(
     session: SessionDep,
     current_user: User = Depends(get_current_user),
-) -> UserPublic:
+) -> None:
     """
-    Update current user's own information.
-    Users can only update their username (not role or enabled status).
+    Delete current user's own account.
     """
-    if user_data.role is not None or user_data.enabled is not None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot modify role or enabled status",
-        )
+    # Delete user's sessions first
+    statement = select(UserSession).where(UserSession.user_id == current_user.id)
+    sessions = session.exec(statement).unique().all()
+    for user_session in sessions:
+        session.delete(user_session)
 
-    if user_data.username:
-        # Check if new username already exists
-        if user_data.username != current_user.username:
-            statement = select(User).where(User.username == user_data.username)
-            existing_user = session.exec(statement).first()
-            if existing_user:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Username already exists",
-                )
-            current_user.username = user_data.username
-
-    current_user.updated_at = datetime.now()
-    session.add(current_user)
+    session.delete(current_user)
     session.commit()
-    session.refresh(current_user)
-
-    return UserPublic.model_validate(current_user)
 
 
 @router.delete(
@@ -325,7 +347,7 @@ def delete_user(
 
     # Delete user's sessions first
     statement = select(UserSession).where(UserSession.user_id == user_id)
-    sessions = session.exec(statement).all()
+    sessions = session.exec(statement).unique().all()
     for user_session in sessions:
         session.delete(user_session)
 
@@ -333,58 +355,7 @@ def delete_user(
     session.commit()
 
 
-@router.delete(
-    "/users/me",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete current user",
-)
-def delete_current_user(
-    session: SessionDep,
-    current_user: User = Depends(get_current_user),
-) -> None:
-    """
-    Delete current user's own account.
-    """
-    # Delete user's sessions first
-    statement = select(UserSession).where(UserSession.user_id == current_user.id)
-    sessions = session.exec(statement).all()
-    for user_session in sessions:
-        session.delete(user_session)
-
-    session.delete(current_user)
-    session.commit()
-
-
 # Password management endpoints
-
-
-@router.post(
-    "/users/{user_id}/password",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Change user password (Admin only)",
-)
-def change_user_password(
-    user_id: UUID,
-    password_data: UserPasswordChange,
-    session: SessionDep,
-    _current_user: User = Depends(require_admin),
-) -> None:
-    """
-    Change a user's password. Requires admin role.
-    Admin does not need to provide current password.
-    """
-    user = session.get(User, user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
-
-    # Hash new password and update
-    user.password = hash_password(password_data.new_password)
-    user.updated_at = datetime.now()
-    session.add(user)
-    session.commit()
 
 
 @router.post(
@@ -418,6 +389,35 @@ def change_own_password(
     current_user.password = hash_password(password_data.new_password)
     current_user.updated_at = datetime.now()
     session.add(current_user)
+    session.commit()
+
+
+@router.post(
+    "/users/{user_id}/password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Change user password (Admin only)",
+)
+def change_user_password(
+    user_id: UUID,
+    password_data: UserPasswordChange,
+    session: SessionDep,
+    _current_user: User = Depends(require_admin),
+) -> None:
+    """
+    Change a user's password. Requires admin role.
+    Admin does not need to provide current password.
+    """
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    # Hash new password and update
+    user.password = hash_password(password_data.new_password)
+    user.updated_at = datetime.now()
+    session.add(user)
     session.commit()
 
 
