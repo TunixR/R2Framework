@@ -145,9 +145,3 @@ class RouterUpdate(SQLModel):
     provider_type: Router.Provider | None = Field(
         default=None, description="The provider type backing this router."
     )
-
-
-class RouterDelete(SQLModel):
-    """Schema representing a router deletion request."""
-
-    id: uuid.UUID
