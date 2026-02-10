@@ -8,6 +8,7 @@ otherwise we fall back to an in-memory SQLite database.
 """
 
 import pytest
+from sqlalchemy import Engine
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.pool import StaticPool
@@ -36,12 +37,10 @@ def flush_db(session: Session):
     session.commit()
 
 
-@pytest.fixture(name="session", scope="session")
-def session_fixture():
+@pytest.fixture(name="engine", scope="session")
+def engine_fixture():
     """
     Create an in-memory SQLite database for testing.
-
-    This fixture provides a clean database session for each test.
     """
     engine = create_engine(
         "sqlite://",
@@ -50,5 +49,13 @@ def session_fixture():
     )
 
     SQLModel.metadata.create_all(engine)
+    yield engine
+
+
+@pytest.fixture(name="session", scope="session")
+def session_fixture(engine: Engine):
+    """
+    This fixture provides a clean database session the test session.
+    """
     with Session(engine) as session:
         yield session
