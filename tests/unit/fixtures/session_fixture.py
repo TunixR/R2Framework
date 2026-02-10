@@ -5,8 +5,6 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
-POSTGRES_CONTAINER = "test-postgres"
-
 
 @compiles(JSONB, "sqlite")
 def _compile_jsonb_sqlite(_type, _compiler, **_kw):  # pyright: ignore[reportUnusedFunction, reportMissingParameterType]
