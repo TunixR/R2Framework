@@ -7,11 +7,14 @@ This module provides:
 - Session token generation and validation
 """
 
-import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import bcrypt
+import jwt
 from pydantic import SecretStr
+
+from security.token import TokenData
+from settings import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
 
 
 def hash_password(password: SecretStr | str) -> str:
@@ -57,14 +60,24 @@ def verify_password(
         return False
 
 
-def generate_session_token() -> str:
+def generate_session_token(
+    data: TokenData,
+    expires_delta: timedelta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+) -> str:
     """
     Generate a secure random session token.
 
     Returns:
         Random session token as a hex string
     """
-    return secrets.token_hex(32)
+    to_encode = data.model_dump(mode="json").copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
 
 
 def get_session_expiry(hours: int = 24) -> datetime:

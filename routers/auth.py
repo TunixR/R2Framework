@@ -13,33 +13,40 @@ User operations: Login, See self, Delete self, Edit self, Change own password, L
 
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+import jwt
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import select
 
 from database.auth.models import (
     User,
     UserCreate,
-    UserLogin,
     UserPasswordChange,
     UserPublic,
     UserSession,
     UserUpdate,
 )
-from database.auth.utils import (
+from database.general import SessionDep
+from middlewares.auth import get_current_user, require_admin
+from security.token import Token, TokenData, oauth2_scheme
+from security.utils import (
+    generate_session_token,
     get_session_expiry,
     hash_password,
     verify_password,
 )
-from database.general import SessionDep
-from middlewares.auth import get_current_user, require_admin
+from settings import ALGORITHM, SECRET_KEY
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
-@router.post("/login", response_model=dict, summary="User login")
-def login(credentials: UserLogin, session: SessionDep) -> dict[str, str | UserPublic]:
+@router.post("/login", response_model=Token, summary="User login")
+def login(
+    credentials: Annotated[OAuth2PasswordRequestForm, Depends()], session: SessionDep
+) -> Token:
     """
     Authenticate a user and create a session.
     Returns the user information (without password) and session token.
@@ -68,33 +75,35 @@ def login(credentials: UserLogin, session: SessionDep) -> dict[str, str | UserPu
         )
 
     # Create session
-    user_session = UserSession(  # pyright: ignore[reportCallIssue]
-        user=user,
+    user_session = UserSession(
+        user_id=user.id,
         valid_until=get_session_expiry(hours=24),
     )
     session.add(user_session)
     session.commit()
     session.refresh(user_session)
 
-    return {
-        "user": UserPublic.model_validate(user),
-        "session_token": str(user_session.id),
-        "valid_until": user_session.valid_until.isoformat(),
-    }
+    # Create the jwt
+    data = TokenData(username=user.username, session_id=str(user_session.id))
+    access_token = generate_session_token(data)
+
+    return Token(access_token=access_token, token_type="bearer")  # nosec
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, summary="User logout")
 def logout(
     session: SessionDep,
-    _current_user: User = Depends(get_current_user),
-    authorization: str = Header(None),
+    token: Annotated[str, Depends(oauth2_scheme)],
 ) -> None:
     """
     Logout the current user by invalidating their session.
     """
-    # Extract session ID from authorization header
-    _, token = authorization.split()
-    session_id = UUID(token)
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    session_id_raw = payload.get("session_id")
+    if not session_id_raw:
+        return
+
+    session_id = UUID(str(session_id_raw))
 
     # Find and delete session
     user_session = session.get(UserSession, session_id)
