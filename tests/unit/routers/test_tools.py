@@ -14,8 +14,9 @@ def test_tools_list_requires_auth(client: TestClient):
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
-def test_tools_get_requires_auth(mock_tool: Tool, client: TestClient):
-    response = client.get(f"/tools/{mock_tool.id}")
+def test_tools_get_requires_auth(client: TestClient):
+    missing_id = uuid.uuid4()
+    response = client.get(f"/tools/{missing_id}")
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
