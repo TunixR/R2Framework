@@ -20,13 +20,13 @@ def _mock_tool_impl():  # pyright: ignore[reportUnusedFunction]
 @pytest.fixture
 def mock_tool(session: Session):
     """Create a mock tool for testing."""
-    tool = Tool(
+    tool_obj = Tool(
         id=uuid.uuid4(),
         name="Test Tool",
         description="A mock tool for testing.",
         fn_module="tests.unit.fixtures.tool_fixtures._mock_tool_impl",
     )
-    session.add(tool)
+    session.add(tool_obj)
     session.commit()
-    session.refresh(tool)
-    return tool
+    session.refresh(tool_obj)
+    return tool_obj
