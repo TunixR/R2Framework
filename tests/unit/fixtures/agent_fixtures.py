@@ -13,7 +13,7 @@ from database.provider.models import Router
 
 @pytest.fixture
 def mock_agent(session: Session, mock_router: Router):
-    """Create a mock agent user for testing."""
+    """Create a mock Agent record for testing."""
     agent = Agent(
         id=uuid.uuid4(),
         name="Test Agent",
