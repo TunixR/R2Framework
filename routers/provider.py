@@ -14,7 +14,7 @@ from database.provider.models import (
     RouterPublic,
     RouterUpdate,
 )
-from middlewares.auth import require_admin
+from middlewares.auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/provider", tags=["Provider"])
 
@@ -22,7 +22,10 @@ router = APIRouter(prefix="/provider", tags=["Provider"])
 @router.get(
     "/", response_model=Sequence[RouterPublic], summary="List all provider routers"
 )
-def list_routers(session: SessionDep) -> Sequence[RouterPublic]:
+def list_routers(
+    session: SessionDep,
+    _current_user: Annotated[User, Depends(get_current_user)],
+) -> Sequence[RouterPublic]:
     routers = session.exec(select(Router)).all()
     return [RouterPublic.model_validate(r) for r in routers]
 
@@ -30,7 +33,11 @@ def list_routers(session: SessionDep) -> Sequence[RouterPublic]:
 @router.get(
     "/{router_id}", response_model=RouterPublic, summary="Get provider router by ID"
 )
-def get_router(router_id: UUID, session: SessionDep) -> RouterPublic:
+def get_router(
+    router_id: UUID,
+    session: SessionDep,
+    _current_user: Annotated[User, Depends(get_current_user)],
+) -> RouterPublic:
     router_obj = session.get(Router, router_id)
     if not router_obj:
         raise HTTPException(
