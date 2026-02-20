@@ -8,6 +8,8 @@ This module provides:
 """
 
 from datetime import datetime, timedelta, timezone
+import hmac
+import hashlib
 
 import bcrypt
 import jwt
@@ -104,3 +106,14 @@ def is_session_valid(valid_until: datetime) -> bool:
         True if session is still valid, False otherwise
     """
     return datetime.now() < valid_until
+
+
+def robot_key_hash(key: str) -> str:
+    """Compute an HMAC-SHA256 hash of a robot key for storage/lookup."""
+    mac = hmac.new(SECRET_KEY.encode("utf-8"), key.encode("utf-8"), hashlib.sha256)
+    return mac.hexdigest()
+
+
+def constant_time_equals(a: str, b: str) -> bool:
+    """Constant-time string comparison."""
+    return hmac.compare_digest(a, b)

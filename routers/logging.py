@@ -1,14 +1,22 @@
 import zipfile
 from collections.abc import Sequence
 from io import BytesIO
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
 from sqlmodel import select
 
+from database.auth.models import User
 from database.general import SessionDep
-from database.logging.models import AgentTrace, GUITrace, RobotException, ToolTrace
+from database.logging.models import (
+    AgentTrace,
+    GUITrace,
+    RobotException,
+    ToolTrace,
+)
+from middlewares.auth import get_current_user
 from s3.utils import S3Client
 
 router = APIRouter(prefix="/logging", tags=["Logging"])
@@ -262,6 +270,21 @@ def delete_tool_trace(tool_trace_id: UUID, session: SessionDep) -> None:
 )
 def list_robot_exceptions(session: SessionDep) -> Sequence[RobotException]:
     return session.exec(select(RobotException)).all()
+
+
+@router.get(
+    "/key/{key_id}",
+    response_model=Sequence[RobotException],
+    summary="List RobotExceptions by RobotKey",
+)
+def list_robot_exceptions_by_key(
+    key_id: UUID,
+    session: SessionDep,
+    _current_user: Annotated[User, Depends(get_current_user)],
+) -> Sequence[RobotException]:
+    return session.exec(
+        select(RobotException).where(RobotException.robot_key_id == key_id)
+    ).all()
 
 
 @router.get(
