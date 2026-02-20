@@ -208,7 +208,11 @@ class RobotException(SQLModel, table=True):
         foreign_key="robotkey.id",
         description="RobotKey used to submit the exception",
     )
-    robot_key: RobotKey | None = Relationship()
+    robot_key: RobotKey | None = Relationship(
+        sa_relationship_kwargs={
+            "lazy": "noload",
+        },
+    )
 
     agent_traces: list[AgentTrace] = Relationship(back_populates="robot_exception")
 
