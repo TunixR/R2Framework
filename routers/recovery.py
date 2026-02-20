@@ -6,7 +6,9 @@ from opentelemetry import trace
 from sqlmodel import Session, select
 
 import database.general as database
+from database.keys.models import RobotKey
 from database.logging.models import RobotException
+from security.utils import robot_key_hash
 
 router = APIRouter(prefix="/recovery")
 tracer = trace.get_tracer(__name__)
@@ -17,6 +19,11 @@ async def handle_robot_exception(websocket: WebSocket):
     """
     Passes the exception to the robot exception handler for processing.
     """
+    key_raw = websocket.headers.get("X-ROBOT-KEY")
+    if not key_raw:
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
 
     with tracer.start_as_current_span(
@@ -42,6 +49,20 @@ async def handle_robot_exception(websocket: WebSocket):
 
             # Grab the gatewayagent from db
             with Session(database.general_engine) as session:
+                key_hash = robot_key_hash(key_raw)
+                robot_key = session.exec(
+                    select(RobotKey).where(RobotKey.key_hash == key_hash)
+                ).first()
+                if not robot_key or not robot_key.enabled:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "content": "Invalid robot key",
+                        }
+                    )
+                    await websocket.close(code=1008)
+                    return
+
                 agent = session.exec(
                     select(database.Agent).where(
                         database.Agent.type == database.AgentType.GatewayAgent
@@ -59,7 +80,10 @@ async def handle_robot_exception(websocket: WebSocket):
                     return
 
                 try:
-                    exception = RobotException(exception_details=data)
+                    exception = RobotException(
+                        exception_details=data,
+                        robot_key_id=robot_key.id,
+                    )
                     session.add(exception)
                     session.commit()
                     session.refresh(exception)
