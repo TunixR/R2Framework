@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import secrets
 from collections.abc import Sequence
 from typing import Annotated
@@ -20,6 +21,8 @@ from middlewares.auth import get_current_user, require_admin
 from security.utils import robot_key_hash
 
 router = APIRouter(prefix="/keys", tags=["Keys"])
+
+logger = logging.getLogger(__name__)
 
 
 @router.get("", response_model=Sequence[RobotKeyPublic], summary="List RobotKeys")
@@ -87,9 +90,10 @@ def create_robot_key(
         session.commit()
     except Exception as e:
         session.rollback()
+        logger.error("Failed to create key: %s", e)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to create key: {str(e)}",
+            detail="Failed to create key.",
         )
     session.refresh(key)
 
@@ -123,9 +127,10 @@ def delete_robot_key(
         session.commit()
     except Exception as e:
         session.rollback()
+        logger.error("Failed to delete key: %s", e)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to delete key: {str(e)}",
+            detail="Failed to delete key.",
         )
     return
 
@@ -152,9 +157,10 @@ def toggle_robot_key(
         session.commit()
     except Exception as e:
         session.rollback()
+        logger.error("Failed to toggle key: %s", e)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to toggle key: {str(e)}",
+            detail="Failed to toggle key.",
         )
     session.refresh(key)
 
