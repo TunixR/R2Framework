@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import logging
 import secrets
 from collections.abc import Sequence
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from opentelemetry import trace
+from opentelemetry.trace import StatusCode
 from sqlmodel import select
 
 from database.auth.models import User
@@ -22,7 +23,7 @@ from security.utils import robot_key_hash
 
 router = APIRouter(prefix="/keys", tags=["Keys"])
 
-logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 @router.get("", response_model=Sequence[RobotKeyPublic], summary="List RobotKeys")
@@ -90,7 +91,9 @@ def create_robot_key(
         session.commit()
     except Exception as e:
         session.rollback()
-        logger.error("Failed to create key: %s", e)
+        span = trace.get_current_span()
+        span.record_exception(e)
+        span.set_status(StatusCode.ERROR, "Failed to create key")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to create key.",
@@ -127,7 +130,9 @@ def delete_robot_key(
         session.commit()
     except Exception as e:
         session.rollback()
-        logger.error("Failed to delete key: %s", e)
+        span = trace.get_current_span()
+        span.record_exception(e)
+        span.set_status(StatusCode.ERROR, "Failed to delete key")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to delete key.",
@@ -157,7 +162,9 @@ def toggle_robot_key(
         session.commit()
     except Exception as e:
         session.rollback()
-        logger.error("Failed to toggle key: %s", e)
+        span = trace.get_current_span()
+        span.record_exception(e)
+        span.set_status(StatusCode.ERROR, "Failed to toggle key")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to toggle key.",
