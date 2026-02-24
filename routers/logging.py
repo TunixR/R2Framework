@@ -1,14 +1,12 @@
 import zipfile
 from collections.abc import Sequence
 from io import BytesIO
-from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
 from sqlmodel import select
 
-from database.auth.models import User
 from database.general import SessionDep
 from database.logging.models import (
     AgentTrace,
@@ -19,7 +17,11 @@ from database.logging.models import (
 from middlewares.auth import get_current_user
 from s3.utils import S3Client
 
-router = APIRouter(prefix="/logging", tags=["Logging"])
+router = APIRouter(
+    prefix="/logging",
+    tags=["Logging"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get(
@@ -138,7 +140,9 @@ async def get_exception_ui_log(exception_id: str, session: SessionDep):
 @router.get(
     "/agent_traces", response_model=Sequence[AgentTrace], summary="List AgentTraces"
 )
-def list_agent_traces(session: SessionDep) -> Sequence[AgentTrace]:
+def list_agent_traces(
+    session: SessionDep,
+) -> Sequence[AgentTrace]:
     return session.exec(select(AgentTrace)).unique().all()
 
 
@@ -147,7 +151,10 @@ def list_agent_traces(session: SessionDep) -> Sequence[AgentTrace]:
     response_model=AgentTrace,
     summary="Get AgentTrace by ID",
 )
-def get_agent_trace(trace_id: UUID, session: SessionDep) -> AgentTrace:
+def get_agent_trace(
+    trace_id: UUID,
+    session: SessionDep,
+) -> AgentTrace:
     trace = session.get(AgentTrace, trace_id)
     if not trace:
         raise HTTPException(
@@ -161,7 +168,10 @@ def get_agent_trace(trace_id: UUID, session: SessionDep) -> AgentTrace:
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete AgentTrace",
 )
-def delete_agent_trace(trace_id: UUID, session: SessionDep) -> None:
+def delete_agent_trace(
+    trace_id: UUID,
+    session: SessionDep,
+) -> None:
     trace = session.get(AgentTrace, trace_id)
     if not trace:
         raise HTTPException(
@@ -180,14 +190,19 @@ def delete_agent_trace(trace_id: UUID, session: SessionDep) -> None:
 
 
 @router.get("/gui_traces", response_model=Sequence[GUITrace], summary="List GUITraces")
-def list_gui_traces(session: SessionDep) -> Sequence[GUITrace]:
+def list_gui_traces(
+    session: SessionDep,
+) -> Sequence[GUITrace]:
     return session.exec(select(GUITrace)).all()
 
 
 @router.get(
     "/gui_traces/{gui_trace_id}", response_model=GUITrace, summary="Get GUITrace by ID"
 )
-def get_gui_trace(gui_trace_id: UUID, session: SessionDep) -> GUITrace:
+def get_gui_trace(
+    gui_trace_id: UUID,
+    session: SessionDep,
+) -> GUITrace:
     gtrace = session.get(GUITrace, gui_trace_id)
     if not gtrace:
         raise HTTPException(
@@ -201,7 +216,10 @@ def get_gui_trace(gui_trace_id: UUID, session: SessionDep) -> GUITrace:
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete GUITrace",
 )
-def delete_gui_trace(gui_trace_id: UUID, session: SessionDep) -> None:
+def delete_gui_trace(
+    gui_trace_id: UUID,
+    session: SessionDep,
+) -> None:
     gtrace = session.get(GUITrace, gui_trace_id)
     if not gtrace:
         raise HTTPException(
@@ -222,7 +240,9 @@ def delete_gui_trace(gui_trace_id: UUID, session: SessionDep) -> None:
 @router.get(
     "/tool_traces", response_model=Sequence[ToolTrace], summary="List ToolTraces"
 )
-def list_tool_traces(session: SessionDep) -> Sequence[ToolTrace]:
+def list_tool_traces(
+    session: SessionDep,
+) -> Sequence[ToolTrace]:
     return session.exec(select(ToolTrace)).all()
 
 
@@ -231,7 +251,10 @@ def list_tool_traces(session: SessionDep) -> Sequence[ToolTrace]:
     response_model=ToolTrace,
     summary="Get ToolTrace by ID",
 )
-def get_tool_trace(tool_trace_id: UUID, session: SessionDep) -> ToolTrace:
+def get_tool_trace(
+    tool_trace_id: UUID,
+    session: SessionDep,
+) -> ToolTrace:
     ttrace = session.get(ToolTrace, tool_trace_id)
     if not ttrace:
         raise HTTPException(
@@ -245,7 +268,10 @@ def get_tool_trace(tool_trace_id: UUID, session: SessionDep) -> ToolTrace:
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete ToolTrace",
 )
-def delete_tool_trace(tool_trace_id: UUID, session: SessionDep) -> None:
+def delete_tool_trace(
+    tool_trace_id: UUID,
+    session: SessionDep,
+) -> None:
     ttrace = session.get(ToolTrace, tool_trace_id)
     if not ttrace:
         raise HTTPException(
@@ -280,7 +306,6 @@ def list_robot_exceptions(session: SessionDep) -> Sequence[RobotException]:
 def list_robot_exceptions_by_key(
     key_id: UUID,
     session: SessionDep,
-    _current_user: Annotated[User, Depends(get_current_user)],
 ) -> Sequence[RobotException]:
     return session.exec(
         select(RobotException).where(RobotException.robot_key_id == key_id)
@@ -292,7 +317,10 @@ def list_robot_exceptions_by_key(
     response_model=RobotException,
     summary="Get RobotException by ID",
 )
-def get_robot_exception(exception_id: UUID, session: SessionDep) -> RobotException:
+def get_robot_exception(
+    exception_id: UUID,
+    session: SessionDep,
+) -> RobotException:
     rex = session.get(RobotException, exception_id)
     if not rex:
         raise HTTPException(
@@ -306,7 +334,10 @@ def get_robot_exception(exception_id: UUID, session: SessionDep) -> RobotExcepti
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete RobotException",
 )
-def delete_robot_exception(exception_id: UUID, session: SessionDep) -> None:
+def delete_robot_exception(
+    exception_id: UUID,
+    session: SessionDep,
+) -> None:
     rex = session.get(RobotException, exception_id)
     if not rex:
         raise HTTPException(
