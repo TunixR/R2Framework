@@ -33,7 +33,7 @@ router = APIRouter(
         200: {"content": {"text/markdown": {}}},
     },
 )
-async def get_agent_trace_markdown(agent_trace_id: str, session: SessionDep):
+async def get_agent_trace_markdown(agent_trace_id: UUID, session: SessionDep):
     """
     Endpoint to retrieve the markdown log for a given agent trace ID.
     """
@@ -42,13 +42,13 @@ async def get_agent_trace_markdown(agent_trace_id: str, session: SessionDep):
     ).first()
 
     if not agent_trace:
-        return HTTPException(
+        raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"AgentTrace with ID {agent_trace_id} not found.",
         )
 
     markdown_log = await agent_trace.get_makdown_log()
-    return Response(content=markdown_log, media_type="text/plain")
+    return Response(content=markdown_log, media_type="text/markdown")
 
 
 @router.get(
@@ -60,7 +60,7 @@ async def get_agent_trace_markdown(agent_trace_id: str, session: SessionDep):
         200: {"content": {"text/csv": {}}},
     },
 )
-async def get_exception_ui_log(exception_id: str, session: SessionDep):
+async def get_exception_ui_log(exception_id: UUID, session: SessionDep):
     """
     Retrieve the UI log for a given robot exception ID.
     """
@@ -69,7 +69,7 @@ async def get_exception_ui_log(exception_id: str, session: SessionDep):
     ).first()
 
     if not robot_exception:
-        return HTTPException(
+        raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"RobotException with ID {exception_id} not found.",
         )
