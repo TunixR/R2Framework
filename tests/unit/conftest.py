@@ -16,4 +16,5 @@ pytest_plugins = [
     "tests.unit.fixtures.router_fixtures",
     "tests.unit.fixtures.tool_fixtures",
     "tests.unit.fixtures.agent_fixtures",
+    "tests.unit.fixtures.logging_fixtures",
 ]

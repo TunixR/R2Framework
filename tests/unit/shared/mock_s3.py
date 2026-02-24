@@ -9,20 +9,6 @@ def clear_store() -> None:
     _STORE.clear()
 
 
-def seed_bytes(
-    *,
-    key: str,
-    file_bytes: bytes,
-    content_type: str = "application/octet-stream",
-    bucket: str = "mock-bucket",
-) -> None:
-    _STORE[key] = {
-        "bytes": file_bytes,
-        "content_type": content_type,
-        "bucket": bucket,
-    }
-
-
 class MockS3Client(S3Client):
     @staticmethod
     @override
