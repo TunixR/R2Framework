@@ -193,7 +193,7 @@ def delete_agent_trace(
 def list_gui_traces(
     session: SessionDep,
 ) -> Sequence[GUITrace]:
-    return session.exec(select(GUITrace)).all()
+    return session.exec(select(GUITrace)).unique().all()
 
 
 @router.get(
@@ -243,7 +243,7 @@ def delete_gui_trace(
 def list_tool_traces(
     session: SessionDep,
 ) -> Sequence[ToolTrace]:
-    return session.exec(select(ToolTrace)).all()
+    return session.exec(select(ToolTrace)).unique().all()
 
 
 @router.get(
