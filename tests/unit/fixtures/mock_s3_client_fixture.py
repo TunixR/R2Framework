@@ -4,6 +4,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def mock_s3client_model(monkeypatch):  # pyright: ignore[reportMissingParameterType]
     import database.logging.models as logging_models_mod
+    import database.logging.orm_events as logging_orm_events
     import routers.logging as logging_router
     import s3 as s3_mod
     from s3 import utils as s3_utils
@@ -15,6 +16,7 @@ def mock_s3client_model(monkeypatch):  # pyright: ignore[reportMissingParameterT
     monkeypatch.setattr(s3_utils, "S3Client", MockS3Client, raising=True)
     monkeypatch.setattr(s3_mod, "S3Client", MockS3Client, raising=True)
     monkeypatch.setattr(logging_models_mod, "S3Client", MockS3Client, raising=True)
+    monkeypatch.setattr(logging_orm_events, "S3Client", MockS3Client, raising=True)
     monkeypatch.setattr(logging_router, "S3Client", MockS3Client, raising=True)
 
     return {

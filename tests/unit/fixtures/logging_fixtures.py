@@ -10,7 +10,8 @@ import pytest
 from sqlmodel import Session
 
 from database.agents.models import Agent
-from database.logging.models import AgentTrace, GUITrace, RobotException
+from database.logging.models import AgentTrace, GUITrace, RobotException, ToolTrace
+from database.tools.models import Tool
 
 
 @pytest.fixture
@@ -99,3 +100,37 @@ def mock_gui_trace(
     mock_agent_trace: AgentTrace,
 ) -> GUITrace:
     return make_gui_trace(agent_trace=mock_agent_trace)
+
+
+@pytest.fixture
+def make_tool_trace(session: Session):
+    def _make_tool_trace(
+        *,
+        agent_trace: AgentTrace,
+        tool: Tool,
+        input: dict[str, object] | None = None,
+        output: str = "",
+        success: bool = True,
+    ) -> ToolTrace:
+        ttrace = ToolTrace(
+            agent_trace_id=agent_trace.id,
+            tool_id=tool.id,
+            input=input or {},
+            output=output,
+            success=success,
+        )
+        session.add(ttrace)
+        session.commit()
+        session.refresh(ttrace)
+        return ttrace
+
+    return _make_tool_trace
+
+
+@pytest.fixture
+def mock_tool_trace(
+    make_tool_trace: Callable[..., ToolTrace],
+    mock_agent_trace: AgentTrace,
+    mock_tool: Tool,
+) -> ToolTrace:
+    return make_tool_trace(agent_trace=mock_agent_trace, tool=mock_tool)
