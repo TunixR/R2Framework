@@ -1,167 +1,153 @@
 **Repository Agents Guide**
-- Purpose: onboarding and runbook for agentic coding assistants operating in this repository.
-- Location: root of the repo — use `AGENTS.md` when automating tasks, CI, or running local checks.
 
-1) Quick environment and tooling
-- Python: `>=3.12` (see `pyproject.toml` and `.python-version`).
-- Package/tool driver: `uv` is used in CI and pre-commit hooks (see `.github/workflows/unit-tests.yml` and `.pre-commit-config.yaml`).
-- Virtual env (recommended): `python -m venv .venv` then activate before running `uv` or direct Python commands.
+Purpose: onboarding/runbook for agentic coding assistants operating in this repo. Keep changes small, verifiable, and consistent with CI.
 
-2) Build / install / sync
-- Install project deps (reproducible env used in CI):
+1) Environment
+- Python: project requires `>=3.12` (`pyproject.toml`); CI uses Python `3.12` (`.github/workflows/unit-tests.yml`).
+- Note: `.python-version` currently pins `3.13`; when reproducing CI issues, prefer Python `3.12`.
+- Tooling: `uv` is the expected runner for installs, lint, type-check, and tests.
+
+2) Install / sync (matches CI)
 ```
-# sync all extras and frozen deps (same as CI)
 uv sync --all-extras --frozen
 ```
-- If you don't use `uv`, create and activate a venv and use pip as usual; prefer `uv` to match CI.
 
-3) Lint / format / static checks
-- The repo uses `ruff` for linting/formatting and `basedpyright` for type checks, plus `bandit` for security scanning. Pre-commit runs:
-  - `ruff` (with `--fix`),
-  - `ruff-format`,
-  - `bandit` (with args from `pyproject.toml`),
-  - `basedpyright` (via `uv run basedpyright -p pyproject.toml --level error`).
-
-- Common commands (run locally to mimic CI/pre-commit):
+3) Lint / format / type-check / security
+Pre-commit and CI expect these tools:
+- Lint + auto-fix + format (ruff):
 ```
-# run ruff (format + lints)
 uv run ruff . --fix
-
-# just check (no fixes)
-uv run ruff .
-
-# run type checks (basedpyright)
+```
+- Type-check (basedpyright):
+```
 uv run basedpyright -p pyproject.toml --level error
-
-# run bandit security scan (pre-commit uses -c pyproject.toml)
+```
+- Security scan (bandit):
+```
 uv run bandit -c pyproject.toml -r .
+```
+- Run the full pre-commit suite locally:
+```
+pre-commit run --all-files
+```
+- Install the git hooks locally:
+```
+pre-commit install
 ```
 
 4) Tests
-- Unit tests live under `tests/unit` (CI runs `uv run pytest tests/unit -q`). The project depends on `pytest`, `pytest-asyncio`, and `pytest-cov`.
-- Run the whole unit test suite:
+CI runs unit tests only:
 ```
 uv run pytest tests/unit -q
 ```
-- Run a single test file:
+
+Running a single test (preferred patterns):
+- Single file:
 ```
 uv run pytest tests/unit/path/to/test_file.py -q
 ```
-- Run a single test function (explicit nodeid):
+- Single test by nodeid:
 ```
-uv run pytest tests/unit/path/to/test_file.py::test_function_name -q
+uv run pytest tests/unit/path/to/test_file.py::test_name -q
 ```
-- Run tests matching a pattern (fast selection):
+- Quick selection by substring/expression:
 ```
-uv run pytest -k "substring_or_expr" -q
-```
-- Run async tests: same `pytest` invocation — async tests use `pytest-asyncio` fixtures.
-- Run with coverage:
-```
-uv run pytest tests/unit --cov=your_package --cov-report=term-missing
+uv run pytest -k "unique_substring" -q
 ```
 
-5) Pre-commit & CI
-- Install pre-commit hooks locally to match CI behavior:
+Optional (not in CI):
+- Integration tests (exist under `tests/integration`):
 ```
-pre-commit install
-# or run them once
-pre-commit run --all-files
-```
-- CI workflow ` .github/workflows/unit-tests.yml` sets up Python 3.12 with `uv` and runs `uv run pytest tests/unit -q` — agents should mirror this for reproducibility.
-
-6) Running a single test from an agent
-- Preferred (explicit nodeid and quiet):
-```
-uv run pytest tests/unit/<relative_path_to_file>::test_name -q
-```
-- If the agent cannot compute the exact file path, use `-k` with a short unique substring:
-```
-uv run pytest -k "unique_test_substring" -q
+uv run pytest tests/integration -q
 ```
 
-7) Code style and conventions
-- Base style: follow PEP8 with repository-specific rules enforced by `ruff` and `basedpyright`. `ruff` is configured in the pre-commit hooks and should be the primary formatter/linter.
-
-- Imports
-  - Use absolute imports for project modules (e.g. `from gateway.agent import GatewayAgent`).
-  - Group imports in three sections separated by a blank line: (1) standard library, (2) third-party, (3) local packages. Sort each group alphabetically.
-  - Do not use wildcard imports (`from x import *`).
-  - Avoid circular imports; prefer local imports inside functions for optional dependencies.
-
-- Formatting
-  - Let `ruff` manage formatting. If you need to format manually, run `uv run ruff . --fix`.
-  - Use 4-space indentation, limit lines to 88/99 chars as needed for readability.
-  - Prefer f-strings for interpolation.
-
-- Typing / types
-  - Annotate public functions and methods with precise types. Use `typing` and `collections.abc` when appropriate.
-  - Avoid unnecessary `Any`. When legacy `Any` is needed, add a `# type: ignore[override]` with a short justification.
-  - Use `basedpyright` (`uv run basedpyright -p pyproject.toml`) as the primary type-checker; mirror its configuration from `pyproject.toml`.
-
-- Naming
-  - Modules / packages: short lowercase with underscores when necessary.
-  - Classes: PascalCase (e.g. `GatewayAgent`).
-  - Functions / variables: snake_case.
-  - Constants: UPPER_SNAKE.
-  - Tests: `test_` prefix on functions and files (e.g. `test_my_feature.py`, `def test_something():`).
-
-- Async patterns
-  - Use `async def` for IO-bound operations that call async libraries (FastAPI handlers, db calls, aioboto3, etc.).
-  - Avoid blocking calls in async functions; if you must, run them in a thread executor.
-  - Name coroutine functions clearly and `await` all coroutine calls.
-
-- Error handling and logging
-  - Do not use bare `except:`. Prefer `except SpecificError:` or `except Exception as exc:` and preserve context where appropriate.
-  - Raise domain-specific exceptions (create small exception classes per module when useful) rather than overloading generic exceptions.
-  - Log at appropriate levels (DEBUG for internals, INFO for important lifecycle events, WARNING for recoverable issues, ERROR for failures). Use structured messages when possible.
-  - When re-raising, use `raise` to preserve the original traceback or `raise NewError(...) from exc` to keep chaining.
-
-- Security & secrets
-  - Do not commit secrets. `.env` exists but treat it as local-only; CI should use secrets in the environment.
-  - Run `bandit` to surface common security issues: `uv run bandit -c pyproject.toml -r .`.
-
-- Database / SQLModel patterns
-  - Use `sqlmodel` models for typed DB models, keep DB access in `database` package and small repository-style helpers in `database/tools`.
-  - Keep transaction boundaries explicit and short; prefer context managers for connections/sessions.
-
-8) Tests style
-- Tests live under `tests/unit` and should be small, focused, deterministic, and fast.
-- Use fixtures (`conftest.py`) for reusable setups; prefer function scope for speed unless expensive setup is required.
-- For async components use `pytest.mark.asyncio` and `pytest-asyncio` fixtures.
-
-9) Project tooling files to be aware of
-- `pyproject.toml` — dependency and tool configuration (type-checker settings, dev deps).
-- `.pre-commit-config.yaml` — configured pre-commit hooks (ruff, bandit, basedpyright, pytest-unit hook for `tests/unit`).
-- `.github/workflows/unit-tests.yml` — CI job that mirrors local `uv` usage for tests.
-
-10) Cursor / Copilot rules
-- Cursor rules: no ` .cursor/rules/` or `.cursorrules` files found in the repo — no extra Cursor rules to import.
-- Copilot instructions: no `.github/copilot-instructions.md` file found. If such files are added, agents MUST read them and honor their guidance.
-
-11) When you are blocked (agent guidance)
-- If a change touches production configuration, secrets, or billing, ask exact questions and do not proceed.
-- If a test or linter fails, run the exact failing command locally, collect stderr/stdout, and include the minimal failing stack / message in your report.
-
-12) Recommended agent workflow
-1. Sync environment: `uv sync --all-extras --frozen`.
-2. Run `uv run ruff . --fix` and `uv run basedpyright -p pyproject.toml`.
-3. Run unit tests for the affected area: `uv run pytest path/to/test -q`.
-4. If pre-commit is used, run `pre-commit run --all-files` before opening PRs.
-
-Appendix: helpful command examples
+5) Database + migrations (Alembic)
+- Config: `alembic.ini`, migration env: `migrations/env.py`.
+- Common commands:
 ```
-# install pre-commit hooks
-pre-commit install
+uv run alembic current
+uv run alembic history
+uv run alembic upgrade head
+uv run alembic downgrade -1
+uv run alembic revision --autogenerate -m "your message"
+```
+Note: `migrations/env.py` imports models via wildcard to register tables with `SQLModel.metadata`.
 
-# run a single test function by nodeid
-uv run pytest tests/unit/gateway/test_agent.py::test_agent_routes -q
-
-# run linters and type checks
-uv run ruff . --fix && uv run basedpyright -p pyproject.toml --level error
-
-# full local verification (lint, type-check, security, tests)
+6) “Full verification” (recommended before PR)
+```
 uv run ruff . --fix && uv run basedpyright -p pyproject.toml --level error && uv run bandit -c pyproject.toml -r . && uv run pytest tests/unit -q
 ```
+
+7) Code style (repo conventions)
+- Formatting: let `ruff-format` handle layout; don’t hand-align or fight the formatter.
+- Line length: follow ruff defaults/config; keep long expressions readable.
+- Imports:
+  - Use 3 groups separated by a blank line: stdlib, third-party, local.
+  - Prefer absolute imports within the repo.
+  - Avoid wildcard imports, except for the SQLModel “model registration” pattern noted below.
+  - Avoid circular imports; use local imports inside functions for optional/late-bound deps.
+- Naming:
+  - Modules/packages: `lower_snake_case`.
+  - Classes: `PascalCase`.
+  - Functions/vars: `snake_case`.
+  - Constants: `UPPER_SNAKE_CASE`.
+  - Tests: `tests/unit/.../test_*.py` and `def test_*()`.
+- Types:
+  - Add precise types on public functions/methods and data models.
+  - Prefer `collections.abc` (`Sequence`, `Iterable`, etc.) over `typing` legacy aliases.
+  - Avoid `Any` unless required by a third-party API; when unavoidable, keep the `Any` local.
+  - Type-checker is `basedpyright`; follow existing patterns like `# pyright: ignore[...]` with a short justification.
+  - Prefer `str | None` over `Optional[str]` (Python 3.12+).
+- Errors:
+  - No bare `except:`; catch specific exceptions or `Exception as exc`.
+  - Preserve tracebacks: `raise` or `raise NewError(...) from exc`.
+  - For FastAPI endpoints, use `raise HTTPException` with appropriate status codes.
+- Logging:
+  - Prefer opentelemetry span loggers and structured, actionable messages.
+  - Don’t log secrets (API keys, tokens, passwords) or entire request bodies by default.
+- Async:
+  - Use `async def` for IO-bound code; don’t block the event loop (use executors for blocking work).
+  - Always `await` coroutines; keep lifespans/startup logic minimal.
+
+Repo layout conventions (as seen in this codebase):
+- HTTP endpoints live in `routers/*` and are included from `main.py`.
+- DB models live under `database/*/models.py` using SQLModel.
+- Cross-cutting auth lives in `middlewares/auth.py` and `security/*`.
+
+8) SQLModel / Alembic repo-specific patterns
+- Model registration: `database/general.py` and `migrations/env.py` use `from ...models import *` so `SQLModel.metadata` sees all tables.
+  - If you add a new model module, ensure it is imported in those aggregation points.
+  - Keep the existing `# noqa: F403` annotations and add a short “why” if you introduce a new one.
+- Unit tests use SQLite. If you introduce Postgres-only types, add a SQLite compile shim (see `tests/unit/fixtures/session_fixture.py` mapping `JSONB` -> `JSON`).
+
+9) Testing conventions
+- Tests should be deterministic and isolated.
+- Prefer fixtures from `tests/unit/fixtures/*` via `tests/unit/conftest.py` (it uses `pytest_plugins`).
+- When touching DB-related code, ensure tests don’t depend on external Postgres; unit tests use SQLite fixtures.
+
+10) Security / secrets / env
+- Do not commit secrets; `.env` is local-only; `.env.example` is the safe template.
+- Treat these as sensitive: `SECRET_KEY`, `PROVIDER_API_KEY`, `FREE_PROVIDER_API_KEY`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`.
+- `bandit` excludes `tests/` and `migrations/` (see `[tool.bandit]` in `pyproject.toml`).
+
+11) Repo automation files (read before changing workflows)
+- `pyproject.toml`: dependencies + tool configuration (bandit, basedpyright).
+- `.pre-commit-config.yaml`: ruff, bandit, basedpyright, and unit tests.
+- `.github/workflows/unit-tests.yml`: CI uses `uv sync --all-extras --frozen` then `uv run pytest tests/unit -q`.
+
+12) Cursor / Copilot rules
+- Cursor rules: no `.cursor/rules/` and no `.cursorrules` found at repo root.
+- Copilot instructions: no `.github/copilot-instructions.md` found.
+
+13) When blocked
+- If a change impacts secrets, auth, production config, billing, or data retention: stop and ask a targeted question.
+- If a check fails: rerun the exact failing command locally and report the minimal failing output needed to diagnose.
+
+14) Agent workflow (practical default)
+1. `uv sync --all-extras --frozen`
+2. Make the smallest change that satisfies the request.
+3. `uv run ruff . --fix`
+4. `uv run basedpyright -p pyproject.toml --level error`
+5. Run the narrowest relevant test(s) (`pytest` nodeid preferred).
 
 If you see anything missing or a CI mismatch, update this document and add a short note in the PR describing why the agent workflow changed.
