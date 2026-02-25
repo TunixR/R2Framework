@@ -3,15 +3,25 @@ from collections.abc import Sequence
 from io import BytesIO
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
 from sqlmodel import select
 
 from database.general import SessionDep
-from database.logging.models import AgentTrace, GUITrace, RobotException, ToolTrace
+from database.logging.models import (
+    AgentTrace,
+    GUITrace,
+    RobotException,
+    ToolTrace,
+)
+from middlewares.auth import get_current_user
 from s3.utils import S3Client
 
-router = APIRouter(prefix="/logging", tags=["Logging"])
+router = APIRouter(
+    prefix="/logging",
+    tags=["Logging"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get(
@@ -23,7 +33,7 @@ router = APIRouter(prefix="/logging", tags=["Logging"])
         200: {"content": {"text/markdown": {}}},
     },
 )
-async def get_agent_trace_markdown(agent_trace_id: str, session: SessionDep):
+async def get_agent_trace_markdown(agent_trace_id: UUID, session: SessionDep):
     """
     Endpoint to retrieve the markdown log for a given agent trace ID.
     """
@@ -32,13 +42,13 @@ async def get_agent_trace_markdown(agent_trace_id: str, session: SessionDep):
     ).first()
 
     if not agent_trace:
-        return HTTPException(
+        raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"AgentTrace with ID {agent_trace_id} not found.",
         )
 
     markdown_log = await agent_trace.get_makdown_log()
-    return Response(content=markdown_log, media_type="text/plain")
+    return Response(content=markdown_log, media_type="text/markdown")
 
 
 @router.get(
@@ -50,7 +60,7 @@ async def get_agent_trace_markdown(agent_trace_id: str, session: SessionDep):
         200: {"content": {"text/csv": {}}},
     },
 )
-async def get_exception_ui_log(exception_id: str, session: SessionDep):
+async def get_exception_ui_log(exception_id: UUID, session: SessionDep):
     """
     Retrieve the UI log for a given robot exception ID.
     """
@@ -59,7 +69,7 @@ async def get_exception_ui_log(exception_id: str, session: SessionDep):
     ).first()
 
     if not robot_exception:
-        return HTTPException(
+        raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"RobotException with ID {exception_id} not found.",
         )
@@ -130,7 +140,9 @@ async def get_exception_ui_log(exception_id: str, session: SessionDep):
 @router.get(
     "/agent_traces", response_model=Sequence[AgentTrace], summary="List AgentTraces"
 )
-def list_agent_traces(session: SessionDep) -> Sequence[AgentTrace]:
+def list_agent_traces(
+    session: SessionDep,
+) -> Sequence[AgentTrace]:
     return session.exec(select(AgentTrace)).unique().all()
 
 
@@ -139,7 +151,10 @@ def list_agent_traces(session: SessionDep) -> Sequence[AgentTrace]:
     response_model=AgentTrace,
     summary="Get AgentTrace by ID",
 )
-def get_agent_trace(trace_id: UUID, session: SessionDep) -> AgentTrace:
+def get_agent_trace(
+    trace_id: UUID,
+    session: SessionDep,
+) -> AgentTrace:
     trace = session.get(AgentTrace, trace_id)
     if not trace:
         raise HTTPException(
@@ -153,7 +168,10 @@ def get_agent_trace(trace_id: UUID, session: SessionDep) -> AgentTrace:
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete AgentTrace",
 )
-def delete_agent_trace(trace_id: UUID, session: SessionDep) -> None:
+def delete_agent_trace(
+    trace_id: UUID,
+    session: SessionDep,
+) -> None:
     trace = session.get(AgentTrace, trace_id)
     if not trace:
         raise HTTPException(
@@ -172,14 +190,19 @@ def delete_agent_trace(trace_id: UUID, session: SessionDep) -> None:
 
 
 @router.get("/gui_traces", response_model=Sequence[GUITrace], summary="List GUITraces")
-def list_gui_traces(session: SessionDep) -> Sequence[GUITrace]:
-    return session.exec(select(GUITrace)).all()
+def list_gui_traces(
+    session: SessionDep,
+) -> Sequence[GUITrace]:
+    return session.exec(select(GUITrace)).unique().all()
 
 
 @router.get(
     "/gui_traces/{gui_trace_id}", response_model=GUITrace, summary="Get GUITrace by ID"
 )
-def get_gui_trace(gui_trace_id: UUID, session: SessionDep) -> GUITrace:
+def get_gui_trace(
+    gui_trace_id: UUID,
+    session: SessionDep,
+) -> GUITrace:
     gtrace = session.get(GUITrace, gui_trace_id)
     if not gtrace:
         raise HTTPException(
@@ -193,7 +216,10 @@ def get_gui_trace(gui_trace_id: UUID, session: SessionDep) -> GUITrace:
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete GUITrace",
 )
-def delete_gui_trace(gui_trace_id: UUID, session: SessionDep) -> None:
+def delete_gui_trace(
+    gui_trace_id: UUID,
+    session: SessionDep,
+) -> None:
     gtrace = session.get(GUITrace, gui_trace_id)
     if not gtrace:
         raise HTTPException(
@@ -214,8 +240,10 @@ def delete_gui_trace(gui_trace_id: UUID, session: SessionDep) -> None:
 @router.get(
     "/tool_traces", response_model=Sequence[ToolTrace], summary="List ToolTraces"
 )
-def list_tool_traces(session: SessionDep) -> Sequence[ToolTrace]:
-    return session.exec(select(ToolTrace)).all()
+def list_tool_traces(
+    session: SessionDep,
+) -> Sequence[ToolTrace]:
+    return session.exec(select(ToolTrace)).unique().all()
 
 
 @router.get(
@@ -223,7 +251,10 @@ def list_tool_traces(session: SessionDep) -> Sequence[ToolTrace]:
     response_model=ToolTrace,
     summary="Get ToolTrace by ID",
 )
-def get_tool_trace(tool_trace_id: UUID, session: SessionDep) -> ToolTrace:
+def get_tool_trace(
+    tool_trace_id: UUID,
+    session: SessionDep,
+) -> ToolTrace:
     ttrace = session.get(ToolTrace, tool_trace_id)
     if not ttrace:
         raise HTTPException(
@@ -237,7 +268,10 @@ def get_tool_trace(tool_trace_id: UUID, session: SessionDep) -> ToolTrace:
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete ToolTrace",
 )
-def delete_tool_trace(tool_trace_id: UUID, session: SessionDep) -> None:
+def delete_tool_trace(
+    tool_trace_id: UUID,
+    session: SessionDep,
+) -> None:
     ttrace = session.get(ToolTrace, tool_trace_id)
     if not ttrace:
         raise HTTPException(
@@ -265,11 +299,28 @@ def list_robot_exceptions(session: SessionDep) -> Sequence[RobotException]:
 
 
 @router.get(
+    "/key/{key_id}",
+    response_model=Sequence[RobotException],
+    summary="List RobotExceptions by RobotKey",
+)
+def list_robot_exceptions_by_key(
+    key_id: UUID,
+    session: SessionDep,
+) -> Sequence[RobotException]:
+    return session.exec(
+        select(RobotException).where(RobotException.robot_key_id == key_id)
+    ).all()
+
+
+@router.get(
     "/robot_exceptions/{exception_id}",
     response_model=RobotException,
     summary="Get RobotException by ID",
 )
-def get_robot_exception(exception_id: UUID, session: SessionDep) -> RobotException:
+def get_robot_exception(
+    exception_id: UUID,
+    session: SessionDep,
+) -> RobotException:
     rex = session.get(RobotException, exception_id)
     if not rex:
         raise HTTPException(
@@ -283,7 +334,10 @@ def get_robot_exception(exception_id: UUID, session: SessionDep) -> RobotExcepti
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete RobotException",
 )
-def delete_robot_exception(exception_id: UUID, session: SessionDep) -> None:
+def delete_robot_exception(
+    exception_id: UUID,
+    session: SessionDep,
+) -> None:
     rex = session.get(RobotException, exception_id)
     if not rex:
         raise HTTPException(

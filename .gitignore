@@ -16,3 +16,6 @@ strands.log
 migrations/versions/
 
 .coverage
+
+# Git worktrees
+.worktrees/

@@ -3,20 +3,41 @@ import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from opentelemetry import trace
-from sqlmodel import Session, select
+from sqlmodel import select
 
 import database.general as database
+from database.keys.models import RobotKey
 from database.logging.models import RobotException
+from security.utils import robot_key_hash
 
 router = APIRouter(prefix="/recovery")
 tracer = trace.get_tracer(__name__)
 
 
 @router.websocket("/robot_exception/ws")
-async def handle_robot_exception(websocket: WebSocket):
+async def handle_robot_exception(websocket: WebSocket, session: database.SessionDep):
     """
     Passes the exception to the robot exception handler for processing.
     """
+    key_raw = websocket.headers.get("X-ROBOT-KEY")
+    if not key_raw:
+        await websocket.close(code=1008)
+        return
+
+    key_hash = robot_key_hash(key_raw)
+    robot_key = session.exec(
+        select(RobotKey).where(RobotKey.key_hash == key_hash)
+    ).first()
+    if not robot_key or not robot_key.enabled:
+        await websocket.send_json(
+            {
+                "type": "error",
+                "content": "Invalid robot key",
+            }
+        )
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
 
     with tracer.start_as_current_span(
@@ -41,47 +62,49 @@ async def handle_robot_exception(websocket: WebSocket):
             )  # Will only accept one exception per connection
 
             # Grab the gatewayagent from db
-            with Session(database.general_engine) as session:
-                agent = session.exec(
-                    select(database.Agent).where(
-                        database.Agent.type == database.AgentType.GatewayAgent
-                    )
-                ).first()
+            agent = session.exec(
+                select(database.Agent).where(
+                    database.Agent.type == database.AgentType.GatewayAgent
+                )
+            ).first()
 
-                if not agent:
-                    await websocket.send_json(
-                        {
-                            "type": "done",
-                            "content": "No GatewayAgent found in the database.",
-                        }
-                    )
-                    await websocket.close()
-                    return
-
-                try:
-                    exception = RobotException(exception_details=data)
-                    session.add(exception)
-                    session.commit()
-                    session.refresh(exception)
-
-                    invocation_state = {
-                        "websocket": websocket,
-                        "robot_exception_id": exception.id,
+            if not agent:
+                await websocket.send_json(
+                    {
+                        "type": "done",
+                        "content": "No GatewayAgent found in the database.",
                     }
-                    response = await agent(invocation_state=invocation_state, **data)
-                    await websocket.send_json({"type": "done", "content": response})
-                    await websocket.close()
+                )
+                await websocket.close()
+                return
 
-                    success = response.get("success", False)
-                    exception.infered_success = success
-                    session.add(exception)
-                    session.commit()
-                except WebSocketDisconnect as _:
-                    logging.info("WebSocket disconnected before completion.")
-                except Exception as e:
-                    logging.error(f"Error handling robot exception: {e}")
-                    await websocket.send_json({"type": "error", "content": str(e)})
-                    await websocket.close()
+            try:
+                exception = RobotException(
+                    exception_details=data,
+                    robot_key_id=robot_key.id,
+                )
+                session.add(exception)
+                session.commit()
+                session.refresh(exception)
+
+                invocation_state = {
+                    "websocket": websocket,
+                    "robot_exception_id": exception.id,
+                }
+                response = await agent(invocation_state=invocation_state, **data)
+                await websocket.send_json({"type": "done", "content": response})
+                await websocket.close()
+
+                success = response.get("success", False)
+                exception.infered_success = success
+                session.add(exception)
+                session.commit()
+            except WebSocketDisconnect as _:
+                logging.info("WebSocket disconnected before completion.")
+            except Exception as e:
+                logging.error(f"Error handling robot exception: {e}")
+                await websocket.send_json({"type": "error", "content": str(e)})
+                await websocket.close()
 
         keep = asyncio.create_task(keep_alive())
         work = asyncio.create_task(handle_exception())

@@ -5,6 +5,10 @@ from s3.utils import S3Client
 _STORE: dict[str, Any] = {}
 
 
+def clear_store() -> None:
+    _STORE.clear()
+
+
 class MockS3Client(S3Client):
     @staticmethod
     @override
@@ -33,3 +37,16 @@ class MockS3Client(S3Client):
             del _STORE[key]
         else:
             raise KeyError(f"Key {key} not found in bucket {bucket}.")
+
+    @staticmethod
+    @override
+    async def bulk_download_bytes(
+        keys: list[str], bucket: str = "mock-bucket"
+    ) -> dict[str, bytes]:
+        result: dict[str, bytes] = {}
+        for key in keys:
+            if key in _STORE and _STORE[key]["bucket"] == bucket:
+                result[key] = _STORE[key]["bytes"]
+            else:
+                raise KeyError(f"Key {key} not found in bucket {bucket}.")
+        return result

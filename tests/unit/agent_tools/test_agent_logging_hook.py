@@ -12,9 +12,6 @@ from tests.unit.agent_tools._shared.fakes import (
     is_bound_method_of,
 )
 
-from ..conftest.mock_s3_client_fixture import (
-    mock_s3client_model,  # pyright: ignore[reportUnusedImport] # noqa: F401
-)
 from ..shared.mock_session import (  # noqa: F401 We need to import these fixtures for them to activate
     _STORE,  # pyright: ignore[reportPrivateUsage]
     clear_store,  # pyright: ignore[reportUnusedImport]

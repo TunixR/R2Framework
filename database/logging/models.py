@@ -12,6 +12,7 @@ from sqlmodel import (
 )
 
 from database.agents.models import Agent
+from database.keys.models import RobotKey
 from database.tools.models import Tool
 from s3 import S3Client
 
@@ -200,6 +201,17 @@ class RobotException(SQLModel, table=True):
     exception_details: dict[str, Any] = Field(
         sa_type=JSONB,
         nullable=True,
+    )
+
+    robot_key_id: UUID | None = Field(
+        default=None,
+        foreign_key="robotkey.id",
+        description="RobotKey used to submit the exception",
+    )
+    robot_key: RobotKey | None = Relationship(
+        sa_relationship_kwargs={
+            "lazy": "noload",
+        },
     )
 
     agent_traces: list[AgentTrace] = Relationship(back_populates="robot_exception")
