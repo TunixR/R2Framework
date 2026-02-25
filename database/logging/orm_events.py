@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 from sqlalchemy import Connection, event
@@ -43,6 +44,13 @@ def _validate_sub_agent_trace(_, connection: Connection, target: SubAgentTrace) 
 
 
 @event.listens_for(GUITrace, "before_delete")
-async def _cascade_delete_gui_trace_screenshot(_, __: Any, target: GUITrace):  # pyright: ignore[reportUnusedFunction,reportUnusedParameter]
-    if target.screenshot_key:
-        await S3Client.delete_object(target.screenshot_key)
+def _cascade_delete_gui_trace_screenshot(_, __: Any, target: GUITrace):  # pyright: ignore[reportUnusedFunction,reportUnusedParameter]
+    if not target.screenshot_key:
+        return
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(S3Client.delete_object(target.screenshot_key))
+    else:
+        _ = loop.create_task(S3Client.delete_object(target.screenshot_key))
