@@ -10,13 +10,16 @@ from database.auth.models import User
 from database.general import SessionDep
 from middlewares.auth import get_current_user, require_admin
 
-router = APIRouter(prefix="/agents", tags=["Agents"])
+router = APIRouter(
+    prefix="/agents",
+    tags=["Agents"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get("/", response_model=Sequence[Agent], summary="List all agents")
 def list_agents(
     session: SessionDep,
-    _current_user: Annotated[User, Depends(get_current_user)],
 ) -> Sequence[Agent]:
     return session.exec(select(Agent)).unique().all()
 
@@ -25,7 +28,6 @@ def list_agents(
 def get_agent(
     agent_id: UUID,
     session: SessionDep,
-    _current_user: Annotated[User, Depends(get_current_user)],
 ) -> Agent:
     agent = session.get(Agent, agent_id)
     if not agent:

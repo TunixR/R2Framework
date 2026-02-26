@@ -21,7 +21,9 @@ from database.keys.models import (
 from middlewares.auth import get_current_user, require_admin
 from security.utils import robot_key_hash
 
-router = APIRouter(prefix="/keys", tags=["Keys"])
+router = APIRouter(
+    prefix="/keys", tags=["Keys"], dependencies=[Depends(get_current_user)]
+)
 
 tracer = trace.get_tracer(__name__)
 
@@ -29,7 +31,6 @@ tracer = trace.get_tracer(__name__)
 @router.get("", response_model=Sequence[RobotKeyPublic], summary="List RobotKeys")
 def list_robot_keys(
     session: SessionDep,
-    _current_user: Annotated[User, Depends(get_current_user)],
 ) -> Sequence[RobotKeyPublic]:
     keys = session.exec(select(RobotKey)).all()
     return [
@@ -49,7 +50,6 @@ def list_robot_keys(
 def get_robot_key(
     key_id: UUID,
     session: SessionDep,
-    _current_user: Annotated[User, Depends(get_current_user)],
 ) -> RobotKeyPublic:
     key = session.get(RobotKey, key_id)
     if not key:

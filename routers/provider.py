@@ -16,7 +16,9 @@ from database.provider.models import (
 )
 from middlewares.auth import get_current_user, require_admin
 
-router = APIRouter(prefix="/provider", tags=["Provider"])
+router = APIRouter(
+    prefix="/provider", tags=["Provider"], dependencies=[Depends(get_current_user)]
+)
 
 
 @router.get(
@@ -24,7 +26,6 @@ router = APIRouter(prefix="/provider", tags=["Provider"])
 )
 def list_routers(
     session: SessionDep,
-    _current_user: Annotated[User, Depends(get_current_user)],
 ) -> Sequence[RouterPublic]:
     routers = session.exec(select(Router)).all()
     return [RouterPublic.model_validate(r) for r in routers]
