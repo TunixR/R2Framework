@@ -1,7 +1,15 @@
 import asyncio
 import logging
+from uuid import UUID
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    Request,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from opentelemetry import trace
 from sqlmodel import select
 
@@ -92,7 +100,9 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
                     "robot_exception_id": exception.id,
                 }
                 response = await agent(invocation_state=invocation_state, **data)
-                await websocket.send_json({"type": "done", "content": response})
+                await websocket.send_json(
+                    {"type": "done", "content": response, "id": str(exception.id)}
+                )
                 await websocket.close()
 
                 success = response.get("success", False)
@@ -115,3 +125,38 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
             _ = task.cancel()
 
         return
+
+
+@router.post("/report_result/{recovery_id}")
+async def report_recovery_result(
+    request: Request, recovery_id: str, session: database.SessionDep
+):
+    try:
+        recovery_uuid = UUID(recovery_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=400, detail="Invalid recovery ID format. Must be a UUID."
+        )
+
+    key_raw = request.headers.get("X-ROBOT-KEY")
+    if not key_raw:
+        raise HTTPException(status_code=401, detail="No robot key provided")
+
+    key_hash = robot_key_hash(key_raw)
+    robot_key = session.exec(
+        select(RobotKey).where(RobotKey.key_hash == key_hash)
+    ).first()
+    if not robot_key or not robot_key.enabled:
+        raise HTTPException(status_code=403, detail="Invalid robot key")
+
+    body = await request.json()
+    success = body.get("success", False)
+
+    exception = session.get(RobotException, recovery_uuid)
+    if not exception:
+        raise HTTPException(status_code=404, detail="Recovery ID not found")
+
+    exception.infered_success = success
+    session.add(exception)
+    session.commit()
+    return Response(status_code=204)

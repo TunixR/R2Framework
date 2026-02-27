@@ -10,8 +10,35 @@ import pytest
 from sqlmodel import Session
 
 from database.agents.models import Agent
+from database.keys.models import RobotKey
 from database.logging.models import AgentTrace, GUITrace, RobotException, ToolTrace
 from database.tools.models import Tool
+from security.utils import robot_key_hash
+
+
+@pytest.fixture
+def make_robot_key(session: Session):
+    def _make_robot_key(
+        *,
+        name: str = "Test Key",
+        enabled: bool = True,
+        key_raw: str | None = None,
+    ) -> RobotKey:
+        if key_raw is None:
+            key_raw = f"test-key-{UUID().hex[:8]}"
+        key = RobotKey(
+            name=name,
+            description=None,
+            enabled=enabled,
+            key_hash=robot_key_hash(key_raw),
+            key_last4=key_raw[-4:],
+        )
+        session.add(key)
+        session.commit()
+        session.refresh(key)
+        return key
+
+    return _make_robot_key
 
 
 @pytest.fixture
