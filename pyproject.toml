@@ -10,6 +10,7 @@ dependencies = [
     "sqlmodel>=0.0.24",
     "strands-agents[openai,otel]>=1.18.0",
     "strands-agents-tools>=0.2.16",
+    "strands-agents-evals>=0.1.0",
     "pillow>=11.2.1",
     "numpy>=2.2.6",
     "scikit-image>=0.25.2",
