@@ -2864,7 +2864,7 @@ otel = [
 
 [[package]]
 name = "strands-agents-tools"
-version = "0.3.0"
+version = "0.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -2885,9 +2885,9 @@ dependencies = [
     { name = "tzdata", marker = "sys_platform == 'win32'" },
     { name = "watchdog" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fb/ab/078ea5ccab4f97aaa80500de844e1c744e4e77e6f2a4c67f62f10040c6a3/strands_agents_tools-0.3.0.tar.gz", hash = "sha256:10913ca85acb6da36ae05f2507e4f0c88d6b8b8034d1b4db6e93f3f6b7264fd0", size = 476838, upload-time = "2026-03-26T19:25:45.97Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/39/7a/9f8d9868768669dd658f1c424534ef8e0aef4d7bb44af70c102f08041efa/strands_agents_tools-0.4.1.tar.gz", hash = "sha256:4d5c77fe6019b89d483bea2a5ad41bd1b56f17b0f696b7aa06be31cca73344e1", size = 480977, upload-time = "2026-04-09T14:09:17.376Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/42/61dd37e0ad3c8b22cce83ef4c7ee21e8f6f3fc071f5096106090cb8ded60/strands_agents_tools-0.3.0-py3-none-any.whl", hash = "sha256:0d55aae56abfe1e336cdb718027d8780938881135b61b15f1dfbb1fa6e2d7cba", size = 313555, upload-time = "2026-03-26T19:25:44.147Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/93/0f04a8fd253df239792b79f5578679e3112e3f8ff69d26301190f7f9f890/strands_agents_tools-0.4.1-py3-none-any.whl", hash = "sha256:6736c54237270114aeb90d57a5fb8ccd2a363a22bab4feddc472755873bf7b0a", size = 315607, upload-time = "2026-04-09T14:09:15.577Z" },
 ]
 
 [[package]]
