@@ -10,7 +10,6 @@ from templates.recovery_payload import RecoveryPayload
 
 def _valid_payload() -> dict[str, Any]:
     return {
-        "schema_version": "3.0",
         "task_name": "Submit invoice",
         "platform": "uipath",
         "os": "windows",
@@ -29,14 +28,6 @@ def _valid_payload() -> dict[str, Any]:
             "edges": [],
         },
     }
-
-
-def test_payload_requires_schema_version():
-    payload = _valid_payload()
-    payload.pop("schema_version")
-
-    with pytest.raises(ValidationError):
-        _ = RecoveryPayload.model_validate(payload)
 
 
 def test_payload_rejects_unknown_top_level_field():

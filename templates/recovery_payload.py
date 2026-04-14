@@ -161,7 +161,6 @@ class RecoveryActivities(TemplateModel):
 class RecoveryPayload(TemplateModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: str
     task_name: str
     platform: str
     os: str
