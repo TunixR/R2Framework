@@ -2,22 +2,11 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
-from typing import override
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
-
-class TemplateModel(BaseModel):
-    """Base model that provides consistent formatting helpers."""
-
-    class ConfigDict:
-        extra = "forbid"
-
-    @override
-    def __str__(self) -> str:  # pragma: no cover - simple serialization helper
-        return json.dumps(self.model_dump(), indent=2, ensure_ascii=True)
+from templates.common import TemplateModel
 
 
 class RecoveryReasoning(TemplateModel):
@@ -70,25 +59,6 @@ class RecoveryPlannerReport(TemplateModel):
     steps: list[str] = Field(
         ...,
         description="High level steps grouped into logical units.",
-    )
-
-
-class UiExceptionReport(TemplateModel):
-    result: str = Field(
-        ...,
-        description="Summary of the recovery execution result.",
-    )
-    finished_activity: bool = Field(
-        ...,
-        description="Flag indicating whether the task and all future activities were completed.",
-    )
-    success: bool = Field(
-        ...,
-        description="Indicates if the recovery was successful.",
-    )
-    continue_from_step: int = Field(
-        ...,
-        description="Index of the next step to resume if unfinished, otherwise -1.",
     )
 
 
@@ -145,11 +115,6 @@ TEMPLATES: dict[str, TemplateDefinition] = {
         description="High level plan that groups recovery actions into logical steps.",
         model=RecoveryPlannerReport,
     ),
-    "ui_exception_report": TemplateDefinition(
-        name="ui_exception_report",
-        description="Execution summary returned by the ui_exception_handler workflow.",
-        model=UiExceptionReport,
-    ),
     "recovery_step_execution_result": TemplateDefinition(
         name="recovery_step_execution_result",
         description="Status payload returned after attempting to execute a recovery step.",
@@ -173,5 +138,4 @@ __all__ = [
     "RecoveryPlannerReport",
     "RecoveryStepExecutionResult",
     "RecoveryReasoning",
-    "UiExceptionReport",
 ]

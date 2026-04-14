@@ -64,7 +64,7 @@ from strands.types.content import ContentBlock, Messages
 from agent_tools.hooks import AgentLoggingHook
 from agent_tools.image import screenshot_bytes
 from config import Config
-from modules.uierror.prompts import (
+from prompts.gui_agent import (
     STANDALONE_COMPUTER_USE_DOUBAO,
 )
 from settings import (

@@ -54,7 +54,7 @@ def gateway_task(case: Case[str, str], mocks: GatewayMocks) -> dict[str, Any]:
     - tool_calls: which mock tools were called and with what args
     - raw_instruction: what was sent to the model
     """
-    from gateway.prompts import GATEWAY_ORCHESTRATOR_PROMPT
+    from prompts.gateway import GATEWAY_ORCHESTRATOR_PROMPT
 
     mocks.clear()
     error_input = json.loads(case.input)
@@ -96,7 +96,7 @@ def handler_task(case: Case[str, str], mocks: HandlerMocks) -> dict[str, Any]:
     - tool_calls: which mock tools were called and with what args
     - raw_instruction: what was sent to the model
     """
-    from modules.uierror.prompts import UI_EXCEPTION_HANDLER
+    from prompts.error_handler import UI_EXCEPTION_HANDLER
 
     mocks.clear()
     error_input = json.loads(case.input)
