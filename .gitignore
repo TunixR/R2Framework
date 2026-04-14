@@ -19,3 +19,6 @@ migrations/versions/
 
 # Git worktrees
 .worktrees/
+
+# Agents
+docs/
