@@ -12,8 +12,20 @@
       "enabled": true,
       "arguments": [
         {
-          "name": "code",
-          "description": "Raw error code or identifier reported by the RPA system.",
+          "name": "task_name",
+          "description": "Name of the task being recovered.",
+          "type": "str",
+          "json_type": "string"
+        },
+        {
+          "name": "platform",
+          "description": "Execution platform where the task runs.",
+          "type": "str",
+          "json_type": "string"
+        },
+        {
+          "name": "os",
+          "description": "Operating system where recovery is happening.",
           "type": "str",
           "json_type": "string"
         },
@@ -24,10 +36,10 @@
           "json_type": "object"
         },
         {
-          "name": "details",
-          "description": "Additional structured details or metadata about the error.",
-          "type": "dict",
-          "json_type": "object"
+          "name": "graph_dot",
+          "description": "Task activity graph in DOT format for downstream routing.",
+          "type": "str",
+          "json_type": "string"
         }
       ],
       "tools": {
@@ -47,34 +59,34 @@
       "enabled": true,
       "arguments": [
         {
-          "name": "task",
-          "description": "Original business task the robot was executing.",
+          "name": "task_name",
+          "description": "Name of the task being recovered.",
           "type": "str",
           "json_type": "string"
         },
         {
-          "name": "action_history",
-          "description": "List of executed actions prior to failure.",
-          "type": "list",
-          "json_type": "array"
+          "name": "platform",
+          "description": "Execution platform where the task runs.",
+          "type": "str",
+          "json_type": "string"
         },
         {
-          "name": "failed_activity",
-          "description": "The action that failed causing the exception.",
-          "type": "dict",
-          "json_type": "object"
-        },
-        {
-          "name": "future_activities",
-          "description": "Planned upcoming actions after failure.",
-          "type": "list",
-          "json_type": "array"
+          "name": "os",
+          "description": "Operating system where recovery is happening.",
+          "type": "str",
+          "json_type": "string"
         },
         {
           "name": "variables",
           "description": "Runtime variables relevant to the task.",
           "type": "dict",
           "json_type": "object"
+        },
+        {
+          "name": "graph_dot",
+          "description": "Task activity graph in DOT format for downstream recovery flow.",
+          "type": "str",
+          "json_type": "string"
         }
       ],
       "tools": {
@@ -276,22 +288,16 @@
           "json_type": "string"
         },
         {
-          "name": "action_history",
-          "description": "History of executed actions.",
-          "type": "list",
-          "json_type": "array"
-        },
-        {
-          "name": "failed_activity",
-          "description": "Failed action structure.",
-          "type": "dict",
-          "json_type": "object"
-        },
-        {
           "name": "variables",
           "description": "Execution variables.",
           "type": "dict",
           "json_type": "object"
+        },
+        {
+          "name": "graph_dot",
+          "description": "Task activity graph in DOT format used to guide future path grounding.",
+          "type": "str",
+          "json_type": "string"
         }
       ],
       "tools": {
