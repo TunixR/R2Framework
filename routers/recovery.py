@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import Any
 from uuid import UUID
 
 from fastapi import (
@@ -11,15 +12,108 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from opentelemetry import trace
+from pydantic import ValidationError
 from sqlmodel import select
 
 import database.general as database
+from database.agents.models import Agent, AgentType
 from database.keys.models import RobotKey
-from database.logging.models import RobotException
+from database.logging.models import RecoveryContext, RobotException
 from security.utils import robot_key_hash
+from templates.common import TemplateModel
+from templates.recovery_payload import RecoveryPayload
 
 router = APIRouter(prefix="/recovery")
 tracer = trace.get_tracer(__name__)
+
+
+class RecoveryWsDomainError(Exception):
+    def __init__(self, code: str, content: str):
+        super().__init__(content)
+        self.code = code
+        self.content = content
+
+
+class RecoveryWsErrorResponse(TemplateModel):
+    type: str = "error"
+    code: str
+    content: str
+
+
+def _get_valid_robot_key(
+    websocket: WebSocket, session: database.SessionDep
+) -> RobotKey | None:
+    key_raw = websocket.headers.get("X-ROBOT-KEY")
+    if not key_raw:
+        return None
+
+    key_hash = robot_key_hash(key_raw)
+    robot_key = session.exec(
+        select(RobotKey).where(RobotKey.key_hash == key_hash)
+    ).first()
+    if not robot_key or not robot_key.enabled:
+        return None
+
+    return robot_key
+
+
+def _get_gateway_agent(session: database.SessionDep):
+    return session.exec(
+        select(database.Agent).where(database.Agent.type == AgentType.GatewayAgent)
+    ).first()
+
+
+def _build_recovery_context_or_raise(data: dict[str, Any]):
+    try:
+        payload = RecoveryPayload.model_validate(data)
+        return RecoveryContext.from_payload(payload=payload)
+    except ValidationError as exc:
+        raise RecoveryWsDomainError(
+            code="INVALID_RECOVERY_PAYLOAD",
+            content=str(exc),
+        ) from exc
+    except NotImplementedError as exc:
+        raise RecoveryWsDomainError(
+            code="VISUAL_PIPELINE_NOT_IMPLEMENTED",
+            content=str(exc),
+        ) from exc
+
+
+def _persist_exception_with_context(
+    session: database.SessionDep,
+    data: dict[str, Any],
+    robot_key: RobotKey,
+    recovery_context: RecoveryContext,
+):
+    exception = RobotException(
+        exception_details=data,
+        robot_key_id=robot_key.id,
+    )
+    exception.recovery_context = recovery_context
+    session.add(exception)
+    session.commit()
+    session.refresh(exception)
+    return exception
+
+
+async def _invoke_gateway_agent(
+    agent: Agent,
+    websocket: WebSocket,
+    exception: RobotException,
+    recovery_context: RecoveryContext,
+):
+    invocation_state = {
+        "websocket": websocket,
+        "robot_exception_id": exception.id,
+    }
+    return await agent(
+        invocation_state=invocation_state,
+        task_name=recovery_context.task_name,
+        platform=recovery_context.platform,
+        os=recovery_context.os,
+        variables=recovery_context.variables,
+        graph_dot=recovery_context.to_dot(),
+    )
 
 
 @router.websocket("/robot_exception/ws")
@@ -27,16 +121,8 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
     """
     Passes the exception to the robot exception handler for processing.
     """
-    key_raw = websocket.headers.get("X-ROBOT-KEY")
-    if not key_raw:
-        await websocket.close(code=1008)
-        return
-
-    key_hash = robot_key_hash(key_raw)
-    robot_key = session.exec(
-        select(RobotKey).where(RobotKey.key_hash == key_hash)
-    ).first()
-    if not robot_key or not robot_key.enabled:
+    robot_key = _get_valid_robot_key(websocket, session)
+    if not robot_key:
         await websocket.send_json(
             {
                 "type": "error",
@@ -69,12 +155,7 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
                 await websocket.receive_json()
             )  # Will only accept one exception per connection
 
-            # Grab the gatewayagent from db
-            agent = session.exec(
-                select(database.Agent).where(
-                    database.Agent.type == database.AgentType.GatewayAgent
-                )
-            ).first()
+            agent = _get_gateway_agent(session)
 
             if not agent:
                 await websocket.send_json(
@@ -87,19 +168,13 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
                 return
 
             try:
-                exception = RobotException(
-                    exception_details=data,
-                    robot_key_id=robot_key.id,
+                recovery_context = _build_recovery_context_or_raise(data)
+                exception = _persist_exception_with_context(
+                    session, data, robot_key, recovery_context
                 )
-                session.add(exception)
-                session.commit()
-                session.refresh(exception)
-
-                invocation_state = {
-                    "websocket": websocket,
-                    "robot_exception_id": exception.id,
-                }
-                response = await agent(invocation_state=invocation_state, **data)
+                response = await _invoke_gateway_agent(
+                    agent, websocket, exception, recovery_context
+                )
                 await websocket.send_json(
                     {"type": "done", "content": response, "id": str(exception.id)}
                 )
@@ -111,6 +186,14 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
                 session.commit()
             except WebSocketDisconnect as _:
                 logging.info("WebSocket disconnected before completion.")
+            except RecoveryWsDomainError as exc:
+                await websocket.send_json(
+                    RecoveryWsErrorResponse(
+                        code=exc.code,
+                        content=exc.content,
+                    ).model_dump()
+                )
+                await websocket.close(code=1003, reason=exc.content)
             except Exception as e:
                 logging.error(f"Error handling robot exception: {e}")
                 await websocket.send_json({"type": "error", "content": str(e)})
