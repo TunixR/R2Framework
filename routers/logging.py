@@ -1,6 +1,7 @@
 import zipfile
 from collections.abc import Sequence
 from io import BytesIO
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -11,6 +12,7 @@ from database.general import SessionDep
 from database.logging.models import (
     AgentTrace,
     GUITrace,
+    RecoveryContext,
     RobotException,
     ToolTrace,
 )
@@ -22,6 +24,32 @@ router = APIRouter(
     tags=["Logging"],
     dependencies=[Depends(get_current_user)],
 )
+
+
+def _get_recovery_context_or_404(
+    *,
+    exception_id: UUID,
+    session: SessionDep,
+) -> RecoveryContext:
+    robot_exception = session.get(RobotException, exception_id)
+    if not robot_exception:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="RobotException not found",
+        )
+
+    recovery_context = session.exec(
+        select(RecoveryContext).where(
+            RecoveryContext.robot_exception_id == exception_id
+        )
+    ).first()
+    if not recovery_context:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="RecoveryContext not found",
+        )
+
+    return recovery_context
 
 
 @router.get(
@@ -353,3 +381,33 @@ def delete_robot_exception(
             detail=f"Failed to delete RobotException: {e}",
         )
     return
+
+
+@router.get(
+    "/recovery_context/{exception_id}",
+    summary="Get normalized recovery context by exception ID",
+)
+def get_recovery_context_payload(
+    exception_id: UUID,
+    session: SessionDep,
+) -> dict[str, Any]:
+    recovery_context = _get_recovery_context_or_404(
+        exception_id=exception_id,
+        session=session,
+    )
+    return recovery_context.to_payload()
+
+
+@router.get(
+    "/recovery_context/{exception_id}/dot",
+    summary="Get recovery context DOT by exception ID",
+)
+def get_recovery_context_dot(
+    exception_id: UUID,
+    session: SessionDep,
+) -> Response:
+    recovery_context = _get_recovery_context_or_404(
+        exception_id=exception_id,
+        session=session,
+    )
+    return Response(content=recovery_context.to_dot(), media_type="text/plain")
