@@ -242,7 +242,7 @@
       "arguments": [
         {
           "name": "task",
-          "description": "Action or UI step to ground.",
+          "description": "Task describing what needs to be done to get the process back on track.",
           "type": "str",
           "json_type": "string"
         },
@@ -283,7 +283,7 @@
       "arguments": [
         {
           "name": "task",
-          "description": "Task description the robot was attempting.",
+          "description": "Task describing what needs to be done to get the process back on track.",
           "type": "str",
           "json_type": "string"
         },
