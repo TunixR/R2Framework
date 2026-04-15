@@ -37,7 +37,7 @@ temp = [
 ]
 
 [tool.bandit]
-exclude_dirs = ["tests", "migrations"]
+exclude_dirs = ["tests", "migrations", ".venv"]
 
 [tool.basedpyright]
 exclude = ["**/migrations", "**/.*", "**/__pycache__", "**/tests/unit/shared"]
