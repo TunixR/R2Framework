@@ -12,33 +12,44 @@ def valid_recovery_payload() -> dict[str, Any]:
         "platform": "uipath",
         "os": "windows",
         "variables": {"invoice_id": "INV-100", "retry": 1},
-        "activities": {
-            "nodes": [
-                {
-                    "id": "A1",
-                    "node_type": "activity",
-                    "attributes": {
-                        "state": "errored",
-                        "activity_name": "Click Submit",
-                        "selector_type": "selector",
-                        "selector_value": "#submit",
-                    },
-                },
-                {
-                    "id": "G1",
-                    "node_type": "gate",
-                    "attributes": {
-                        "gate_type": "if",
-                        "condition_statement": "invoice_id != ''",
-                    },
-                },
-            ],
-            "edges": [
-                {
-                    "source": "A1",
-                    "target": "G1",
-                    "attributes": {"condition_statement": "next"},
-                }
-            ],
+        "ui_log": [
+            {
+                "model_act_id": "A1",
+                "activity_name": "Type invoice id",
+                "action_type": "type",
+                "application": "SAP",
+                "input": "INV-100",
+                "ui_element_target": "Invoice ID",
+                "ui_group": "Invoice Form",
+                "timestamp": "2026-04-17T10:00:00Z",
+                "previous_state": "",
+                "current_state": "INV-100",
+            }
+        ],
+        "errored_act": {
+            "model_act_id": "A2",
+            "activity_name": "Click Submit",
+            "action_type": "click",
+            "application": "SAP",
+            "input": "",
+            "error_code": "E500",
+            "error_description": "Submit button disabled",
         },
+        "model": '<process id="invoice-processing"></process>',
+    }
+
+
+@pytest.fixture
+def minimal_recovery_ui_log_entry() -> dict[str, str]:
+    return {
+        "model_act_id": "A1",
+        "activity_name": "Type invoice id",
+        "action_type": "type",
+        "application": "SAP",
+        "input": "INV-100",
+        "ui_element_target": "Invoice ID",
+        "ui_group": "Invoice Form",
+        "timestamp": "2026-04-17T10:00:00Z",
+        "previous_state": "",
+        "current_state": "INV-100",
     }
