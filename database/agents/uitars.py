@@ -677,19 +677,21 @@ def add_box_token(input_string):
 )
 async def standalone_uitars(
     task: str,
-    action_history: list[str],
-    failed_activity: dict[str, Any],
     variables: dict[str, Any],
-    tool_context: ToolContext,
+    ui_log: list[Any] | None = None,
+    errored_act: dict[str, Any] | None = None,
+    model: str | None = None,
+    tool_context: ToolContext | None = None,
 ) -> list[list[ContentBlock]] | str:
     """
     This function is to be called by the ui_exception_handler tool to execute a recovery plan for a UI error.
 
     Args:
         task (str): The task description that the robot was trying to complete
-        action_history (list): The history of actions taken by the robot (list)
-        failed_activity (dict): The action that was expected to be performed but failed (dict)
         variables (dict): A dictionary of variables used in the process
+        ui_log (list | None): Ordered UI execution history leading up to failure
+        errored_act (dict | None): Structured details for the failed activity
+        model (str | None): Model-generated textual context for failure and recovery intent
 
     Returns:
         Dictionary containing status and tool response:
@@ -728,9 +730,10 @@ async def standalone_uitars(
 
     instruction = f"""
 Task: {task}
-Action History: {action_history}
-Failed Action: {failed_activity}
+UI Log: {ui_log}
+Errored Activity: {errored_act}
 Variables: {variables}
+Model Context: {model}
 """
 
     if "websocket" not in tool_context.invocation_state:

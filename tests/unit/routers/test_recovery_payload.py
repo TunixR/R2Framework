@@ -32,7 +32,7 @@ def test_recovery_ws_ingest_stores_raw_payload_and_normalized_context(
 
     original_from_payload = RecoveryContext.from_payload
 
-    def _spy_from_payload(cls, *, payload):  # pyright: ignore[reportMissingParameterType]
+    def _spy_from_payload(cls, *, payload):  # pyright: ignore[reportMissingParameterType,reportUnusedParameter]
         captured_from_payload["payload"] = payload
         return original_from_payload(payload=payload)
 
