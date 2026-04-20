@@ -72,11 +72,6 @@ def _build_recovery_context_or_raise(data: dict[str, Any]):
             code="INVALID_RECOVERY_PAYLOAD",
             content=str(exc),
         ) from exc
-    except NotImplementedError as exc:
-        raise RecoveryWsDomainError(
-            code="VISUAL_PIPELINE_NOT_IMPLEMENTED",
-            content=str(exc),
-        ) from exc
 
 
 def _persist_exception_with_context(
@@ -106,13 +101,44 @@ async def _invoke_gateway_agent(
         "websocket": websocket,
         "robot_exception_id": exception.id,
     }
+
+    ui_log = [
+        {
+            "model_act_id": entry.model_act_id,
+            "activity_name": entry.activity_name,
+            "action_type": entry.action_type,
+            "application": entry.application,
+            "input": entry.input,
+            "ui_element_target": entry.ui_element_target,
+            "ui_group": entry.ui_group,
+            "timestamp": entry.timestamp,
+            "previous_state": entry.previous_state,
+            "current_state": entry.current_state,
+        }
+        for entry in recovery_context.ui_log_entries
+    ]
+
+    errored_act = None
+    if recovery_context.errored_activity:
+        errored_act = {
+            "model_act_id": recovery_context.errored_activity.model_act_id,
+            "activity_name": recovery_context.errored_activity.activity_name,
+            "action_type": recovery_context.errored_activity.action_type,
+            "application": recovery_context.errored_activity.application,
+            "input": recovery_context.errored_activity.input,
+            "error_code": recovery_context.errored_activity.error_code,
+            "error_description": recovery_context.errored_activity.error_description,
+        }
+
     return await agent(
         invocation_state=invocation_state,
         task_name=recovery_context.task_name,
         platform=recovery_context.platform,
         os=recovery_context.os,
         variables=recovery_context.variables,
-        graph_dot=recovery_context.to_dot(),
+        ui_log=ui_log,
+        errored_act=errored_act,
+        model=recovery_context.model,
     )
 
 
