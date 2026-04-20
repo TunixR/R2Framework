@@ -46,22 +46,6 @@ class RecoveryErroredAct(TemplateModel):
     error_description: str
 
 
-class RecoveryActivityNode(TemplateModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str | None = None
-    node_type: str | None = None
-    attributes: dict[str, Any] = Field(default_factory=dict)
-
-
-class RecoveryGateNode(TemplateModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str | None = None
-    node_type: str | None = None
-    attributes: dict[str, Any] = Field(default_factory=dict)
-
-
 class RecoveryPayload(TemplateModel):
     model_config = ConfigDict(extra="forbid")
 

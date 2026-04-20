@@ -2,8 +2,8 @@ from sqlmodel import Session, select
 
 from database.logging.models import (
     RecoveryContext,
-    RecoveryGraphEdge,
-    RecoveryGraphNode,
+    RecoveryErroredActivity,
+    RecoveryUiLogEntry,
     RobotException,
 )
 
@@ -30,7 +30,7 @@ def test_recovery_context_links_to_robot_exception(session: Session):
     assert recovery_context.robot_exception.id == robot_exception.id
 
 
-def test_recovery_context_persists_nodes_and_edges(session: Session):
+def test_recovery_context_persists_normalized_payload_fields(session: Session):
     robot_exception = RobotException(exception_details={"message": "failed"})
     session.add(robot_exception)
     session.commit()
@@ -42,35 +42,30 @@ def test_recovery_context_persists_nodes_and_edges(session: Session):
             "platform": "uipath",
             "os": "windows",
             "variables": {"invoice_id": "INV-001"},
-            "activities": {
-                "nodes": [
-                    {
-                        "id": "n1",
-                        "node_type": "activity",
-                        "attributes": {
-                            "state": "past",
-                            "activity_name": "OpenInvoice",
-                            "selector_type": "selector",
-                            "selector_value": "#open-btn",
-                        },
-                    },
-                    {
-                        "id": "n2",
-                        "node_type": "gate",
-                        "attributes": {
-                            "gate_type": "xor",
-                            "condition_statement": "invoice_id != ''",
-                        },
-                    },
-                ],
-                "edges": [
-                    {
-                        "source": "n1",
-                        "target": "n2",
-                        "attributes": {"condition_statement": "on_error"},
-                    }
-                ],
+            "ui_log": [
+                {
+                    "model_act_id": "A1",
+                    "activity_name": "OpenInvoice",
+                    "action_type": "click",
+                    "application": "SAP",
+                    "input": "INV-001",
+                    "ui_element_target": "Open Invoice",
+                    "ui_group": "Invoice List",
+                    "timestamp": "2026-04-17T10:00:00Z",
+                    "previous_state": None,
+                    "current_state": "opened",
+                }
+            ],
+            "errored_act": {
+                "model_act_id": "A2",
+                "activity_name": "Submit",
+                "action_type": "click",
+                "application": "SAP",
+                "input": None,
+                "error_code": "E500",
+                "error_description": "Submit button disabled",
             },
+            "model": "<process id='invoice-recovery' />",
         },
     )
     recovery_context.robot_exception = robot_exception
@@ -80,252 +75,102 @@ def test_recovery_context_persists_nodes_and_edges(session: Session):
     stored_context = session.exec(
         select(RecoveryContext).where(RecoveryContext.id == recovery_context.id)
     ).one()
-    stored_nodes = stored_context.nodes
-    stored_edges = stored_context.edges
-
     assert stored_context.robot_exception_id == robot_exception.id
-    assert len(stored_nodes) == 2
-    assert len(stored_edges) == 1
-    assert all(
-        stored_edge.recovery_context_id == stored_context.id
-        for stored_edge in stored_edges
-    )
-    assert all(
-        stored_node.recovery_context_id == stored_context.id
-        for stored_node in stored_nodes
-    )
-    assert stored_nodes[0].node_type == "activity"
-    assert stored_nodes[1].node_type == "gate"
+    assert stored_context.task_name == "Invoice Recovery"
+    assert stored_context.platform == "uipath"
+    assert stored_context.os == "windows"
+    assert stored_context.variables == {"invoice_id": "INV-001"}
+    assert len(stored_context.ui_log_entries) == 1
+    assert stored_context.ui_log_entries[0].model_act_id == "A1"
+    assert stored_context.ui_log_entries[0].previous_state is None
+    assert stored_context.errored_activity is not None
+    assert stored_context.errored_activity.model_act_id == "A2"
+    assert stored_context.errored_activity.input is None
+    assert stored_context.model == "<process id='invoice-recovery' />"
 
 
-def test_recovery_context_to_payload_returns_structured_shape():
+def test_recovery_context_to_payload_returns_normalized_shape():
     recovery_context = RecoveryContext(
         task_name="Invoice Recovery",
         platform="uipath",
         os="windows",
         variables={"invoice_id": "INV-001"},
+        model="<process id='invoice-recovery' />",
     )
-    recovery_context.nodes = [
-        RecoveryGraphNode(
-            node_key="n1",
-            node_type="activity",
-            state="past",
-            activity_name="OpenInvoice",
+    recovery_context.ui_log_entries = [
+        RecoveryUiLogEntry(
+            position=0,
+            model_act_id="A1",
+            activity_name=None,
+            action_type="click",
+            application=None,
+            input=None,
+            ui_element_target=None,
+            ui_group=None,
+            timestamp="2026-04-17T10:00:00Z",
+            previous_state=None,
+            current_state=None,
         )
     ]
-    recovery_context.edges = [
-        RecoveryGraphEdge(
-            source_node_key="n1",
-            target_node_key="n1",
-            condition="loop",
-        )
-    ]
-
-    payload = recovery_context.to_payload()
-
-    assert payload["activities"]["nodes"][0]["node_type"] == "activity"
-    assert payload["activities"]["edges"][0]["source"] == "n1"
-    assert (
-        payload["activities"]["edges"][0]["attributes"]["condition_statement"] == "loop"
+    recovery_context.errored_activity = RecoveryErroredActivity(
+        model_act_id="A2",
+        activity_name=None,
+        action_type="click",
+        application=None,
+        input=None,
+        error_code="E500",
+        error_description="Submit button disabled",
     )
 
+    payload = recovery_context.model_dump()
 
-def test_recovery_context_from_payload_rejects_visual_not_supported():
+    assert payload["task_name"] == "Invoice Recovery"
+    assert payload["variables"]["invoice_id"] == "INV-001"
+    assert payload["ui_log"][0]["model_act_id"] == "A1"
+    assert payload["ui_log"][0]["activity_name"] is None
+    assert payload["errored_act"]["model_act_id"] == "A2"
+    assert payload["errored_act"]["input"] is None
+    assert payload["model"] == "<process id='invoice-recovery' />"
+
+
+def test_recovery_context_from_payload_accepts_nullable_fields() -> None:
     recovery_payload = {
         "task_name": "Invoice Recovery",
         "platform": "uipath",
         "os": "windows",
         "variables": {},
-        "activities": {
-            "nodes": [
-                {
-                    "id": "n1",
-                    "node_type": "activity",
-                    "attributes": {
-                        "state": "errored",
-                        "has_visual_ref": True,
-                        "selector_type": "ocr",
-                        "activity_name": "",
-                    },
-                }
-            ],
-            "edges": [],
+        "ui_log": [
+            {
+                "model_act_id": "A1",
+                "activity_name": None,
+                "action_type": "click",
+                "application": None,
+                "input": None,
+                "ui_element_target": None,
+                "ui_group": None,
+                "timestamp": "2026-04-17T10:00:00Z",
+                "previous_state": None,
+                "current_state": None,
+            }
+        ],
+        "errored_act": {
+            "model_act_id": "A2",
+            "activity_name": None,
+            "action_type": "click",
+            "application": None,
+            "input": None,
+            "error_code": "E500",
+            "error_description": "Submit button disabled",
         },
+        "model": "<process id='invoice-recovery' />",
     }
 
-    try:
-        _ = RecoveryContext.from_payload(payload=recovery_payload)
-        assert False, "Expected NotImplementedError for unsupported visual payload."
-    except NotImplementedError:
-        assert True
+    context = RecoveryContext.from_payload(payload=recovery_payload)
 
-
-def test_recovery_context_to_dot_returns_graph_with_nodes_and_edges():
-    recovery_context = RecoveryContext(
-        task_name="Invoice Recovery",
-        platform="uipath",
-        os="windows",
-        variables={"invoice_id": "INV-001"},
-    )
-    recovery_context.nodes = [
-        RecoveryGraphNode(
-            node_key="past_1",
-            node_type="activity",
-            state="past",
-            activity_name="Type Vendor Name",
-            selector_type="selector",
-            selector_value="<selector/>",
-        ),
-        RecoveryGraphNode(
-            node_key="gate_1",
-            node_type="gate",
-            gate_type="xor",
-            condition_statement="notification_medium",
-        ),
-    ]
-    recovery_context.edges = [
-        RecoveryGraphEdge(
-            source_node_key="past_1",
-            target_node_key="gate_1",
-            condition="on_error",
-        )
-    ]
-
-    dot = recovery_context.to_dot()
-
-    assert "digraph Activities" in dot
-    assert '"past_1" [node_type="activity"' in dot
-    assert '"gate_1" [node_type="gate"' in dot
-    assert '"past_1" -> "gate_1" [condition_statement="on_error"]' in dot
-
-
-def test_recovery_context_to_dot_complex():
-    recoveryContext = RecoveryContext(
-        task_name="Complex Recovery",
-        platform="uipath",
-        os="windows",
-        variables={},
-    )
-    recoveryContext.nodes = [
-        RecoveryGraphNode(
-            node_key="a",
-            node_type="activity",
-            state="past",
-            activity_name="Activity A",
-        ),
-        RecoveryGraphNode(
-            node_key="b",
-            node_type="activity",
-            state="past",
-            activity_name="Activity B",
-        ),
-        RecoveryGraphNode(
-            node_key="c",
-            node_type="activity",
-            state="errored",
-            activity_name="Activity C",
-        ),
-        RecoveryGraphNode(
-            node_key="d",
-            node_type="activity",
-            state="future",
-            activity_name="Activity D",
-        ),
-        RecoveryGraphNode(
-            node_key="e",
-            node_type="gate",
-            gate_type="xor",
-            condition_statement="condition_e",
-        ),
-        RecoveryGraphNode(
-            node_key="f",
-            node_type="activity",
-            state="future",
-            activity_name="Activity F",
-        ),
-        RecoveryGraphNode(
-            node_key="g",
-            node_type="activity",
-            state="future",
-            activity_name="Activity G",
-        ),
-        RecoveryGraphNode(
-            node_key="h",
-            node_type="activity",
-            state="future",
-            activity_name="Activity H",
-        ),
-        RecoveryGraphNode(
-            node_key="i",
-            node_type="gate",
-            gate_type="xor",
-            condition_statement="condition_i",
-        ),
-        RecoveryGraphNode(
-            node_key="j",
-            node_type="activity",
-            state="future",
-            activity_name="Activity J",
-        ),
-    ]
-    recoveryContext.edges = [
-        RecoveryGraphEdge(
-            source_node_key="a",
-            target_node_key="b",
-        ),
-        RecoveryGraphEdge(
-            source_node_key="b",
-            target_node_key="c",
-        ),
-        RecoveryGraphEdge(
-            source_node_key="c",
-            target_node_key="d",
-            condition="on_error",
-        ),
-        RecoveryGraphEdge(
-            source_node_key="d",
-            target_node_key="e",
-        ),
-        RecoveryGraphEdge(
-            source_node_key="e",
-            target_node_key="f",
-            condition="condition_e_true",
-        ),
-        RecoveryGraphEdge(
-            source_node_key="e",
-            target_node_key="g",
-            condition="condition_e_false",
-        ),
-        RecoveryGraphEdge(
-            source_node_key="g",
-            target_node_key="h",
-        ),
-        RecoveryGraphEdge(
-            source_node_key="f",
-            target_node_key="i",
-        ),
-        RecoveryGraphEdge(
-            source_node_key="i",
-            target_node_key="j",
-        ),
-        RecoveryGraphEdge(
-            source_node_key="h",
-            target_node_key="i",
-        ),
-    ]
-
-    dot = recoveryContext.to_dot()
-
-    assert "digraph Activities" in dot
-    for node_key in ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]:
-        assert f'"{node_key}"' in dot
-    assert '"a" -> "b"' in dot
-    assert '"b" -> "c"' in dot
-    assert '"c" -> "d" [condition_statement="on_error"]' in dot
-    assert '"d" -> "e"' in dot
-    assert '"e" -> "f" [condition_statement="condition_e_true"]' in dot
-    assert '"e" -> "g" [condition_statement="condition_e_false"]' in dot
-    assert '"g" -> "h"' in dot
-    assert '"i" -> "j"' in dot
-    assert '"f" -> "i"' in dot
-    assert '"h" -> "i"' in dot
+    assert context.ui_log_entries[0].activity_name is None
+    assert context.ui_log_entries[0].application is None
+    assert context.ui_log_entries[0].input is None
+    assert context.errored_activity is not None
+    assert context.errored_activity.activity_name is None
+    assert context.errored_activity.application is None
+    assert context.errored_activity.input is None
