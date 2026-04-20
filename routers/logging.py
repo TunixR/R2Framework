@@ -6,6 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlmodel import select
 
 from database.general import SessionDep
@@ -18,6 +19,19 @@ from database.logging.models import (
 )
 from middlewares.auth import get_current_user
 from s3.utils import S3Client
+
+
+class RecoveryContextEnriched(BaseModel):
+    id: UUID
+    robot_exception_id: UUID
+    task_name: str
+    platform: str
+    os: str
+    variables: dict[str, Any]
+    model: str
+    ui_log: list[dict[str, Any]]
+    errored_act: dict[str, Any] | None
+
 
 router = APIRouter(
     prefix="/logging",
@@ -387,27 +401,18 @@ def delete_robot_exception(
     "/recovery_context/{exception_id}",
     summary="Get normalized recovery context by exception ID",
 )
-def get_recovery_context_payload(
+def get_recovery_context(
     exception_id: UUID,
     session: SessionDep,
-) -> dict[str, Any]:
+) -> RecoveryContextEnriched:
     recovery_context = _get_recovery_context_or_404(
         exception_id=exception_id,
         session=session,
     )
-    return recovery_context.to_payload()
-
-
-@router.get(
-    "/recovery_context/{exception_id}/dot",
-    summary="Get recovery context DOT by exception ID",
-)
-def get_recovery_context_dot(
-    exception_id: UUID,
-    session: SessionDep,
-) -> Response:
-    recovery_context = _get_recovery_context_or_404(
-        exception_id=exception_id,
-        session=session,
+    return RecoveryContextEnriched.model_validate(
+        recovery_context.model_dump()
+        | {
+            "id": recovery_context.id,
+            "robot_exception_id": recovery_context.robot_exception_id,
+        }
     )
-    return Response(content=recovery_context.to_dot(), media_type="text/plain")

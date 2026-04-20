@@ -678,10 +678,10 @@ def add_box_token(input_string):
 async def standalone_uitars(
     task: str,
     variables: dict[str, Any],
-    ui_log: list[Any] | None = None,
-    errored_act: dict[str, Any] | None = None,
-    model: str | None = None,
-    tool_context: ToolContext | None = None,
+    ui_log: list[Any],
+    errored_act: dict[str, Any],
+    model: str,
+    tool_context: ToolContext,
 ) -> list[list[ContentBlock]] | str:
     """
     This function is to be called by the ui_exception_handler tool to execute a recovery plan for a UI error.
@@ -689,9 +689,9 @@ async def standalone_uitars(
     Args:
         task (str): The task description that the robot was trying to complete
         variables (dict): A dictionary of variables used in the process
-        ui_log (list | None): Ordered UI execution history leading up to failure
-        errored_act (dict | None): Structured details for the failed activity
-        model (str | None): Model-generated textual context for failure and recovery intent
+        ui_log (list): Ordered UI execution history leading up to failure
+        errored_act (dict): Structured details for the failed activity
+        model (str): Model-generated textual context for failure and recovery intent
 
     Returns:
         Dictionary containing status and tool response:
@@ -761,7 +761,7 @@ Model Context: {model}
         },
     ]
 
-    model = OpenAIModel(
+    agent_model = OpenAIModel(
         client_args={"api_key": PROVIDER_API_KEY, "base_url": PROVIDER_API_BASE},
         model_id=PROVIDER_GROUNDING_MODEL,
     )
@@ -772,7 +772,7 @@ Model Context: {model}
         parent_trace_id=tool_context.invocation_state.get("parent_trace_id", None),
         is_gui_agent=True,
     )
-    agent = Agent(model=model, messages=messages, hooks=[hook])  # type: ignore
+    agent = Agent(model=agent_model, messages=messages, hooks=[hook])  # type: ignore
 
     try:
         response = await agent.invoke_async(
