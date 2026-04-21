@@ -1,0 +1,112 @@
+[
+  {
+    "id": 1,
+    "payload": {
+      "task_name": "Invoice Processing",
+      "platform": "uipath",
+      "os": "windows",
+      "variables": {
+        "invoice_id": "INV-100",
+        "retry": 1
+      },
+      "ui_log": [
+        {
+          "model_act_id": "A1",
+          "activity_name": "Type invoice id",
+          "action_type": "type",
+          "application": "SAP",
+          "input": "INV-100",
+          "ui_element_target": "Invoice ID",
+          "ui_group": "Invoice Form",
+          "timestamp": "2026-04-17T10:00:00Z",
+          "previous_state": "",
+          "current_state": "INV-100"
+        }
+      ],
+      "errored_act": {
+        "model_act_id": "A2",
+        "activity_name": "Click Submit",
+        "action_type": "click",
+        "application": "SAP",
+        "input": "",
+        "error_code": "E500",
+        "error_description": "Submit button disabled"
+      },
+      "model": "<process id=\"invoice-processing\"></process>"
+    }
+  },
+  {
+    "id": 2,
+    "payload": {
+      "task_name": "Login",
+      "platform": "uipath",
+      "os": "windows",
+      "variables": {
+        "username": "admin",
+        "password": "admin"
+      },
+      "ui_log": [
+        {
+          "model_act_id": "L1",
+          "activity_name": "Type username",
+          "action_type": "type",
+          "application": "Web",
+          "input": "admin",
+          "ui_element_target": "Username",
+          "ui_group": "Login Form",
+          "timestamp": "2026-04-17T11:00:00Z",
+          "previous_state": "",
+          "current_state": "admin"
+        }
+      ],
+      "errored_act": {
+        "model_act_id": "L2",
+        "activity_name": "Type password",
+        "action_type": "type",
+        "application": "Web",
+        "input": "admin",
+        "error_code": "E_INPUT",
+        "error_description": "Password field was not focused"
+      },
+      "model": "\n      <Activity mc:Ignorable=\"sap sap2010\" x:Class=\"Main\" sap2010:ExpressionActivityEditor.ExpressionActivityEditor=\"C#\" sap2010:WorkflowViewState.IdRef=\"ActivityBuilder_1\" xmlns=\"http://schemas.microsoft.com/netfx/2009/xaml/activities\" xmlns:_a=\"clr-namespace:_2RFramework.Activities;assembly=_2RFramework.Activities\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:sap=\"http://schemas.microsoft.com/netfx/2009/xaml/activities/presentation\" xmlns:sap2010=\"http://schemas.microsoft.com/netfx/2010/xaml/activities/presentation\" xmlns:scg=\"clr-namespace:System.Collections.Generic;assembly=System.Private.CoreLib\" xmlns:sco=\"clr-namespace:System.Collections.ObjectModel;assembly=System.Private.CoreLib\" xmlns:uix=\"http://schemas.uipath.com/workflow/activities/uix\" xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\">\n        <Sequence DisplayName=\"Main Sequence\" sap:VirtualizedContainerService.HintSize=\"897.2,1400\" sap2010:WorkflowViewState.IdRef=\"Sequence_1\">\n          <sap:WorkflowViewStateService.ViewState>\n            <scg:Dictionary x:TypeArguments=\"x:String, x:Object\">\n              <x:Boolean x:Key=\"IsExpanded\">True</x:Boolean>\n            </scg:Dictionary>\n          </sap:WorkflowViewStateService.ViewState>\n          <uix:NApplicationCard AttachMode=\"ByInstance\" DisplayName=\"Use Browser Edge: Login Page\" HealingAgentBehavior=\"Job\" sap:VirtualizedContainerService.HintSize=\"483.2,1376.8\" sap2010:WorkflowViewState.IdRef=\"NApplicationCard_2\" InteractionMode=\"DebuggerApi\" IsDisplayNameAuto=\"True\" ScopeGuid=\"743e26a9-de39-4bb2-be29-6da4edcd84e2\" Version=\"V2\">\n            <uix:NApplicationCard.Body>\n              <ActivityAction x:TypeArguments=\"x:Object\">\n                <ActivityAction.Argument>\n                  <DelegateInArgument x:TypeArguments=\"x:Object\" Name=\"WSSessionData\" />\n                </ActivityAction.Argument>\n                <Sequence DisplayName=\"Do\" sap:VirtualizedContainerService.HintSize=\"449.6,1136.8\" sap2010:WorkflowViewState.IdRef=\"Sequence_4\">\n                  <Sequence.Variables>\n                    <Variable x:TypeArguments=\"x:String\" Default=\"admin\" Name=\"password\" />\n                    <Variable x:TypeArguments=\"x:String\" Default=\"admin\" Name=\"user\" />\n                  </Sequence.Variables>\n                  <sap:WorkflowViewStateService.ViewState>\n                    <scg:Dictionary x:TypeArguments=\"x:String, x:Object\">\n                      <x:Boolean x:Key=\"IsExpanded\">True</x:Boolean>\n                    </scg:Dictionary>\n                  </sap:WorkflowViewStateService.ViewState>\n                  <_a:Task sap:VirtualizedContainerService.HintSize=\"416,1075.2\" sap2010:WorkflowViewState.IdRef=\"Task_4\">\n                    <_a:Task.Activities>\n                      <scg:List x:TypeArguments=\"Activity\" Capacity=\"4\">\n                        <uix:NTypeInto ActivateBefore=\"True\" ClickBeforeMode=\"Single\" ClipboardMode=\"Never\" DisplayName=\"Type Into ''Username''\" EmptyFieldMode=\"SingleLine\" HealingAgentBehavior=\"SameAsCard\" sap:VirtualizedContainerService.HintSize=\"334.4,269.6\" sap2010:WorkflowViewState.IdRef=\"NTypeInto_1\" InteractionMode=\"SameAsCard\" ScopeIdentifier=\"743e26a9-de39-4bb2-be29-6da4edcd84e2\" Version=\"V5\">\n                          <uix:NTypeInto.Target>\n                            <uix:TargetAnchorable BrowserURL=\"\" CVScreenId=\"737b21c4-602e-4031-811b-08b90a8dfd9f\" CvElementArea=\"782, 592, 371, 46\" CvType=\"InputBox\" DesignTimeRectangle=\"783, 594, 370, 44\" DesignTimeScaleFactor=\"1\" ElementType=\"InputBox\" ElementVisibilityArgument=\"Interactive\" FullSelectorArgument=\"&lt;webctrl id='username' tag='INPUT' /&gt;\" FuzzySelectorArgument=\"&lt;webctrl id='username' tag='INPUT' type='text' class='' placeholder='Enter your username' aaname='Username' matching:id='fuzzy' fuzzylevel:id='0.0' matching:class='fuzzy' fuzzylevel:class='0.0' matching:aaname='fuzzy' fuzzylevel:aaname='0.0' /&gt;\" Guid=\"a34f9f40-a48d-408f-9e62-3a28eef6c8fc\" InformativeScreenshot=\"e2c99de1c9cb867c9139ad6a0bb9f496.png\" IsResponsive=\"True\" ScopeSelectorArgument=\"&lt;html app='msedge.exe' title='Login Page' /&gt;\" SearchSteps=\"FuzzySelector, CV\" Version=\"V6\">\n                              <uix:TargetAnchorable.Anchors>\n                                <scg:List x:TypeArguments=\"uix:ITarget\" Capacity=\"1\">\n                                  <uix:Target CVScreenId=\"737b21c4-602e-4031-811b-08b90a8dfd9f\" CvTextArea=\"782, 570, 66, 13\" CvTextArgument=\"Username\" CvType=\"Text\" DesignTimeRectangle=\"783, 567, 370, 19\" ElementType=\"Text\" FullSelectorArgument=\"&lt;webctrl tag='LABEL' /&gt;\" FuzzySelectorArgument=\"&lt;webctrl tag='LABEL' type='' class='' aaname='Username' matching:class='fuzzy' fuzzylevel:class='0.0' matching:aaname='fuzzy' fuzzylevel:aaname='0.0' check:innerText='Username' /&gt;\" Guid=\"cf49373a-4f8f-49ff-be96-8e2c13acb044\" SearchSteps=\"FuzzySelector, CV\" />\n                                </scg:List>\n                              </uix:TargetAnchorable.Anchors>\n                              <uix:TargetAnchorable.PointOffset>\n                                <uix:PointOffset />\n                              </uix:TargetAnchorable.PointOffset>\n                            </uix:TargetAnchorable>\n                          </uix:NTypeInto.Target>\n                          <uix:NTypeInto.Text>\n                            <InArgument x:TypeArguments=\"x:String\">\n                              <CSharpValue x:TypeArguments=\"x:String\" sap2010:WorkflowViewState.IdRef=\"CSharpValue`1_1\">user</CSharpValue>\n                            </InArgument>\n                          </uix:NTypeInto.Text>\n                          <uix:NTypeInto.VerifyOptions>\n                            <uix:VerifyExecutionTypeIntoOptions DisplayName=\"{x:Null}\" Mode=\"Appears\">\n                              <uix:VerifyExecutionTypeIntoOptions.Retry>\n                                <InArgument x:TypeArguments=\"x:Boolean\" />\n                              </uix:VerifyExecutionTypeIntoOptions.Retry>\n                              <uix:VerifyExecutionTypeIntoOptions.Timeout>\n                                <InArgument x:TypeArguments=\"x:Double\" />\n                              </uix:VerifyExecutionTypeIntoOptions.Timeout>\n                            </uix:VerifyExecutionTypeIntoOptions>\n                          </uix:NTypeInto.VerifyOptions>\n                        </uix:NTypeInto>\n                        <uix:NTypeInto ActivateBefore=\"True\" ClickBeforeMode=\"Single\" ClipboardMode=\"Never\" DisplayName=\"Type Into ''Password''\" EmptyFieldMode=\"SingleLine\" HealingAgentBehavior=\"SameAsCard\" sap:VirtualizedContainerService.HintSize=\"334.4,269.6\" sap2010:WorkflowViewState.IdRef=\"NTypeInto_2\" InteractionMode=\"SameAsCard\" ScopeIdentifier=\"743e26a9-de39-4bb2-be29-6da4edcd84e2\" Version=\"V5\">\n                          <uix:NTypeInto.Target>\n                            <uix:TargetAnchorable BrowserURL=\"\" CVScreenId=\"737b21c4-602e-4031-811b-08b90a8dfd9f\" CvElementArea=\"782, 683, 372, 46\" CvType=\"InputBox\" DesignTimeRectangle=\"783, 685, 370, 44\" DesignTimeScaleFactor=\"1\" ElementType=\"InputBoxPassword\" ElementVisibilityArgument=\"Interactive\" FullSelectorArgument=\"&lt;webctrl id='password' tag='INPUT' /&gt;\" FuzzySelectorArgument=\"&lt;webctrl id='password' tag='INPUT' type='password' class='' placeholder='Enter your password' aaname='Password' matching:id='fuzzy' fuzzylevel:id='0.0' matching:class='fuzzy' fuzzylevel:class='0.0' matching:aaname='fuzzy' fuzzylevel:aaname='0.0' /&gt;\" Guid=\"0247f0d6-644a-4ce0-8841-2e8874c3e6ca\" InformativeScreenshot=\"3bed5450d1ee4acf717563de85d7a3ef.png\" ScopeSelectorArgument=\"&lt;html app='msedge.exe' title='Login Page' /&gt;\" SearchSteps=\"FuzzySelector, CV\" Version=\"V6\">\n                              <uix:TargetAnchorable.Anchors>\n                                <scg:List x:TypeArguments=\"uix:ITarget\" Capacity=\"1\">\n                                  <uix:Target CVScreenId=\"737b21c4-602e-4031-811b-08b90a8dfd9f\" CvTextArea=\"782, 661, 61, 13\" CvTextArgument=\"Password\" CvType=\"Text\" DesignTimeRectangle=\"783, 658, 370, 19\" ElementType=\"Text\" FullSelectorArgument=\"&lt;webctrl aaname='Password' tag='LABEL' /&gt;\" FuzzySelectorArgument=\"&lt;webctrl aaname='Password' tag='LABEL' type='' class='' matching:aaname='fuzzy' fuzzylevel:aaname='0.0' matching:class='fuzzy' fuzzylevel:class='0.0' check:innerText='Password' /&gt;\" Guid=\"50c00c5b-3bab-4ac8-b36a-a0e279f47a96\" SearchSteps=\"FuzzySelector, CV\" />\n                                </scg:List>\n                              </uix:TargetAnchorable.Anchors>\n                              <uix:TargetAnchorable.PointOffset>\n                                <uix:PointOffset />\n                              </uix:TargetAnchorable.PointOffset>\n                            </uix:TargetAnchorable>\n                          </uix:NTypeInto.Target>\n                          <uix:NTypeInto.Text>\n                            <InArgument x:TypeArguments=\"x:String\">\n                              <CSharpValue x:TypeArguments=\"x:String\" sap2010:WorkflowViewState.IdRef=\"CSharpValue`1_2\">password</CSharpValue>\n                            </InArgument>\n                          </uix:NTypeInto.Text>\n                          <uix:NTypeInto.VerifyOptions>\n                            <uix:VerifyExecutionTypeIntoOptions DisplayName=\"{x:Null}\" Mode=\"Appears\">\n                              <uix:VerifyExecutionTypeIntoOptions.Retry>\n                                <InArgument x:TypeArguments=\"x:Boolean\" />\n                              </uix:VerifyExecutionTypeIntoOptions.Retry>\n                              <uix:VerifyExecutionTypeIntoOptions.Timeout>\n                                <InArgument x:TypeArguments=\"x:Double\" />\n                              </uix:VerifyExecutionTypeIntoOptions.Timeout>\n                            </uix:VerifyExecutionTypeIntoOptions>\n                          </uix:NTypeInto.VerifyOptions>\n                        </uix:NTypeInto>\n                        <uix:NClick ActivateBefore=\"True\" ClickType=\"Single\" DisplayName=\"Click ''Sign In''\" HealingAgentBehavior=\"SameAsCard\" sap:VirtualizedContainerService.HintSize=\"334.4,208.8\" sap2010:WorkflowViewState.IdRef=\"NClick_2\" InteractionMode=\"SameAsCard\" KeyModifiers=\"None\" MouseButton=\"Left\" ScopeIdentifier=\"743e26a9-de39-4bb2-be29-6da4edcd84e2\" Version=\"V5\">\n                          <uix:NClick.Target>\n                            <uix:TargetAnchorable BrowserURL=\"\" CVScreenId=\"737b21c4-602e-4031-811b-08b90a8dfd9f\" CvElementArea=\"781, 782, 373, 49\" CvTextArea=\"940, 797, 56, 19\" CvTextArgument=\"Sign In\" CvType=\"Button\" DesignTimeRectangle=\"783, 784, 370, 46\" DesignTimeScaleFactor=\"1\" ElementType=\"Button\" ElementVisibilityArgument=\"Interactive\" FullSelectorArgument=\"&lt;webctrl tag='BUTTON' /&gt;\" FuzzySelectorArgument=\"&lt;webctrl tag='BUTTON' type='submit' class='login-btn' aaname='Sign In' matching:class='fuzzy' fuzzylevel:class='0.0' matching:aaname='fuzzy' fuzzylevel:aaname='0.0' check:innerText='Sign In' /&gt;\" Guid=\"7726c4c9-de8a-4314-a045-bce274c49f2d\" InformativeScreenshot=\"a9659fd02a1d783aa5396e0bbcf8c30c.png\" ScopeSelectorArgument=\"&lt;html app='msedge.exe' title='Login Page' /&gt;\" SearchSteps=\"Selector, CV\" Version=\"V6\">\n                              <uix:TargetAnchorable.PointOffset>\n                                <uix:PointOffset />\n                              </uix:TargetAnchorable.PointOffset>\n                            </uix:TargetAnchorable>\n                          </uix:NClick.Target>\n                          <uix:NClick.VerifyOptions>\n                            <uix:VerifyExecutionOptions DisplayName=\"{x:Null}\" Mode=\"Appears\">\n                              <uix:VerifyExecutionOptions.Retry>\n                                <InArgument x:TypeArguments=\"x:Boolean\" />\n                              </uix:VerifyExecutionOptions.Retry>\n                              <uix:VerifyExecutionOptions.Timeout>\n                                <InArgument x:TypeArguments=\"x:Double\" />\n                              </uix:VerifyExecutionOptions.Timeout>\n                            </uix:VerifyExecutionOptions>\n                          </uix:NClick.VerifyOptions>\n                        </uix:NClick>\n                        <uix:NClick ActivateBefore=\"True\" ClickType=\"Single\" DisplayName=\"Click 'Sign Out'\" HealingAgentBehavior=\"SameAsCard\" sap:VirtualizedContainerService.HintSize=\"334.4,208.8\" sap2010:WorkflowViewState.IdRef=\"NClick_3\" InteractionMode=\"SameAsCard\" KeyModifiers=\"None\" MouseButton=\"Left\" ScopeIdentifier=\"743e26a9-de39-4bb2-be29-6da4edcd84e2\" Version=\"V5\">\n                          <uix:NClick.Target>\n                            <uix:TargetAnchorable BrowserURL=\"\" CVScreenId=\"0cea4e42-7adc-43c8-8b36-eb8ed843e162\" ContentHash=\"j1D_5XBrLkOKzchBxH2dww\" CvElementArea=\"781, 843, 373, 49\" CvTextArea=\"934, 858, 70, 19\" CvTextArgument=\"Sign Out\" CvType=\"Button\" DesignTimeRectangle=\"783, 845, 370, 46\" ElementType=\"Button\" ElementVisibilityArgument=\"Interactive\" FullSelectorArgument=\"&lt;webctrl tag='BUTTON' /&gt;\" Guid=\"8993bfbe-1350-420c-8ec5-cf68d1052825\" InformativeScreenshot=\"d0e3160661a5f3359df3af6192086640.png\" Reference=\"qy1NiGteVUOgpKpntQz4tA/uyFDDPORN0Cb2LQ7pTI9gA\" ScopeSelectorArgument=\"&lt;html app='msedge.exe' title='Login Successful' /&gt;\" SearchSteps=\"Selector, CV\" Version=\"V6\" WaitForReadyArgument=\"Interactive\" />\n                          </uix:NClick.Target>\n                          <uix:NClick.VerifyOptions>\n                            <uix:VerifyExecutionOptions DisplayName=\"{x:Null}\" Mode=\"Appears\">\n                              <uix:VerifyExecutionOptions.Retry>\n                                <InArgument x:TypeArguments=\"x:Boolean\" />\n                              </uix:VerifyExecutionOptions.Retry>\n                              <uix:VerifyExecutionOptions.Timeout>\n                                <InArgument x:TypeArguments=\"x:Double\" />\n                              </uix:VerifyExecutionOptions.Timeout>\n                            </uix:VerifyExecutionOptions>\n                          </uix:NClick.VerifyOptions>\n                        </uix:NClick>\n                      </scg:List>\n                    </_a:Task.Activities>\n                    <_a:Task.TaskName>\n                      <InArgument x:TypeArguments=\"x:String\" />\n                    </_a:Task.TaskName>\n                  </_a:Task>\n                </Sequence>\n              </ActivityAction>\n            </uix:NApplicationCard.Body>\n            <uix:NApplicationCard.TargetApp>\n              <uix:TargetApp Area=\"-8, -8, 1936, 1056\" BrowserType=\"Edge\" IconBase64=\"...\" sap2010:WorkflowViewState.IdRef=\"TargetApp_1\" InformativeScreenshot=\"252ebe7421fb4f6f4017266c0c273403.jpg\" Selector=\"&lt;html app='msedge.exe' title='Login Page' /&gt;\" Url=\"file:///C:/Code/LoginTestPage/index-twostep.html\" Version=\"V2\" />\n            </uix:NApplicationCard.TargetApp>\n          </uix:NApplicationCard>\n        </Sequence>\n      </Activity>\n      \"\n"
+    }
+  },
+  {
+    "id": 3,
+    "payload": {
+      "task_name": "Login Page - Recover password field typing",
+      "platform": "uipath",
+      "os": "windows",
+      "variables": {
+        "user": "admin",
+        "password": "admin",
+        "workflow_file": "Main.xaml",
+        "scope": "Use Browser Edge: Login Page"
+      },
+      "ui_log": [
+        {
+          "model_act_id": "L1",
+          "activity_name": "Type Into 'Username'",
+          "action_type": "type",
+          "application": "Edge - Login Page",
+          "input": "admin",
+          "ui_element_target": "Input id='username'",
+          "ui_group": "Login Form",
+          "timestamp": "2026-04-21T10:00:00Z",
+          "previous_state": "Username empty",
+          "current_state": "Username=admin"
+        }
+      ],
+      "errored_act": {
+        "model_act_id": "L2",
+        "activity_name": "Type Into 'Password'",
+        "action_type": "type",
+        "application": "Edge - Login Page",
+        "input": "admin",
+        "error_code": "UI_VERIFICATION_FAILED",
+        "error_description": "The element was found but the verification failed. It could be because you are trying to type in a password field that obfuscates the typed string"
+      },
+      "model": "<workflow name=\"Main\" source=\"Main.xaml\"><app title=\"Login Page\" browser=\"Edge\"/><activities><type-into target=\"username\"/><type-into target=\"password\" elementType=\"InputBoxPassword\"/><click target=\"Sign In\"/><click target=\"Sign Out\"/></activities></workflow>"
+    }
+  }
+]
