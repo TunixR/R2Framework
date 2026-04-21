@@ -297,8 +297,8 @@
     {
       "name": "UI Standalone UITARS",
       "description": "Executes recovery directly via iterative UITARS grounding without planning.",
-      "prompt": "Iteratively ground and execute UI actions until task recovered or attempts exhausted.",
-      "prompt_import": null,
+      "prompt": null,
+      "prompt_import": "prompts.gui_agent:STANDALONE_COMPUTER_USE_DOUBAO",
       "response_model": null,
       "router_model": "$PROVIDER_GROUNDING_MODEL",
       "agent_type": "GuiAgent",
