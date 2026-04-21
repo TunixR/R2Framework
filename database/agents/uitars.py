@@ -767,7 +767,7 @@ Model Context: {model}
     )
 
     hook = AgentLoggingHook(
-        agent_id=uuid.UUID("d3befb44-ade2-479d-b71c-b76fa0bddc1c"),  # Huge mega hack
+        agent_id=uuid.UUID("ba86c387-8b62-419b-a15e-54bcbcae8443"),
         invocation_state=tool_context.invocation_state,
         parent_trace_id=tool_context.invocation_state.get("parent_trace_id", None),
         is_gui_agent=True,

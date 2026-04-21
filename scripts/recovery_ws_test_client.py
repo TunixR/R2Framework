@@ -13,18 +13,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Standalone recovery websocket test client"
     )
-    parser.add_argument("--ws-url", required=True)
-    parser.add_argument("--robot-key", required=True)
-    parser.add_argument("--payload-id", type=int, required=True)
-    parser.add_argument(
+    _ = parser.add_argument("--ws-url", required=True)
+    _ = parser.add_argument("--robot-key", required=True)
+    _ = parser.add_argument("--payload-id", type=int, required=True)
+    _ = parser.add_argument(
         "--payload-file",
         default="scripts/data/payloads.json",
     )
-    parser.add_argument("--action-delay-seconds", type=float, default=1.0)
-    parser.add_argument("--max-actions", type=int, default=None)
-    parser.add_argument("--dry-run-actions", action="store_true")
-    parser.add_argument("--log-json", default=None)
-    parser.add_argument("--save-screenshots-dir", default=None)
+    _ = parser.add_argument("--action-delay-seconds", type=float, default=1.0)
+    _ = parser.add_argument("--max-actions", type=int, default=None)
+    _ = parser.add_argument("--dry-run-actions", action="store_true")
+    _ = parser.add_argument("--log-json", default=None)
+    _ = parser.add_argument("--save-screenshots-dir", default=None)
     return parser
 
 
