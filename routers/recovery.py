@@ -104,8 +104,10 @@ async def _invoke_gateway_agent(
 
     ui_log = [
         {
-            "model_act_id": entry.model_act_id,
-            "activity_name": entry.activity_name,
+            "case_id": entry.case_id,
+            "activity_id": entry.activity_id,
+            "event_id": entry.event_id,
+            "event_name": entry.event_name,
             "action_type": entry.action_type,
             "application": entry.application,
             "input": entry.input,
@@ -120,14 +122,17 @@ async def _invoke_gateway_agent(
 
     errored_act = None
     if recovery_context.errored_activity:
+        act = recovery_context.errored_activity
         errored_act = {
-            "model_act_id": recovery_context.errored_activity.model_act_id,
-            "activity_name": recovery_context.errored_activity.activity_name,
-            "action_type": recovery_context.errored_activity.action_type,
-            "application": recovery_context.errored_activity.application,
-            "input": recovery_context.errored_activity.input,
-            "error_code": recovery_context.errored_activity.error_code,
-            "error_description": recovery_context.errored_activity.error_description,
+            "case_id": act.case_id,
+            "activity_id": act.activity_id,
+            "event_id": act.event_id,
+            "event_name": act.event_name,
+            "action_type": act.action_type,
+            "application": act.application,
+            "input": act.input,
+            "error_code": act.error_code,
+            "error_description": act.error_description,
         }
 
     return await agent(
@@ -173,7 +178,9 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
                 while True:
                     await asyncio.sleep(10)
                     await websocket.send_json({"type": "ping"})
-            except WebSocketDisconnect:
+            except WebSocketDisconnect as e:
+                logging.info("WebSocket disconnected during keep-alive.", exc_info=e)
+                print(f"WebSocket disconnected during keep-alive: {e}")
                 return
 
         async def handle_exception():
@@ -210,7 +217,7 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
                 exception.infered_success = success
                 session.add(exception)
                 session.commit()
-            except WebSocketDisconnect as _:
+            except WebSocketDisconnect:
                 logging.info("WebSocket disconnected before completion.")
             except RecoveryWsDomainError as exc:
                 await websocket.send_json(

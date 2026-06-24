@@ -182,7 +182,8 @@ Use this grounding method before choosing actions:
 4. Choose the next action that most reliably moves the UI toward that continuation state.
 
 How to interpret context information:
-- `errored_act.activity_name`, `action_type`, `application`, `input`, `error_code`, and `error_description` describe what failed and why.
+- `errored_act.event_name` / `activity_name` (nullable), `action_type`, `application`, `input`, `error_code`, and `error_description` describe what failed and why.
+- `errored_act.case_id` / `event_id` provide grouping and event context.
 - `ui_log` entries describe what likely happened immediately before failure.
 - `model` text provides additional continuation intent and constraints.
 

@@ -33,6 +33,33 @@ class RecoveryContextEnriched(BaseModel):
     errored_act: dict[str, Any] | None
 
 
+class RecoveryUiLogEntryResponse(BaseModel):
+    case_id: str
+    activity_id: str | None
+    event_id: str
+    event_name: str | None
+    action_type: str
+    application: str | None
+    input: str | None
+    ui_element_target: str | None
+    ui_group: str | None
+    timestamp: str
+    previous_state: str | None
+    current_state: str | None
+
+
+class RecoveryErroredActResponse(BaseModel):
+    case_id: str
+    activity_id: str | None
+    event_id: str
+    event_name: str | None
+    action_type: str
+    application: str | None
+    input: str | None
+    error_code: str
+    error_description: str
+
+
 router = APIRouter(
     prefix="/logging",
     tags=["Logging"],
@@ -399,6 +426,7 @@ def delete_robot_exception(
 
 @router.get(
     "/recovery_context/{exception_id}",
+    response_model=RecoveryContextEnriched,
     summary="Get normalized recovery context by exception ID",
 )
 def get_recovery_context(

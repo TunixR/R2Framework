@@ -14,21 +14,27 @@ def valid_recovery_payload() -> dict[str, Any]:
         "variables": {"invoice_id": "INV-100", "retry": 1},
         "ui_log": [
             {
-                "model_act_id": "A1",
+                "case_id": "1",
+                "activity_id": None,
                 "activity_name": "Type invoice id",
+                "event_id": "0",
+                "event_name": "Type invoice id",
                 "action_type": "type",
                 "application": "SAP",
                 "input": "INV-100",
                 "ui_element_target": "Invoice ID",
-                "ui_group": "Invoice Form",
+                "ui_group": None,
                 "timestamp": "2026-04-17T10:00:00Z",
                 "previous_state": "",
                 "current_state": "INV-100",
             }
         ],
         "errored_act": {
-            "model_act_id": "A2",
+            "case_id": "1",
+            "activity_id": None,
             "activity_name": "Click Submit",
+            "event_id": "2",
+            "event_name": None,
             "action_type": "click",
             "application": "SAP",
             "input": "",
@@ -40,15 +46,18 @@ def valid_recovery_payload() -> dict[str, Any]:
 
 
 @pytest.fixture
-def minimal_recovery_ui_log_entry() -> dict[str, str]:
+def minimal_recovery_ui_log_entry() -> dict[str, str | None]:
     return {
-        "model_act_id": "A1",
+        "case_id": "1",
+        "activity_id": None,
         "activity_name": "Type invoice id",
+        "event_id": "0",
+        "event_name": "Type invoice id",
         "action_type": "type",
         "application": "SAP",
         "input": "INV-100",
         "ui_element_target": "Invoice ID",
-        "ui_group": "Invoice Form",
+        "ui_group": None,
         "timestamp": "2026-04-17T10:00:00Z",
         "previous_state": "",
         "current_state": "INV-100",

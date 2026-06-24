@@ -30,7 +30,7 @@ class RecoveryWsRunner:
     async def _action_worker(self, websocket) -> None:  # pyright: ignore[reportMissingParameterType]
         while not self.stop_event.is_set():
             try:
-                message = await asyncio.wait_for(self.action_queue.get(), timeout=0.2)
+                message = await asyncio.wait_for(self.action_queue.get(), timeout=None)
             except TimeoutError:
                 continue
 

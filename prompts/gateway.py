@@ -68,8 +68,9 @@ When you receive an error notification, analyze it systematically:
 Use `errored_act` as the primary failure anchor and `ui_log` as short-term execution history.
 
 1. **Failure anchor (`errored_act`)**
-   - Read `activity_name`, `action_type`, `application`, and `input` to understand intent and interaction mode.
-   - Read `error_code` and `error_description` to classify failure type and urgency.
+    - Read `event_name` / `activity_name` (nullable), `action_type`, `application`, and `input` to understand intent and interaction mode.
+    - Read `case_id` / `event_id` to understand grouping and event context.
+    - Read `error_code` and `error_description` to classify failure type and urgency.
 
 2. **Recent history (`ui_log`)**
    - Treat entries as ordered execution context.

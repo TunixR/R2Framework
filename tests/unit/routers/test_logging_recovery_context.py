@@ -47,6 +47,40 @@ def test_get_recovery_context(
     )
 
     assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+
+    # Verify v2 field names in response
+    assert "ui_log" in data
+    assert len(data["ui_log"]) == 1
+    ui_log_entry = data["ui_log"][0]
+    assert "activity_id" in ui_log_entry
+    assert "event_name" in ui_log_entry
+    assert "case_id" in ui_log_entry
+    assert "event_id" in ui_log_entry
+    # Verify old field names are not present
+    assert "model_act_id" not in ui_log_entry
+    # Verify new field names are present
+    assert "activity_name" in ui_log_entry
+
+    # Verify errored_act has v2 field names
+    assert "errored_act" in data
+    errored_act = data["errored_act"]
+    assert "activity_id" in errored_act
+    assert "event_name" in errored_act
+    assert "case_id" in errored_act
+    assert "event_id" in errored_act
+    # Verify old field names are not present
+    assert "model_act_id" not in errored_act
+    # Verify new field names are present
+    assert "activity_name" in errored_act
+
+    # Verify id fields are strings
+    assert isinstance(ui_log_entry["activity_id"], str | type(None))
+    assert isinstance(ui_log_entry["case_id"], str)
+    assert isinstance(ui_log_entry["event_id"], str)
+    assert isinstance(errored_act["activity_id"], str | type(None))
+    assert isinstance(errored_act["case_id"], str)
+    assert isinstance(errored_act["event_id"], str)
 
 
 def test_get_recovery_context_returns_404_when_exception_missing(

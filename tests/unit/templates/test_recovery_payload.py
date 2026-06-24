@@ -16,21 +16,27 @@ def _valid_payload() -> dict[str, Any]:
         "variables": {"invoice_id": "INV-123"},
         "ui_log": [
             {
-                "model_act_id": "A1",
+                "case_id": 1,
+                "activity_id": None,
                 "activity_name": "Type Into",
+                "event_id": 0,
+                "event_name": "Click on All Menu Button",
                 "action_type": "type",
                 "application": "SAP",
                 "input": "INV-123",
                 "ui_element_target": "Invoice Field",
-                "ui_group": "Invoice Form",
+                "ui_group": None,
                 "timestamp": "2026-04-17T12:00:00Z",
                 "previous_state": "",
                 "current_state": "INV-123",
             }
         ],
         "errored_act": {
-            "model_act_id": "A2",
+            "case_id": 1,
+            "activity_id": None,
             "activity_name": "Click Submit",
+            "event_id": 2,
+            "event_name": None,
             "action_type": "click",
             "application": "SAP",
             "input": "",
@@ -74,6 +80,29 @@ def test_payload_allows_none_input_in_errored_act():
     parsed = RecoveryPayload.model_validate(payload)
 
     assert parsed.errored_act.input is None
+
+
+def test_payload_normalizes_int_ids_to_strings():
+    payload = _valid_payload()
+    payload["ui_log"][0]["case_id"] = 123
+    payload["ui_log"][0]["event_id"] = 456
+    payload["errored_act"]["case_id"] = 789
+    payload["errored_act"]["event_id"] = 101
+
+    parsed = RecoveryPayload.model_validate(payload)
+
+    assert parsed.ui_log[0].case_id == "123"
+    assert parsed.ui_log[0].event_id == "456"
+    assert parsed.errored_act.case_id == "789"
+    assert parsed.errored_act.event_id == "101"
+
+
+def test_payload_treats_empty_string_ids_as_invalid_for_required_fields():
+    payload = _valid_payload()
+    payload["ui_log"][0]["case_id"] = "  "
+
+    with pytest.raises(ValidationError):
+        _ = RecoveryPayload.model_validate(payload)
 
 
 def test_payload_rejects_whitespace_only_model_string():

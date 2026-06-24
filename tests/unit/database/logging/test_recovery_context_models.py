@@ -44,7 +44,10 @@ def test_recovery_context_persists_normalized_payload_fields(session: Session):
             "variables": {"invoice_id": "INV-001"},
             "ui_log": [
                 {
-                    "model_act_id": "A1",
+                    "case_id": 1,
+                    "activity_id": 100,
+                    "event_id": 10,
+                    "event_name": "InvoiceOpened",
                     "activity_name": "OpenInvoice",
                     "action_type": "click",
                     "application": "SAP",
@@ -57,7 +60,10 @@ def test_recovery_context_persists_normalized_payload_fields(session: Session):
                 }
             ],
             "errored_act": {
-                "model_act_id": "A2",
+                "case_id": 2,
+                "activity_id": 200,
+                "event_id": 20,
+                "event_name": "SubmitFailed",
                 "activity_name": "Submit",
                 "action_type": "click",
                 "application": "SAP",
@@ -81,10 +87,14 @@ def test_recovery_context_persists_normalized_payload_fields(session: Session):
     assert stored_context.os == "windows"
     assert stored_context.variables == {"invoice_id": "INV-001"}
     assert len(stored_context.ui_log_entries) == 1
-    assert stored_context.ui_log_entries[0].model_act_id == "A1"
+    assert stored_context.ui_log_entries[0].case_id == "1"
+    assert stored_context.ui_log_entries[0].event_id == "10"
+    assert stored_context.ui_log_entries[0].activity_id == "100"
     assert stored_context.ui_log_entries[0].previous_state is None
     assert stored_context.errored_activity is not None
-    assert stored_context.errored_activity.model_act_id == "A2"
+    assert stored_context.errored_activity.case_id == "2"
+    assert stored_context.errored_activity.event_id == "20"
+    assert stored_context.errored_activity.activity_id == "200"
     assert stored_context.errored_activity.input is None
     assert stored_context.model == "<process id='invoice-recovery' />"
 
@@ -100,7 +110,10 @@ def test_recovery_context_to_payload_returns_normalized_shape():
     recovery_context.ui_log_entries = [
         RecoveryUiLogEntry(
             position=0,
-            model_act_id="A1",
+            case_id="CASE-1",
+            activity_id=None,
+            event_id="EVT-1",
+            event_name="InvoiceOpened",
             activity_name=None,
             action_type="click",
             application=None,
@@ -113,7 +126,10 @@ def test_recovery_context_to_payload_returns_normalized_shape():
         )
     ]
     recovery_context.errored_activity = RecoveryErroredActivity(
-        model_act_id="A2",
+        case_id="CASE-1",
+        activity_id=None,
+        event_id="EVT-2",
+        event_name="SubmitFailed",
         activity_name=None,
         action_type="click",
         application=None,
@@ -126,9 +142,11 @@ def test_recovery_context_to_payload_returns_normalized_shape():
 
     assert payload["task_name"] == "Invoice Recovery"
     assert payload["variables"]["invoice_id"] == "INV-001"
-    assert payload["ui_log"][0]["model_act_id"] == "A1"
+    assert payload["ui_log"][0]["case_id"] == "CASE-1"
+    assert payload["ui_log"][0]["event_id"] == "EVT-1"
     assert payload["ui_log"][0]["activity_name"] is None
-    assert payload["errored_act"]["model_act_id"] == "A2"
+    assert payload["errored_act"]["case_id"] == "CASE-1"
+    assert payload["errored_act"]["event_id"] == "EVT-2"
     assert payload["errored_act"]["input"] is None
     assert payload["model"] == "<process id='invoice-recovery' />"
 
@@ -141,7 +159,10 @@ def test_recovery_context_from_payload_accepts_nullable_fields() -> None:
         "variables": {},
         "ui_log": [
             {
-                "model_act_id": "A1",
+                "case_id": "CASE-1",
+                "activity_id": None,
+                "event_id": "EVT-1",
+                "event_name": "InvoiceOpened",
                 "activity_name": None,
                 "action_type": "click",
                 "application": None,
@@ -154,7 +175,10 @@ def test_recovery_context_from_payload_accepts_nullable_fields() -> None:
             }
         ],
         "errored_act": {
-            "model_act_id": "A2",
+            "case_id": "CASE-1",
+            "activity_id": None,
+            "event_id": "EVT-2",
+            "event_name": "SubmitFailed",
             "activity_name": None,
             "action_type": "click",
             "application": None,
@@ -167,10 +191,12 @@ def test_recovery_context_from_payload_accepts_nullable_fields() -> None:
 
     context = RecoveryContext.from_payload(payload=recovery_payload)
 
+    assert context.ui_log_entries[0].activity_id is None
     assert context.ui_log_entries[0].activity_name is None
     assert context.ui_log_entries[0].application is None
     assert context.ui_log_entries[0].input is None
     assert context.errored_activity is not None
+    assert context.errored_activity.activity_id is None
     assert context.errored_activity.activity_name is None
     assert context.errored_activity.application is None
     assert context.errored_activity.input is None

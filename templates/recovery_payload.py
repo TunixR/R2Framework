@@ -11,16 +11,41 @@ from templates.common import TemplateModel
 class RecoveryUiLogEntry(TemplateModel):
     model_config = ConfigDict(extra="forbid")
 
-    model_act_id: str
+    case_id: str
+    activity_id: str | None
     activity_name: str | None
+    event_id: str
+    event_name: str | None
     action_type: str
     application: str | None
     input: str | None
     ui_element_target: str | None
-    ui_group: str | None
+    ui_group: str | None = None
     timestamp: str
     previous_state: str | None
     current_state: str | None
+
+    @field_validator("case_id", "event_id", mode="before")
+    @classmethod
+    def normalize_required_id(cls, value: str | int) -> str:
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, str):
+            if not value.strip():
+                raise ValueError("id fields must be non-empty")
+            return value
+        raise TypeError("id fields must be str or int")
+
+    @field_validator("activity_id", mode="before")
+    @classmethod
+    def normalize_optional_id(cls, value: str | int | None) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, str):
+            return value if value.strip() else None
+        raise TypeError("activity_id must be str, int, or null")
 
     @field_validator("timestamp")
     @classmethod
@@ -37,13 +62,38 @@ class RecoveryUiLogEntry(TemplateModel):
 class RecoveryErroredAct(TemplateModel):
     model_config = ConfigDict(extra="forbid")
 
-    model_act_id: str
+    case_id: str
+    activity_id: str | None
     activity_name: str | None
+    event_id: str
+    event_name: str | None
     action_type: str
     application: str | None
     input: str | None
     error_code: str
     error_description: str
+
+    @field_validator("case_id", "event_id", mode="before")
+    @classmethod
+    def normalize_required_id(cls, value: str | int) -> str:
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, str):
+            if not value.strip():
+                raise ValueError("id fields must be non-empty")
+            return value
+        raise TypeError("id fields must be str or int")
+
+    @field_validator("activity_id", mode="before")
+    @classmethod
+    def normalize_optional_id(cls, value: str | int | None) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, str):
+            return value if value.strip() else None
+        raise TypeError("activity_id must be str, int, or null")
 
 
 class RecoveryPayload(TemplateModel):

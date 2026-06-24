@@ -249,7 +249,10 @@ class RecoveryUiLogEntry(SQLModel, table=True):
     recovery_context: "RecoveryContext" = Relationship(back_populates="ui_log_entries")
 
     position: int = Field(default=0)
-    model_act_id: str = Field(default="")
+    case_id: str = Field(default="")
+    activity_id: str | None = Field(default=None)
+    event_id: str = Field(default="")
+    event_name: str | None = Field(default=None)
     activity_name: str | None = Field(default=None)
     action_type: str = Field(default="")
     application: str | None = Field(default=None)
@@ -280,7 +283,10 @@ class RecoveryErroredActivity(SQLModel, table=True):
         },
     )
 
-    model_act_id: str = Field(default="")
+    case_id: str = Field(default="")
+    activity_id: str | None = Field(default=None)
+    event_id: str = Field(default="")
+    event_name: str | None = Field(default=None)
     activity_name: str | None = Field(default=None)
     action_type: str = Field(default="")
     application: str | None = Field(default=None)

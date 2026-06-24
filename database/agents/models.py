@@ -415,7 +415,7 @@ class Agent(SQLModel, table=True):
                 ],
             },
             {
-                "role": "user",
+                "role": "assistant",
                 "content": [
                     {
                         "text": "I understand the instructions. I will proceed once you give me all neccesary values.",

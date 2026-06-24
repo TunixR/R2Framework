@@ -77,10 +77,11 @@ def test_recovery_ws_ingest_stores_raw_payload_and_normalized_context(
     assert recovery_context.variables == valid_recovery_payload["variables"]
     assert recovery_context.model == valid_recovery_payload["model"]
     assert len(recovery_context.ui_log_entries) == 1
-    assert recovery_context.ui_log_entries[0].model_act_id == "A1"
-    assert recovery_context.ui_log_entries[0].activity_name == "Type invoice id"
+    assert recovery_context.ui_log_entries[0].activity_id is None
+    assert recovery_context.ui_log_entries[0].event_name == "Type invoice id"
     assert recovery_context.errored_activity is not None
-    assert recovery_context.errored_activity.model_act_id == "A2"
+    assert recovery_context.errored_activity.activity_id is None
+    assert recovery_context.errored_activity.event_name is None
     assert recovery_context.errored_activity.error_code == "E500"
 
     assert isinstance(captured_from_payload["payload"], RecoveryPayload)
@@ -102,11 +103,27 @@ def test_recovery_ws_ingest_stores_raw_payload_and_normalized_context(
         captured_invocation["kwargs"]["variables"]
         == valid_recovery_payload["variables"]
     )
-    assert captured_invocation["kwargs"]["ui_log"] == valid_recovery_payload["ui_log"]
-    assert (
-        captured_invocation["kwargs"]["errored_act"]
-        == valid_recovery_payload["errored_act"]
-    )
+    # Check that ui_log uses v2 field names with normalized ids
+    ui_log = captured_invocation["kwargs"]["ui_log"]
+    assert len(ui_log) == 1
+    assert ui_log[0]["activity_id"] is None  # fixture has activity_id as None
+    assert ui_log[0]["event_name"] == "Type invoice id"
+    assert ui_log[0]["case_id"] == valid_recovery_payload["ui_log"][0]["case_id"]
+    assert ui_log[0]["event_id"] == valid_recovery_payload["ui_log"][0]["event_id"]
+    # Check that all id fields are strings
+    assert isinstance(ui_log[0]["case_id"], str)
+    assert isinstance(ui_log[0]["event_id"], str)
+
+    # Check that errored_act uses v2 field names with normalized ids
+    errored_act = captured_invocation["kwargs"]["errored_act"]
+    assert errored_act["activity_id"] is None  # fixture has activity_id as None
+    assert errored_act["event_name"] is None  # fixture has event_name as None
+    assert errored_act["case_id"] == valid_recovery_payload["errored_act"]["case_id"]
+    assert errored_act["event_id"] == valid_recovery_payload["errored_act"]["event_id"]
+    # Check that all id fields are strings
+    assert isinstance(errored_act["case_id"], str)
+    assert isinstance(errored_act["event_id"], str)
+
     assert captured_invocation["kwargs"]["model"] == valid_recovery_payload["model"]
     assert set(captured_invocation["kwargs"].keys()) == {
         "task_name",
