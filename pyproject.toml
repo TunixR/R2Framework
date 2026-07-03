@@ -27,7 +27,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "bandit>=1.9.3",
-    "basedpyright>=1.39.8",
+    "basedpyright>=1.39.9",
     "ruff>=0.15.18",
 ]
 temp = [
