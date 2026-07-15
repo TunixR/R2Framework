@@ -22,3 +22,9 @@ migrations/versions/
 
 # Agents
 docs/
+
+# Evaluation
+experiment_files
+evals/data
+scripts/data
+evals/notebooks

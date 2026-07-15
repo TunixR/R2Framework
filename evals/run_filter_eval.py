@@ -19,7 +19,7 @@ from strands_evals.evaluators import OutputEvaluator
 from strands_evals.types.evaluation import EvaluationData
 
 import settings
-from evals.agents import _build_model, gateway_task
+from evals.agents import build_model, gateway_task
 from evals.dataset import load_cases
 from evals.evaluators import RoutingEvaluator
 from evals.mocks import GatewayMocks
@@ -32,7 +32,7 @@ def run_evaluation() -> dict[str, Any]:
     cases = load_cases("error_filtering")
     print(f"Loaded {len(cases)} test cases for error filtering evaluation.\n")
 
-    judge_model = _build_model()
+    judge_model = build_model()
     mocks = GatewayMocks()
     routing_eval = RoutingEvaluator()
     rubric_eval = OutputEvaluator(

@@ -16,11 +16,59 @@ def load_cases(
 
     Returns Strands Case objects with:
       - name: test case ID
-      - input: JSON string of the error_input
+      - input: JSON string of the RecoveryPayload (task_identification)
+              or error_input dict (error_filtering)
       - expected_output: JSON string of the relevant ground truth fields
       - metadata: category + source info
     """
-    filename = f"sample_{category}.json"
+    if category == "task_identification":
+        return _load_task_identification_cases()
+    return _load_error_filtering_cases()
+
+
+def _load_task_identification_cases() -> list[Case[str, str]]:
+    """Load task identification cases from payloads.json + ground_truth.json."""
+    payloads_path = DATA_DIR / "payloads.json"
+    gt_path = DATA_DIR / "ground_truth.json"
+
+    if not payloads_path.exists():
+        raise FileNotFoundError(f"Dataset file not found: {payloads_path}")
+    if not gt_path.exists():
+        raise FileNotFoundError(f"Dataset file not found: {gt_path}")
+
+    with open(payloads_path, encoding="utf-8") as f:
+        payloads = json.load(f)
+    with open(gt_path, encoding="utf-8") as f:
+        ground_truths = json.load(f)
+
+    cases: list[Case[str, str]] = []
+    for payload, gt in zip(payloads, ground_truths):
+        expected = json.dumps(
+            {
+                "validity": gt.get("validity", True),
+                "extensiveness": gt.get("extensiveness", "optimal"),
+                "explanation": gt.get("explanation", ""),
+            }
+        )
+
+        cases.append(
+            Case[str, str](
+                name=gt["id"],
+                input=json.dumps(payload),
+                expected_output=expected,
+                metadata={
+                    "category": "task_identification",
+                    "task_name": gt.get("task_name", payload.get("task_name", "")),
+                },
+            )
+        )
+
+    return cases
+
+
+def _load_error_filtering_cases() -> list[Case[str, str]]:
+    """Load error filtering cases (unchanged from original format)."""
+    filename = "sample_error_filtering.json"
     filepath = DATA_DIR / filename
     if not filepath.exists():
         raise FileNotFoundError(f"Dataset file not found: {filepath}")
@@ -31,19 +79,7 @@ def load_cases(
     cases: list[Case[str, str]] = []
     for entry in raw_cases:
         gt = entry["ground_truth"]
-
-        if category == "error_filtering":
-            expected = json.dumps({"is_ui_error": gt["is_ui_error"]})
-        elif category == "task_identification":
-            expected = json.dumps(
-                {
-                    "recovery_task": gt["recovery_task"],
-                    "recovery_subtasks": gt.get("recovery_subtasks", []),
-                    "minimum_recovery": gt.get("minimum_recovery", ""),
-                }
-            )
-        else:
-            expected = json.dumps(gt)
+        expected = json.dumps({"is_ui_error": gt["is_ui_error"]})
 
         cases.append(
             Case[str, str](
@@ -51,7 +87,7 @@ def load_cases(
                 input=json.dumps(entry["error_input"]),
                 expected_output=expected,
                 metadata={
-                    "category": category,
+                    "category": "error_filtering",
                     "source_trace": entry.get("source_trace"),
                     "corruption": entry.get("corruption_description"),
                     "task": entry.get(

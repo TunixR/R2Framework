@@ -85,4 +85,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    main()
+    status = main()
+    print(f"Program exited with status: {status}")
