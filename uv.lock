@@ -2305,7 +2305,7 @@ requires-dist = [
     { name = "scikit-image", specifier = ">=0.25.2" },
     { name = "sqlmodel", specifier = ">=0.0.39" },
     { name = "strands-agents", extras = ["openai", "otel"], specifier = ">=1.45.0" },
-    { name = "strands-agents-tools", specifier = ">=0.8.2" },
+    { name = "strands-agents-tools", specifier = ">=0.8.5" },
 ]
 
 [package.metadata.requires-dev]
@@ -2884,7 +2884,7 @@ otel = [
 
 [[package]]
 name = "strands-agents-tools"
-version = "0.8.2"
+version = "0.8.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -2905,9 +2905,9 @@ dependencies = [
     { name = "tzdata", marker = "sys_platform == 'win32'" },
     { name = "watchdog" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/88/9f/1c2468c86c622b3a20f7b6331234f773ca59df5afdc9726f5c85c699789c/strands_agents_tools-0.8.2.tar.gz", hash = "sha256:fa390c28a31cc7695587180feda8ac9b7f53fab4ece56296e8c039ac6361670a", size = 491890, upload-time = "2026-06-25T22:35:15.72Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0b/5d/84dafd591cc301dfb44961a8c5dbfa92b3e08cb7778ded5c32152f7f2e5a/strands_agents_tools-0.8.5.tar.gz", hash = "sha256:b31ca36706b74b1d8edb0c2a4add2a144b839feda6bb30e2a8769c4bf3596460", size = 511625, upload-time = "2026-07-21T20:06:15.942Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5b/db/a247c24525b6a701e3e9781dd2a103ca89ee8731fd3b89961d8455fa5f5d/strands_agents_tools-0.8.2-py3-none-any.whl", hash = "sha256:fc27780eae94cdbcfbd4b08daebf1ccb83831a4d5ffa2094d719326b08ce9cc6", size = 319967, upload-time = "2026-06-25T22:35:13.87Z" },
+    { url = "https://files.pythonhosted.org/packages/59/67/88e5df5dfeeb066aa85f0ad4ce1b991134be2258175fa4ae88438e5b286a/strands_agents_tools-0.8.5-py3-none-any.whl", hash = "sha256:b3f485184bc7e3bc428b7c7c0daf355b14117515b98c8f457fbfe9ce86181264", size = 327349, upload-time = "2026-07-21T20:06:14.33Z" },
 ]
 
 [[package]]
