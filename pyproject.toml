@@ -28,7 +28,7 @@ dependencies = [
 dev = [
     "bandit>=1.9.3",
     "basedpyright>=1.39.9",
-    "ruff>=0.15.22",
+    "ruff>=0.16.0",
 ]
 temp = [
     "opencv-python>=5.0.0.93",
