@@ -547,14 +547,14 @@ def parsing_response_to_pyautogui_code(
             start_box = action_inputs.get("start_box")
             end_box = action_inputs.get("end_box")
             if start_box and end_box:
-                x1, y1, x2, y2 = ast.literal_eval(
-                    start_box
+                x1, y1, x2, y2 = (
+                    ast.literal_eval(start_box) if type(start_box) is str else start_box
                 )  # Assuming box is in [x1, y1, x2, y2]
                 sx = round(float((x1 + x2) / 2) * image_width, 3)
                 sy = round(float((y1 + y2) / 2) * image_height, 3)
-                x1, y1, x2, y2 = ast.literal_eval(
-                    end_box
-                )  # Assuming box is in [x1, y1, x2, y2]
+                x1, y1, x2, y2 = (
+                    ast.literal_eval(end_box) if type(end_box) is str else end_box
+                )
                 ex = round(float((x1 + x2) / 2) * image_width, 3)
                 ey = round(float((y1 + y2) / 2) * image_height, 3)
                 pyautogui_code += (
@@ -767,7 +767,7 @@ Model Context: {model}
     )
 
     hook = AgentLoggingHook(
-        agent_id=uuid.UUID("ba86c387-8b62-419b-a15e-54bcbcae8443"),
+        agent_id=uuid.UUID("2bd92474-5486-4caa-b59e-dde1aa739b88"),
         invocation_state=tool_context.invocation_state,
         parent_trace_id=tool_context.invocation_state.get("parent_trace_id", None),
         is_gui_agent=True,

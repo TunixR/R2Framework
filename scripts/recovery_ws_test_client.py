@@ -8,6 +8,8 @@ from pathlib import Path
 from scripts.recovery_ws_client import ClientConfig, RecoveryWsRunner
 from scripts.recovery_ws_client.payloads import load_payload_by_id
 
+import traceback
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -18,7 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     _ = parser.add_argument("--payload-id", type=int, required=True)
     _ = parser.add_argument(
         "--payload-file",
-        default="scripts/data/payloads.json",
+        default="evals/data/payloads.json",
     )
     _ = parser.add_argument("--action-delay-seconds", type=float, default=1.0)
     _ = parser.add_argument("--max-actions", type=int, default=None)
@@ -79,8 +81,8 @@ def main() -> int:
             summary.recovery_id,
         )
         return status
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+    except Exception as _:
+        print(f"Error: {traceback.format_exc()}", file=sys.stderr)
         return 1
 
 
