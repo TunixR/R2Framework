@@ -12,10 +12,25 @@
       "--ws-url",
       "ws://localhost:8000/recovery/robot_exception/ws",
       "--robot-key",
-      "rH96rkX6ylZhc9UKPTNsGxZthFVIbFwo",
+      "gmPfO8vshIxOyh02dDhIUbOBcTljKyTi",
       "--payload-id",
       "2",
     ],
     "cwd": "$ZED_WORKTREE_ROOT",
+    "env": {
+      "PYTHONUNBUFFERED": "1",
+    }
+  },
+  {
+      "label": "Python Debugger: FastAPI",
+      "adapter": "Debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+          "main:app",
+          "--reload",
+          "--port",
+          "3000"
+      ],
   },
 ]
