@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import logging
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))  # noqa: E402
@@ -434,4 +435,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    logging.getLogger("strands").setLevel(logging.WARNING)
+    logging.getLogger("strands").propagate = False
+    logging.getLogger("strands").handlers = []
     main()

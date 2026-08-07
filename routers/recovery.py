@@ -26,6 +26,8 @@ from templates.recovery_payload import RecoveryPayload
 router = APIRouter(prefix="/recovery")
 tracer = trace.get_tracer(__name__)
 
+logger = logging.getLogger(__name__)
+
 
 class RecoveryWsDomainError(Exception):
     def __init__(self, code: str, content: str):
@@ -153,6 +155,8 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
     Passes the exception to the robot exception handler for processing.
     """
     robot_key = _get_valid_robot_key(websocket, session)
+    await websocket.accept()
+
     if not robot_key:
         await websocket.send_json(
             {
@@ -161,9 +165,8 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
             }
         )
         await websocket.close(code=1008)
+        logger.info("Invalid robot key")
         return
-
-    await websocket.accept()
 
     with tracer.start_as_current_span(
         "handle_robot_exception",
@@ -172,6 +175,7 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
             "ws.client": str(websocket.client),
         },
     ):
+        logger.info("WebSocket connected")
 
         async def keep_alive():
             try:
@@ -179,8 +183,7 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
                     await asyncio.sleep(10)
                     await websocket.send_json({"type": "ping"})
             except WebSocketDisconnect as e:
-                logging.info("WebSocket disconnected during keep-alive.", exc_info=e)
-                print(f"WebSocket disconnected during keep-alive: {e}")
+                logger.info("WebSocket disconnected during keep-alive.", exc_info=e)
                 return
 
         async def handle_exception():
@@ -218,7 +221,7 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
                 session.add(exception)
                 session.commit()
             except WebSocketDisconnect:
-                logging.info("WebSocket disconnected before completion.")
+                logger.info("WebSocket disconnected before completion.")
             except RecoveryWsDomainError as exc:
                 await websocket.send_json(
                     RecoveryWsErrorResponse(
@@ -228,7 +231,7 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
                 )
                 await websocket.close(code=1003, reason=exc.content)
             except Exception as e:
-                logging.error(f"Error handling robot exception: {e}")
+                logger.error(f"Error handling robot exception: {e}")
                 await websocket.send_json({"type": "error", "content": str(e)})
                 await websocket.close()
 

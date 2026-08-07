@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import regex
 import time
 from pathlib import Path
 from typing import Any, Literal
@@ -72,25 +73,37 @@ def _extract_final_task(agent: StrandsAgent) -> str:
     if not text:
         return ""
 
+    if match := regex.search(r'\{(?:[^{}"\\]+|"(?:\\.|[^"\\])*"|(?R))*\}', text):
+        try:
+            json_content = json.loads(match.group(0))
+            if "final_task" in json_content:
+                return json_content["final_task"].strip()
+        except json.JSONDecodeError:
+            pass  # If JSON parsing fails, continue to regex extraction
+
+    # Fallback: try "final_task": ... (without closing tag)
+    if match := re.search(r'"final_task":\s*(.*?)$', text, re.DOTALL):
+        return match.group(1).strip()
+
     # Try regex for <Final task>...</Final task>
-    match = re.search(r"<Final task>(.*?)</Final task>", text, re.DOTALL)
-    if match:
-        return match.group(1).strip()
+    # match = re.search(r"<Final task>(.*?)</Final task>", text, re.DOTALL)
+    # if match:
+    #     return match.group(1).strip()
 
-    # Fallback: try <Final task>: ... (without closing tag)
-    match = re.search(r"<Final task>:\s*(.*?)$", text, re.DOTALL)
-    if match:
-        return match.group(1).strip()
+    # # Fallback: try <Final task>: ... (without closing tag)
+    # match = re.search(r"<Final task>:\s*(.*?)$", text, re.DOTALL)
+    # if match:
+    #     return match.group(1).strip()
 
-    # Last resort: grab last non-empty line
-    lines = [line.strip() for line in text.strip().split("\n") if line.strip()]
-    if lines:
-        last_line = lines[-1]
-        # Strip any remaining tags
-        last_line = re.sub(r"</?Final task>:", "", last_line).strip()
-        return last_line
+    # # Last resort: grab last non-empty line
+    # lines = [line.strip() for line in text.strip().split("\n") if line.strip()]
+    # if lines:
+    #     last_line = lines[-1]
+    #     # Strip any remaining tags
+    #     last_line = re.sub(r"</?Final task>:", "", last_line).strip()
+    #     return last_line
 
-    return ""
+    return "TASK_NOT_FOUND"
 
 
 @retry(stop=stop_after_attempt(3), reraise=True)

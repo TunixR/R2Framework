@@ -20,11 +20,18 @@ def load_payload_by_id(payload_file: Path, payload_id: int) -> dict[str, Any]:
     seen_ids: set[int] = set()
     selected: dict[str, Any] | None = None
 
-    for item in raw:
+    for i, item in enumerate(raw):
         if not isinstance(item, dict):
             raise ValueError("Each payload catalog entry must be an object")
         if "id" not in item or "payload" not in item:
-            raise ValueError("Each entry must contain 'id' and 'payload'")
+            if not all([key in item for key in ["task_name", "ui_log", "errored_act"]]):
+                raise ValueError("Each entry must contain 'id' and 'payload'")
+            else:
+                item_id = i + 1
+                if item_id == payload_id:
+                    selected = item
+                    break
+                continue
 
         item_id = item["id"]
         if not isinstance(item_id, int):
@@ -39,6 +46,7 @@ def load_payload_by_id(payload_file: Path, payload_id: int) -> dict[str, Any]:
 
         if item_id == payload_id:
             selected = payload
+            break
 
     if selected is None:
         raise ValueError(f"Payload id not found: {payload_id}")
