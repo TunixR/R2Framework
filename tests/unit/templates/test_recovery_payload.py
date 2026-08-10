@@ -53,7 +53,6 @@ def test_payload_rejects_unknown_top_level_field():
 
     with pytest.raises(ValidationError):
         _ = RecoveryPayload.model_validate(payload)
-        _ = RecoveryPayload.model_validate(payload)
 
 
 def test_payload_rejects_empty_model_string():
