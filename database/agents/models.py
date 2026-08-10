@@ -415,7 +415,7 @@ class Agent(SQLModel, table=True):
                 ],
             },
             {
-                "role": "user",
+                "role": "assistant",
                 "content": [
                     {
                         "text": "I understand the instructions. I will proceed once you give me all neccesary values.",
@@ -466,10 +466,10 @@ class Agent(SQLModel, table=True):
             if response is None:
                 raise ValueError("Agent did not return a structured response.")
             return response.model_dump()
-        except WebSocketDisconnect as _:
+        except WebSocketDisconnect:
             raise
-        except Exception:
-            raise
+        except Exception as e:
+            raise e
         finally:
             cost = self.router.get_conversation_cost(input_tokens, output_tokens)
             agent_logging_hook: AgentLoggingHook | None = next(

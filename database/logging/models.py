@@ -1,7 +1,7 @@
 import json
 from base64 import b64encode
 from datetime import datetime
-from typing import Any
+from typing import Any, override
 from uuid import UUID, uuid4
 
 from sqlalchemy.dialects.postgresql import JSONB
@@ -15,6 +15,7 @@ from database.agents.models import Agent
 from database.keys.models import RobotKey
 from database.tools.models import Tool
 from s3 import S3Client
+from templates.recovery_payload import RecoveryPayload
 
 
 class AgentTrace(SQLModel, table=True):
@@ -215,6 +216,7 @@ class RobotException(SQLModel, table=True):
     )
 
     agent_traces: list[AgentTrace] = Relationship(back_populates="robot_exception")
+    recovery_context: "RecoveryContext" = Relationship(back_populates="robot_exception")
 
     infered_success: bool = Field(
         default=False
@@ -232,6 +234,149 @@ class RobotException(SQLModel, table=True):
         description="Timestamp of when the trace was closed.",
         nullable=True,
     )
+
+
+class RecoveryUiLogEntry(SQLModel, table=True):
+    id: UUID = Field(
+        default_factory=uuid4,
+        description="Unique identifier",
+        primary_key=True,
+    )
+
+    recovery_context_id: UUID | None = Field(
+        default=None, foreign_key="recoverycontext.id"
+    )
+    recovery_context: "RecoveryContext" = Relationship(back_populates="ui_log_entries")
+
+    position: int = Field(default=0)
+    case_id: str = Field(default="")
+    activity_id: str | None = Field(default=None)
+    event_id: str = Field(default="")
+    event_name: str | None = Field(default=None)
+    activity_name: str | None = Field(default=None)
+    action_type: str = Field(default="")
+    application: str | None = Field(default=None)
+    input: str | None = Field(default=None)
+    ui_element_target: str | None = Field(default=None)
+    ui_group: str | None = Field(default=None)
+    timestamp: str = Field(default="")
+    previous_state: str | None = Field(default=None)
+    current_state: str | None = Field(default=None)
+
+
+class RecoveryErroredActivity(SQLModel, table=True):
+    id: UUID = Field(
+        default_factory=uuid4,
+        description="Unique identifier",
+        primary_key=True,
+    )
+
+    recovery_context_id: UUID | None = Field(
+        default=None,
+        foreign_key="recoverycontext.id",
+        unique=True,
+    )
+    recovery_context: "RecoveryContext" = Relationship(
+        back_populates="errored_activity",
+        sa_relationship_kwargs={
+            "uselist": False,
+        },
+    )
+
+    case_id: str = Field(default="")
+    activity_id: str | None = Field(default=None)
+    event_id: str = Field(default="")
+    event_name: str | None = Field(default=None)
+    activity_name: str | None = Field(default=None)
+    action_type: str = Field(default="")
+    application: str | None = Field(default=None)
+    input: str | None = Field(default=None)
+    error_code: str = Field(default="")
+    error_description: str = Field(default="")
+
+
+class RecoveryContext(SQLModel, table=True):
+    id: UUID = Field(
+        default_factory=uuid4,
+        description="Unique identifier",
+        primary_key=True,
+    )
+
+    robot_exception_id: UUID | None = Field(
+        default=None, foreign_key="robotexception.id"
+    )
+    robot_exception: RobotException | None = Relationship(
+        sa_relationship_kwargs={"uselist": False}, back_populates="recovery_context"
+    )
+
+    task_name: str = Field(default="")
+    platform: str = Field(default="")
+    os: str = Field(default="")
+    variables: dict[str, Any] = Field(default_factory=dict, sa_type=JSONB)
+    model: str = Field(default="")
+
+    ui_log_entries: list[RecoveryUiLogEntry] = Relationship(
+        back_populates="recovery_context",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "selectin",
+            "order_by": "RecoveryUiLogEntry.position",
+        },
+        cascade_delete=True,
+    )
+
+    errored_activity: RecoveryErroredActivity | None = Relationship(
+        back_populates="recovery_context",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "lazy": "joined",
+            "uselist": False,
+        },
+        cascade_delete=True,
+    )
+
+    # TODO: Introduce RecoveryVariableMutation table when variable writebacks are enabled.
+
+    @classmethod
+    def from_payload(
+        cls,
+        *,
+        payload: RecoveryPayload | dict[str, Any],
+    ) -> "RecoveryContext":
+        parsed_payload = (
+            payload
+            if isinstance(payload, RecoveryPayload)
+            else RecoveryPayload.model_validate(payload)
+        )
+
+        recovery_context = cls(
+            task_name=parsed_payload.task_name,
+            platform=parsed_payload.platform,
+            os=parsed_payload.os,
+            variables=parsed_payload.variables,
+            model=parsed_payload.model,
+        )
+
+        for position, entry in enumerate(parsed_payload.ui_log):
+            recovery_context.ui_log_entries.append(
+                RecoveryUiLogEntry(position=position, **entry.model_dump())
+            )
+
+        recovery_context.errored_activity = RecoveryErroredActivity(
+            **parsed_payload.errored_act.model_dump()
+        )
+
+        return recovery_context
+
+    @override
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+        data = super().model_dump(**kwargs)
+        data["ui_log"] = [entry.model_dump() for entry in self.ui_log_entries]
+        if self.errored_activity:
+            data["errored_act"] = self.errored_activity.model_dump()
+        else:
+            data["errored_act"] = None
+        return data
 
 
 class GUITrace(SQLModel, table=True):

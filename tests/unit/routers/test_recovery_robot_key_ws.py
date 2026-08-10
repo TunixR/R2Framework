@@ -17,10 +17,8 @@ def test_recovery_ws_requires_robot_key_header(client: TestClient):
 def test_recovery_ws_rejects_invalid_robot_key(client: TestClient):
     headers = [("X-ROBOT-KEY", "not-a-real-key")]
     with pytest.raises(Exception):
-        with client.websocket_connect(
-            "/recovery/robot_exception/ws", headers=headers
-        ) as ws:
-            ws.send_json({"foo": "bar"})
+        with client.websocket_connect("/recovery/robot_exception/ws", headers=headers):
+            pass
 
 
 def test_recovery_ws_rejects_disabled_robot_key(session: Session, client: TestClient):

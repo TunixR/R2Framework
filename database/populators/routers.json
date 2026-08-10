@@ -2,7 +2,7 @@
   "routers": [
     {
       "model_name": "$PROVIDER_MODEL",
-      "api_key": "$FREE_PROVIDER_API_KEY",
+      "api_key": "$PROVIDER_API_KEY",
       "api_endpoint": "$PROVIDER_API_BASE",
       "provider_type": "OPENROUTER"
     },

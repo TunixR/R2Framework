@@ -1,20 +1,6 @@
-from __future__ import annotations
+from pydantic import Field
 
-import json
-from typing import override
-
-from pydantic import BaseModel, Field
-
-
-class TemplateModel(BaseModel):
-    """Base model that provides consistent formatting helpers."""
-
-    class ConfigDict:
-        extra = "forbid"
-
-    @override
-    def __str__(self) -> str:  # pragma: no cover - simple serialization helper
-        return json.dumps(self.model_dump(), indent=2, ensure_ascii=True)
+from templates.common import TemplateModel
 
 
 class ResponseToRPA(TemplateModel):

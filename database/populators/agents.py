@@ -5,7 +5,7 @@ This replaces the previous hardcoded definitions and loads agent configurations
 from a JSON file. Tool populators and router populators remain unchanged.
 
 Notes:
-- Idempotent: agents are only created if they do not already exist (matched by name).
+- Idempotent: existing agents are matched by name and their argument contracts are kept in sync.
 - Tools must have been populated previously (populate_tools) or they will be skipped.
 - Routers must exist for the specified model names in the JSON (use populate_routers first).
 - Response model paths are stored as import strings for dynamic loading at runtime.
@@ -142,6 +142,32 @@ def _create_agent(
     session.refresh(agent)
     print(f"[populate_agents] Created agent '{name}'.")
     return agent
+
+
+def _sync_agent_arguments(session: Session, agent: Agent, args: list[Argument]) -> None:
+    """Synchronize an agent's argument definitions with the JSON contract."""
+    existing_signature = {
+        arg.name: (arg.description, arg.type, arg.json_type) for arg in agent.arguments
+    }
+    desired_signature = {
+        arg.name: (arg.description, arg.type, arg.json_type) for arg in args
+    }
+
+    if existing_signature == desired_signature:
+        return
+
+    existing_arguments = list(agent.arguments)
+    for existing in existing_arguments:
+        session.delete(existing)
+    session.flush()
+
+    for arg in args:
+        arg.agent_id = agent.id
+        session.add(arg)
+
+    session.flush()
+    session.refresh(agent)
+    print(f"[populate_agents] Updated argument contract for agent '{agent.name}'.")
 
 
 def _create_sub_agent(
@@ -313,6 +339,8 @@ def populate_agents(engine: Engine) -> None:
                 input_type=input_type,
                 enabled=enabled,
             )
+
+            _sync_agent_arguments(session, agent, args_list)
             created_agents[name] = agent
 
             # Tools

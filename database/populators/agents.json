@@ -4,16 +4,28 @@
       "name": "Gateway Orchestrator",
       "description": "Central orchestrator that standardizes and routes external RPA error notifications.",
       "prompt": null,
-      "prompt_import": "gateway.prompts:GATEWAY_ORCHESTRATOR_PROMPT",
-      "response_model": "gateway.templates.ResponseToRPA",
+      "prompt_import": "prompts.gateway:GATEWAY_ORCHESTRATOR_PROMPT",
+      "response_model": "templates.gateway.ResponseToRPA",
       "router_model": "$PROVIDER_MODEL",
       "agent_type": "GatewayAgent",
       "input_type": "TEXT",
       "enabled": true,
       "arguments": [
         {
-          "name": "code",
-          "description": "Raw error code or identifier reported by the RPA system.",
+          "name": "task_name",
+          "description": "Name of the task being recovered.",
+          "type": "str",
+          "json_type": "string"
+        },
+        {
+          "name": "platform",
+          "description": "Execution platform where the task runs.",
+          "type": "str",
+          "json_type": "string"
+        },
+        {
+          "name": "os",
+          "description": "Operating system where recovery is happening.",
           "type": "str",
           "json_type": "string"
         },
@@ -24,10 +36,22 @@
           "json_type": "object"
         },
         {
-          "name": "details",
-          "description": "Additional structured details or metadata about the error.",
+          "name": "ui_log",
+          "description": "Ordered UI execution history leading up to the failure.",
+          "type": "list",
+          "json_type": "array"
+        },
+        {
+          "name": "errored_act",
+          "description": "Structured information about the action that failed.",
           "type": "dict",
           "json_type": "object"
+        },
+        {
+          "name": "model",
+          "description": "Model-generated textual context for the recovery event.",
+          "type": "str",
+          "json_type": "string"
         }
       ],
       "tools": {
@@ -39,42 +63,54 @@
       "name": "UI Exception Handler",
       "description": "Module responsible for managing UI-related errors. This module has access to the current UI state via screenshots and is provided with visual information about the moment where execution failed. It specializes in identifying and resolving issues related to user interface interactions, element detection, and visual validation failures.",
       "prompt": null,
-      "prompt_import": "modules.uierror.prompts:UI_EXCEPTION_HANDLER",
-      "response_model": "modules.uierror.templates.UiExceptionReport",
+      "prompt_import": "prompts.error_handler:UI_EXCEPTION_HANDLER",
+      "response_model": "templates.error_handler.UiExceptionReport",
       "router_model": "$PROVIDER_MODEL",
       "agent_type": "ErrorAgent",
       "input_type": "TEXT",
       "enabled": true,
       "arguments": [
         {
-          "name": "task",
-          "description": "Original business task the robot was executing.",
+          "name": "task_name",
+          "description": "Name of the task being recovered.",
           "type": "str",
           "json_type": "string"
         },
         {
-          "name": "action_history",
-          "description": "List of executed actions prior to failure.",
-          "type": "list",
-          "json_type": "array"
+          "name": "platform",
+          "description": "Execution platform where the task runs.",
+          "type": "str",
+          "json_type": "string"
         },
         {
-          "name": "failed_activity",
-          "description": "The action that failed causing the exception.",
-          "type": "dict",
-          "json_type": "object"
-        },
-        {
-          "name": "future_activities",
-          "description": "Planned upcoming actions after failure.",
-          "type": "list",
-          "json_type": "array"
+          "name": "os",
+          "description": "Operating system where recovery is happening.",
+          "type": "str",
+          "json_type": "string"
         },
         {
           "name": "variables",
           "description": "Runtime variables relevant to the task.",
           "type": "dict",
           "json_type": "object"
+        },
+        {
+          "name": "ui_log",
+          "description": "Ordered UI execution history leading up to the failure.",
+          "type": "list",
+          "json_type": "array"
+        },
+        {
+          "name": "errored_act",
+          "description": "Structured information about the action that failed.",
+          "type": "dict",
+          "json_type": "object"
+        },
+        {
+          "name": "model",
+          "description": "Model-generated textual context for the recovery event.",
+          "type": "str",
+          "json_type": "string"
         }
       ],
       "tools": {
@@ -86,8 +122,8 @@
       "name": "UI Direct Recovery",
       "description": "Performs immediate direct UI recovery using vision and tool models.",
       "prompt": null,
-      "prompt_import": "modules.uierror.prompts:RECOVERY_DIRECT_PROMPT",
-      "response_model": "modules.uierror.templates.RecoveryDirectReport",
+      "prompt_import": "prompts.gui_agent:RECOVERY_DIRECT_PROMPT",
+      "response_model": "templates.gui_agent.RecoveryDirectReport",
       "router_model": "$PROVIDER_VISION_TOOL_MODEL",
       "agent_type": "GuiAgent",
       "input_type": "IMAGETEXT",
@@ -127,8 +163,8 @@
       "name": "UI Recovery Planner",
       "description": "Generates a multi-step recovery plan for a UI failure.",
       "prompt": null,
-      "prompt_import": "modules.uierror.prompts:RECOVERY_PLANNER_PROMPT",
-      "response_model": "modules.uierror.templates.RecoveryPlannerReport",
+      "prompt_import": "prompts.gui_agent:RECOVERY_PLANNER_PROMPT",
+      "response_model": "templates.gui_agent.RecoveryPlannerReport",
       "router_model": "$PROVIDER_VISION_MODEL",
       "agent_type": "GuiAgent",
       "input_type": "IMAGETEXT",
@@ -174,8 +210,8 @@
       "name": "UI Step Executor",
       "description": "Executes individual planned recovery steps and validates outcomes.",
       "prompt": null,
-      "prompt_import": "modules.uierror.prompts:RECOVERY_STEP_EXECUTION_PROMPT",
-      "response_model": "modules.uierror.templates.RecoveryStepExecutionResult",
+      "prompt_import": "prompts.gui_agent:RECOVERY_STEP_EXECUTION_PROMPT",
+      "response_model": "templates.gui_agent.RecoveryStepExecutionResult",
       "router_model": "$PROVIDER_VISION_TOOL_MODEL",
       "agent_type": "GuiAgent",
       "input_type": "IMAGETEXT",
@@ -230,7 +266,7 @@
       "arguments": [
         {
           "name": "task",
-          "description": "Action or UI step to ground.",
+          "description": "Task describing what needs to be done to get the process back on track.",
           "type": "str",
           "json_type": "string"
         },
@@ -261,8 +297,8 @@
     {
       "name": "UI Standalone UITARS",
       "description": "Executes recovery directly via iterative UITARS grounding without planning.",
-      "prompt": "Iteratively ground and execute UI actions until task recovered or attempts exhausted.",
-      "prompt_import": null,
+      "prompt": null,
+      "prompt_import": "prompts.gui_agent:STANDALONE_COMPUTER_USE_DOUBAO",
       "response_model": null,
       "router_model": "$PROVIDER_GROUNDING_MODEL",
       "agent_type": "GuiAgent",
@@ -271,27 +307,33 @@
       "arguments": [
         {
           "name": "task",
-          "description": "Task description the robot was attempting.",
+          "description": "Task describing what needs to be done to get the process back on track.",
           "type": "str",
           "json_type": "string"
-        },
-        {
-          "name": "action_history",
-          "description": "History of executed actions.",
-          "type": "list",
-          "json_type": "array"
-        },
-        {
-          "name": "failed_activity",
-          "description": "Failed action structure.",
-          "type": "dict",
-          "json_type": "object"
         },
         {
           "name": "variables",
           "description": "Execution variables.",
           "type": "dict",
           "json_type": "object"
+        },
+        {
+          "name": "ui_log",
+          "description": "Ordered UI execution history leading up to the failure.",
+          "type": "list",
+          "json_type": "array"
+        },
+        {
+          "name": "errored_act",
+          "description": "Structured information about the action that failed.",
+          "type": "dict",
+          "json_type": "object"
+        },
+        {
+          "name": "model",
+          "description": "Model-generated textual context for the recovery event.",
+          "type": "str",
+          "json_type": "string"
         }
       ],
       "tools": {

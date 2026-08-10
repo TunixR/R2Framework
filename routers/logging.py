@@ -1,27 +1,96 @@
 import zipfile
 from collections.abc import Sequence
 from io import BytesIO
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlmodel import select
 
 from database.general import SessionDep
 from database.logging.models import (
     AgentTrace,
     GUITrace,
+    RecoveryContext,
     RobotException,
     ToolTrace,
 )
 from middlewares.auth import get_current_user
 from s3.utils import S3Client
 
+
+class RecoveryContextEnriched(BaseModel):
+    id: UUID
+    robot_exception_id: UUID
+    task_name: str
+    platform: str
+    os: str
+    variables: dict[str, Any]
+    model: str
+    ui_log: list[dict[str, Any]]
+    errored_act: dict[str, Any] | None
+
+
+class RecoveryUiLogEntryResponse(BaseModel):
+    case_id: str
+    activity_id: str | None
+    event_id: str
+    event_name: str | None
+    action_type: str
+    application: str | None
+    input: str | None
+    ui_element_target: str | None
+    ui_group: str | None
+    timestamp: str
+    previous_state: str | None
+    current_state: str | None
+
+
+class RecoveryErroredActResponse(BaseModel):
+    case_id: str
+    activity_id: str | None
+    event_id: str
+    event_name: str | None
+    action_type: str
+    application: str | None
+    input: str | None
+    error_code: str
+    error_description: str
+
+
 router = APIRouter(
     prefix="/logging",
     tags=["Logging"],
     dependencies=[Depends(get_current_user)],
 )
+
+
+def _get_recovery_context_or_404(
+    *,
+    exception_id: UUID,
+    session: SessionDep,
+) -> RecoveryContext:
+    robot_exception = session.get(RobotException, exception_id)
+    if not robot_exception:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="RobotException not found",
+        )
+
+    recovery_context = session.exec(
+        select(RecoveryContext).where(
+            RecoveryContext.robot_exception_id == exception_id
+        )
+    ).first()
+    if not recovery_context:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="RecoveryContext not found",
+        )
+
+    return recovery_context
 
 
 @router.get(
@@ -353,3 +422,25 @@ def delete_robot_exception(
             detail=f"Failed to delete RobotException: {e}",
         )
     return
+
+
+@router.get(
+    "/recovery_context/{exception_id}",
+    response_model=RecoveryContextEnriched,
+    summary="Get normalized recovery context by exception ID",
+)
+def get_recovery_context(
+    exception_id: UUID,
+    session: SessionDep,
+) -> RecoveryContextEnriched:
+    recovery_context = _get_recovery_context_or_404(
+        exception_id=exception_id,
+        session=session,
+    )
+    return RecoveryContextEnriched.model_validate(
+        recovery_context.model_dump()
+        | {
+            "id": recovery_context.id,
+            "robot_exception_id": recovery_context.robot_exception_id,
+        }
+    )

@@ -64,7 +64,7 @@ from strands.types.content import ContentBlock, Messages
 from agent_tools.hooks import AgentLoggingHook
 from agent_tools.image import screenshot_bytes
 from config import Config
-from modules.uierror.prompts import (
+from prompts.gui_agent import (
     STANDALONE_COMPUTER_USE_DOUBAO,
 )
 from settings import (
@@ -547,14 +547,14 @@ def parsing_response_to_pyautogui_code(
             start_box = action_inputs.get("start_box")
             end_box = action_inputs.get("end_box")
             if start_box and end_box:
-                x1, y1, x2, y2 = ast.literal_eval(
-                    start_box
+                x1, y1, x2, y2 = (
+                    ast.literal_eval(start_box) if type(start_box) is str else start_box
                 )  # Assuming box is in [x1, y1, x2, y2]
                 sx = round(float((x1 + x2) / 2) * image_width, 3)
                 sy = round(float((y1 + y2) / 2) * image_height, 3)
-                x1, y1, x2, y2 = ast.literal_eval(
-                    end_box
-                )  # Assuming box is in [x1, y1, x2, y2]
+                x1, y1, x2, y2 = (
+                    ast.literal_eval(end_box) if type(end_box) is str else end_box
+                )
                 ex = round(float((x1 + x2) / 2) * image_width, 3)
                 ey = round(float((y1 + y2) / 2) * image_height, 3)
                 pyautogui_code += (
@@ -677,9 +677,10 @@ def add_box_token(input_string):
 )
 async def standalone_uitars(
     task: str,
-    action_history: list[str],
-    failed_activity: dict[str, Any],
     variables: dict[str, Any],
+    ui_log: list[Any],
+    errored_act: dict[str, Any],
+    model: str,
     tool_context: ToolContext,
 ) -> list[list[ContentBlock]] | str:
     """
@@ -687,9 +688,10 @@ async def standalone_uitars(
 
     Args:
         task (str): The task description that the robot was trying to complete
-        action_history (list): The history of actions taken by the robot (list)
-        failed_activity (dict): The action that was expected to be performed but failed (dict)
         variables (dict): A dictionary of variables used in the process
+        ui_log (list): Ordered UI execution history leading up to failure
+        errored_act (dict): Structured details for the failed activity
+        model (str): Model-generated textual context for failure and recovery intent
 
     Returns:
         Dictionary containing status and tool response:
@@ -728,9 +730,10 @@ async def standalone_uitars(
 
     instruction = f"""
 Task: {task}
-Action History: {action_history}
-Failed Action: {failed_activity}
+UI Log: {ui_log}
+Errored Activity: {errored_act}
 Variables: {variables}
+Model Context: {model}
 """
 
     if "websocket" not in tool_context.invocation_state:
@@ -758,18 +761,18 @@ Variables: {variables}
         },
     ]
 
-    model = OpenAIModel(
+    agent_model = OpenAIModel(
         client_args={"api_key": PROVIDER_API_KEY, "base_url": PROVIDER_API_BASE},
         model_id=PROVIDER_GROUNDING_MODEL,
     )
 
     hook = AgentLoggingHook(
-        agent_id=uuid.UUID("d3befb44-ade2-479d-b71c-b76fa0bddc1c"),  # Huge mega hack
+        agent_id=uuid.UUID("2bd92474-5486-4caa-b59e-dde1aa739b88"),
         invocation_state=tool_context.invocation_state,
         parent_trace_id=tool_context.invocation_state.get("parent_trace_id", None),
         is_gui_agent=True,
     )
-    agent = Agent(model=model, messages=messages, hooks=[hook])  # type: ignore
+    agent = Agent(model=agent_model, messages=messages, hooks=[hook])  # type: ignore
 
     try:
         response = await agent.invoke_async(

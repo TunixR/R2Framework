@@ -19,3 +19,13 @@ migrations/versions/
 
 # Git worktrees
 .worktrees/
+
+# Agents
+docs/
+
+# Evaluation
+experiment_files
+evals/data
+scripts/data
+evals/notebooks
+evals/results/*
