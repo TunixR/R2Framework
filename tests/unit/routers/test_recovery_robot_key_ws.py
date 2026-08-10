@@ -8,10 +8,10 @@ from database.keys.models import RobotKey
 from security.utils import robot_key_hash
 
 
-# def test_recovery_ws_requires_robot_key_header(client: TestClient):
-#     with pytest.raises(Exception):
-#         with client.websocket_connect("/recovery/robot_exception/ws"):
-#             pass
+def test_recovery_ws_requires_robot_key_header(client: TestClient):
+    with pytest.raises(Exception):
+        with client.websocket_connect("/recovery/robot_exception/ws"):
+            pass
 
 
 def test_recovery_ws_rejects_invalid_robot_key(client: TestClient):

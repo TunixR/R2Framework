@@ -108,12 +108,10 @@ async def _invoke_gateway_agent(
         {
             "case_id": entry.case_id,
             "activity_id": entry.activity_id,
-            "activity_name": entry.activity_name,
             "event_id": entry.event_id,
             "event_name": entry.event_name,
             "action_type": entry.action_type,
             "application": entry.application,
-
             "input": entry.input,
             "ui_element_target": entry.ui_element_target,
             "ui_group": entry.ui_group,
@@ -157,18 +155,10 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
     Passes the exception to the robot exception handler for processing.
     """
     robot_key = _get_valid_robot_key(websocket, session)
-    await websocket.accept()
-
-    if not robot_key:
-        await websocket.send_json(
-            {
-                "type": "error",
-                "content": "Invalid robot key",
-            }
-        )
-        await websocket.close(code=1008)
-        logger.info("Invalid robot key")
-        return
+    if robot_key:
+        await websocket.accept()
+    else:
+        raise WebSocketDisconnect(code=1008, reason="Invalid robot key")
 
     with tracer.start_as_current_span(
         "handle_robot_exception",
