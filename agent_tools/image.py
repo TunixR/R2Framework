@@ -119,10 +119,14 @@ async def compare_images(
             before_image_cv2,
             after_image_cv2,
             full=False,
-            multichannel=True,
-        )[0]
+            channel_axis=-1,
+        )
 
-        return (ssim_index < IMAGE_SIMILARITY_THRESHOLD) == expected_change
+        return (
+            (ssim_index < IMAGE_SIMILARITY_THRESHOLD) == expected_change
+            if isinstance(ssim_index, float)
+            else False
+        )  # its always gonna be a float
 
     except WebSocketDisconnect as _:
         raise
