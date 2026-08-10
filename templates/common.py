@@ -3,14 +3,13 @@ from __future__ import annotations
 import json
 from typing import override
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class TemplateModel(BaseModel):
     """Base model that provides consistent formatting helpers."""
 
-    class ConfigDict:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     @override
     def __str__(self) -> str:  # pragma: no cover - simple serialization helper
