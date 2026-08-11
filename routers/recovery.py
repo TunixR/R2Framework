@@ -108,6 +108,7 @@ async def _invoke_gateway_agent(
         {
             "case_id": entry.case_id,
             "activity_id": entry.activity_id,
+            "activity_name": entry.activity_name,
             "event_id": entry.event_id,
             "event_name": entry.event_name,
             "action_type": entry.action_type,
