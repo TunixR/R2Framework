@@ -26,6 +26,7 @@ class RecoveryWsRunner:
         self.stop_event = asyncio.Event()
         self.next_action_at = datetime.now(tz=timezone.utc)
         self.actions_executed = 0
+        self.eval_result: dict[str, Any] | None = None
 
     async def _action_worker(self, websocket) -> None:  # pyright: ignore[reportMissingParameterType]
         while not self.stop_event.is_set():
@@ -93,6 +94,18 @@ class RecoveryWsRunner:
                     )
                 )
 
+                if self.config.eval and self.config.recovery_task:
+                    await websocket.send(
+                        json.dumps({"recovery_task": self.config.recovery_task})
+                    )
+                    self.transcript.add(
+                        TranscriptEvent.create(
+                            direction="outbound",
+                            event_type="recovery_task",
+                            payload={"recovery_task": self.config.recovery_task},
+                        )
+                    )
+
                 worker = asyncio.create_task(self._action_worker(websocket))
 
                 while not self.stop_event.is_set():
@@ -138,6 +151,19 @@ class RecoveryWsRunner:
                         recovery_id = message.get("id")
                         if isinstance(recovery_id, str):
                             self.transcript.summary.recovery_id = recovery_id
+                        self.stop_event.set()
+                        break
+
+                    if msg_type == "eval_result":
+                        self.transcript.summary.terminal_type = "done"
+                        self.eval_result = message["content"]
+                        self.transcript.add(
+                            TranscriptEvent.create(
+                                direction="inbound",
+                                event_type="eval_result",
+                                payload=message,
+                            )
+                        )
                         self.stop_event.set()
                         break
 

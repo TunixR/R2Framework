@@ -15,3 +15,6 @@ class ClientConfig:
     dry_run_actions: bool = False
     log_json: Path | None = None
     save_screenshots_dir: Path | None = None
+    recovery_task: str = ""
+    eval: bool = False
+    ground_truth_file: Path | None = None

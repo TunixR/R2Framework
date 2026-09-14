@@ -14,6 +14,8 @@ def load_payload_by_id(payload_file: Path, payload_id: int) -> dict[str, Any]:
     except json.JSONDecodeError as exc:
         raise ValueError(f"Invalid JSON in payload file: {payload_file}") from exc
 
+    if isinstance(raw, dict):
+        raw = [raw]
     if not isinstance(raw, list):
         raise ValueError("Payload catalog must be a JSON array")
 

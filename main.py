@@ -10,6 +10,7 @@ from strands.telemetry import StrandsTelemetry
 
 from routers.agents import router as agents_router
 from routers.auth import router as auth_router
+from routers.evals import router as evals_router
 from routers.keys import router as keys_router
 from routers.logging import router as logging_router
 from routers.provider import router as provider_router
@@ -48,6 +49,7 @@ app.include_router(logging_router)
 app.include_router(keys_router)
 
 app.include_router(recovery_router)
+app.include_router(evals_router)
 app.include_router(agents_router)
 app.include_router(tools_router)
 app.include_router(provider_router)
