@@ -51,7 +51,7 @@ import math
 # SPDX-License-Identifier: Apache-2.0
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any
 
@@ -811,18 +811,18 @@ Model Context: {model}
                         action_content=action.get("action_inputs", {}),
                         screenshot_bytes=image,
                         success=True,
-                        started_at=datetime.now(),
-                        finished_at=datetime.now(),
+                        started_at=datetime.now(timezone.utc),
+                        finished_at=datetime.now(timezone.utc),
                     )
                     break
 
-                start_datetime = datetime.now()
+                start_datetime = datetime.now(timezone.utc)
                 await websocket.send_json(
                     {"type": "action", "content": action}
                 )  # Action will be parsed and executed by the client
                 # Wait for action result
                 result = await websocket.receive_json()
-                finish_datetime = datetime.now()
+                finish_datetime = datetime.now(timezone.utc)
                 if not result.get("success"):
                     await hook.register_gui_trace(
                         action_type=action.get("action_type", "unknown"),

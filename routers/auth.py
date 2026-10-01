@@ -12,7 +12,7 @@ User operations: Login, See self, Delete self, Edit self, Change own password, L
 """
 
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
@@ -257,7 +257,7 @@ def update_current_user(
                 )
             current_user.username = user_data.username
 
-    current_user.updated_at = datetime.now()
+    current_user.updated_at = datetime.now(timezone.utc)
     session.add(current_user)
     session.commit()
     session.refresh(current_user)
@@ -304,7 +304,7 @@ def update_user(
     if user_data.role is not None:
         user.role = user_data.role
 
-    user.updated_at = datetime.now()
+    user.updated_at = datetime.now(timezone.utc)
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -396,7 +396,7 @@ def change_own_password(
 
     # Hash new password and update
     current_user.password = hash_password(password_data.new_password)
-    current_user.updated_at = datetime.now()
+    current_user.updated_at = datetime.now(timezone.utc)
     session.add(current_user)
     session.commit()
 
@@ -425,7 +425,7 @@ def change_user_password(
 
     # Hash new password and update
     user.password = hash_password(password_data.new_password)
-    user.updated_at = datetime.now()
+    user.updated_at = datetime.now(timezone.utc)
     session.add(user)
     session.commit()
 
@@ -454,7 +454,7 @@ def enable_user(
         )
 
     user.enabled = True
-    user.updated_at = datetime.now()
+    user.updated_at = datetime.now(timezone.utc)
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -483,7 +483,7 @@ def disable_user(
         )
 
     user.enabled = False
-    user.updated_at = datetime.now()
+    user.updated_at = datetime.now(timezone.utc)
     session.add(user)
     session.commit()
     session.refresh(user)

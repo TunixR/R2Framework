@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import jwt
@@ -34,7 +34,7 @@ def test_get_current_user_invalid_token(session: Session):
 def test_get_current_user_missing_claims(session: Session):
     payload = {
         "username": "dev",
-        "exp": datetime.now() + timedelta(minutes=5),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
     }
     token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
     with pytest.raises(HTTPException) as exc:

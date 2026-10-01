@@ -19,7 +19,7 @@ the normalized form expected by the WebSocket client.
 import asyncio
 import math
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any
 
@@ -130,7 +130,7 @@ async def _execute_gui_action(
     hook: AgentLoggingHook = state["hook"]
     current_image: bytes = state["current_image"]
 
-    started_at = datetime.now()
+    started_at = datetime.now(timezone.utc)
     await websocket.send_json(
         {
             "type": "action",
@@ -141,7 +141,7 @@ async def _execute_gui_action(
         result = await websocket.receive_json()
     except WebSocketDisconnect:
         raise
-    finished_at = datetime.now()
+    finished_at = datetime.now(timezone.utc)
 
     success = bool(result.get("success", False))
     await hook.register_gui_trace(
@@ -376,7 +376,7 @@ async def finished(
     state = tool_context.invocation_state
     hook: AgentLoggingHook = state["hook"]
     current_image: bytes = state["current_image"]
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     await hook.register_gui_trace(
         "finished", {"content": content}, current_image, now, now, success=True
     )
