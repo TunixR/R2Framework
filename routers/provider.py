@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
@@ -93,7 +93,7 @@ def replace_router(
     router_obj.model_name = payload.model_name
     router_obj.api_endpoint = payload.api_endpoint
     router_obj.provider_type = payload.provider_type
-    router_obj.updated_at = datetime.now()
+    router_obj.updated_at = datetime.now(timezone.utc)
 
     try:
         session.add(router_obj)
@@ -134,7 +134,7 @@ def update_router(
     if payload.provider_type is not None:
         router_obj.provider_type = payload.provider_type
 
-    router_obj.updated_at = datetime.now()
+    router_obj.updated_at = datetime.now(timezone.utc)
 
     try:
         session.add(router_obj)

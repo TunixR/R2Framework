@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -146,8 +146,8 @@ async def test_register_gui_trace_raises_for_non_gui_agent():
             action_content={"x": 10, "y": 20},
             screenshot_bytes=b"\x89PNG",
             success=True,
-            started_at=datetime.now(),
-            finished_at=datetime.now(),
+            started_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(timezone.utc),
         )
 
 
@@ -160,8 +160,8 @@ async def test_register_gui_trace_saves_gui_entry_when_gui_agent():
         action_content={"x": 10, "y": 20},
         screenshot_bytes=b"\x89PNG",
         success=True,
-        started_at=datetime.now(),
-        finished_at=datetime.now(),
+        started_at=datetime.now(timezone.utc),
+        finished_at=datetime.now(timezone.utc),
     )
 
     gui_traces = [o for o in _STORE.values() if isinstance(o, GUITrace)]

@@ -1,5 +1,5 @@
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timezone
 from threading import Lock
 from typing import Any, override
 from uuid import UUID, uuid4
@@ -131,7 +131,7 @@ class ToolLoggingHook(HookProvider):
             if not tool_trace:
                 raise RuntimeError(f"ToolTrace with id {self.trace_id} not found.")
 
-            tool_trace.finished_at = datetime.now()
+            tool_trace.finished_at = datetime.now(timezone.utc)
 
             if event.exception:
                 tool_trace.output = str(event.exception)
@@ -212,7 +212,7 @@ class AgentLoggingHook(HookProvider):
             "content": deepcopy(
                 event.message.get("content", [])
             ),  # Includes text, toolcalls, images, etc.
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         for part in message["content"]:
@@ -238,7 +238,7 @@ class AgentLoggingHook(HookProvider):
 
             trace.messages = self.messages
             if finished:
-                trace.finished_at = datetime.now()
+                trace.finished_at = datetime.now(timezone.utc)
                 trace.cost = cost
 
             session.add(trace)

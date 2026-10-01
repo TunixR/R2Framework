@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -42,7 +42,7 @@ def make_agent_trace(
     created_at: datetime | None = None,
     finished_at: datetime | None = None,
 ) -> AgentTrace:
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     return AgentTrace(
         agent_id=agent.id,
         agent=agent,
@@ -135,12 +135,12 @@ async def test_messages_are_rendered_in_log_after_bug_fix():
                 {"text": "Hello world"},
                 {"text": "How are you?"},
             ],
-            "timestamp": datetime.now(),
+            "timestamp": datetime.now(timezone.utc),
         },
         {
             "role": "assistant",
             "content": [{"text": "Response from assistant"}],
-            "timestamp": datetime.now(),
+            "timestamp": datetime.now(timezone.utc),
         },
     ]
     trace = make_agent_trace(agent, messages=msgs)
@@ -176,7 +176,7 @@ async def test_flags_control_presence_of_tool_and_sub_sections(
     agent = make_agent()
 
     # Construct timestamps to test ordering
-    base = datetime.now()
+    base = datetime.now(timezone.utc)
     t1 = base
     t2 = base + timedelta(seconds=1)
     t3 = base + timedelta(seconds=2)

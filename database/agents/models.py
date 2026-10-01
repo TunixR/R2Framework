@@ -1,6 +1,6 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from importlib import import_module
 from typing import Any, override
 
@@ -191,11 +191,11 @@ class Agent(SQLModel, table=True):
     )
 
     created_at: datetime = Field(
-        default_factory=datetime.now,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="Timestamp of when the agent was created.",
     )
     updated_at: datetime = Field(
-        default_factory=datetime.now,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="Timestamp of when the agent was last updated.",
     )
 
@@ -590,7 +590,7 @@ class SubAgent(SQLModel, table=True):
     )
 
     created_at: datetime = Field(
-        default_factory=datetime.now,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="Timestamp of when the sub-agent association was created.",
     )
 
@@ -632,6 +632,6 @@ class AgentTool(SQLModel, table=True):
     )
 
     created_at: datetime = Field(
-        default_factory=datetime.now,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="Timestamp of when the agent-tool association was created.",
     )

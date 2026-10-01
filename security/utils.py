@@ -92,7 +92,7 @@ def get_session_expiry(hours: int = 24) -> datetime:
     Returns:
         Datetime of when session should expire
     """
-    return datetime.now() + timedelta(hours=hours)
+    return datetime.now(timezone.utc) + timedelta(hours=hours)
 
 
 def is_session_valid(valid_until: datetime) -> bool:
@@ -105,7 +105,9 @@ def is_session_valid(valid_until: datetime) -> bool:
     Returns:
         True if session is still valid, False otherwise
     """
-    return datetime.now() < valid_until
+    if valid_until.tzinfo is None:
+        valid_until = valid_until.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) < valid_until
 
 
 def robot_key_hash(key: str) -> str:
