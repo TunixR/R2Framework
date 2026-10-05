@@ -19,7 +19,7 @@ the normalized form expected by the WebSocket client.
 import asyncio
 import math
 from io import BytesIO
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import WebSocketDisconnect, WebSocket
 from PIL import Image
@@ -29,6 +29,8 @@ from strands.types.content import ContentBlock, Messages
 from strands.types.tools import ToolResult
 
 from agent_tools.image import screenshot_bytes
+
+# from agent_tools.recovery_tree import create_recovery_tree_tools
 from prompts.gui_agent import TOOLED_GUI_AGENT_PROMPT
 from settings import (
     PROVIDER_API_BASE,
@@ -359,11 +361,9 @@ async def drag(
 @tool(
     name="finished",
     description="Signal that the recovery task is complete.",
-    context=True,
 )
 async def finished(
     content: str,
-    tool_context: ToolContext,
 ) -> str:
     """Mark the task as complete and persist the final GUI trace.
 
@@ -377,10 +377,27 @@ async def finished(
     # await hook.register_gui_trace(
     #     "finished", {"content": content}, current_image, now, now, success=True
     # )
-    return f"Task completed: {content}. You may stop talking right now. Please do not respond further, just stop generating any further text and finish your turn."
+    return f"Task completed: {content}"
 
 
-GUI_TOOLS = [
+def create_alter_variable_tool(variables: dict[str, Any]):
+    @tool(
+        name="alter_variable",
+        description="Alter the value of a given variable. The value must be JSON serializable",
+    )
+    async def _alter_variable(
+        name: str,
+        value: Any,
+    ) -> str:
+        if name not in variables:
+            return f"Error: Variable '{name}' not found."
+        variables[name] = value
+        return f"Variable '{name}' has been updated to '{value}'."
+
+    return _alter_variable
+
+
+GUI_TOOLS: list[Callable[..., Any]] = [
     click,
     double_click,
     right_click,
@@ -393,7 +410,6 @@ GUI_TOOLS = [
     drag,
     finished,
 ]
-
 
 # ---------------------------------------------------------------------------
 # Outer tool consumed by the parent agent
@@ -413,7 +429,7 @@ async def standalone_tooled_guiagent(
     model: str,
     # tool_context: ToolContext,
     websocket: WebSocket,
-) -> list[list[ContentBlock]] | str:
+) -> tuple[list[list[ContentBlock]] | str, dict[str, Any]]:
     """Run the tool-based GUI recovery agent for a single recovery session.
 
     Args:
@@ -476,7 +492,16 @@ Model Context: {model}
         model_id=PROVIDER_GROUNDING_MODEL,
     )
 
-    agent = Agent(model=agent_model, messages=messages, tools=GUI_TOOLS)  # type: ignore
+    # _tree, tree_tools = create_recovery_tree_tools(task_description=task)
+
+    tools = GUI_TOOLS.copy()  # shallow copy so GUI_TOOLS is not mutated
+    tools.extend(
+        [
+            create_alter_variable_tool(variables),
+            # *tree_tools,
+        ]
+    )
+    agent = Agent(model=agent_model, messages=messages, tools=tools)
 
     try:
         _ = await agent.invoke_async("", invocation_state=inner_state)
@@ -487,12 +512,12 @@ Model Context: {model}
                 filter(lambda m: m["role"] == "assistant", agent.messages),
             )
         )
-        return conversation_history
+        return conversation_history, variables
     except WebSocketDisconnect:
         raise
     except RuntimeError:
         raise
     except Exception as e:
-        return str(e)
+        return str(e), {}
     # finally:
     #     hook.update_trace(finished=True, cost=-1.0)
