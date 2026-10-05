@@ -106,7 +106,10 @@ def is_session_valid(valid_until: datetime) -> bool:
         True if session is still valid, False otherwise
     """
     if valid_until.tzinfo is None:
-        valid_until = valid_until.replace(tzinfo=timezone.utc)
+        raise ValueError(
+            "valid_until must be a timezone-aware datetime; got a naive datetime. "
+            + "Use datetime.now(timezone.utc) when constructing expiry timestamps."
+        )
     return datetime.now(timezone.utc) < valid_until
 
 

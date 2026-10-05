@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import Column
 from sqlmodel import Enum, Field, Relationship, SQLModel
+from sqlmodel.sql.sqltypes import UTCDateTime
 
 
 class UserRole(str, enum.Enum):
@@ -119,6 +120,7 @@ class UserSession(SQLModel, table=True):
     )
     valid_until: datetime = Field(
         ...,
+        sa_column=Column(UTCDateTime(), nullable=False),
         description="Expiration timestamp for the session.",
     )
     created_at: datetime = Field(
