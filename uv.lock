@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -2719,15 +2719,15 @@ wheels = [
 
 [[package]]
 name = "rich"
-version = "14.3.2"
+version = "15.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "markdown-it-py" },
     { name = "pygments" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/74/99/a4cab2acbb884f80e558b0771e97e21e939c5dfb460f488d19df485e8298/rich-14.3.2.tar.gz", hash = "sha256:e712f11c1a562a11843306f5ed999475f09ac31ffb64281f73ab29ffdda8b3b8", size = 230143, upload-time = "2026-02-01T16:20:47.908Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c0/8f/0722ca900cc807c13a6a0c696dacf35430f72e0ec571c4275d2371fca3e9/rich-15.0.0.tar.gz", hash = "sha256:edd07a4824c6b40189fb7ac9bc4c52536e9780fbbfbddf6f1e2502c31b068c36", size = 230680, upload-time = "2026-04-12T08:24:00.75Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ef/45/615f5babd880b4bd7d405cc0dc348234c5ffb6ed1ea33e152ede08b2072d/rich-14.3.2-py3-none-any.whl", hash = "sha256:08e67c3e90884651da3239ea668222d19bea7b589149d8014a21c633420dbb69", size = 309963, upload-time = "2026-02-01T16:20:46.078Z" },
+    { url = "https://files.pythonhosted.org/packages/82/3b/64d4899d73f91ba49a8c18a8ff3f0ea8f1c1d75481760df8c68ef5235bf5/rich-15.0.0-py3-none-any.whl", hash = "sha256:33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb", size = 310654, upload-time = "2026-04-12T08:24:02.83Z" },
 ]
 
 [[package]]
@@ -3268,7 +3268,7 @@ otel = [
 
 [[package]]
 name = "strands-agents-evals"
-version = "1.4.0"
+version = "1.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "boto3" },
@@ -3283,9 +3283,9 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/78/8f/faad18452289cf63272d9f346a207b79c4113a6befc66feecdf3f875ed7c/strands_agents_evals-1.4.0.tar.gz", hash = "sha256:4c7d3e82d65d594aa1b062a3ee39d2c4acb7d9aeb2220b5ae9dffa31679aac3f", size = 633459, upload-time = "2026-09-22T19:56:56.515Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ce/1a/5cb98a0f7ca0cc10a83bc722f5c06c2a8638c116f7d3848144fd97a28746/strands_agents_evals-1.6.0.tar.gz", hash = "sha256:c62e6edde5981a645b958283c4f268c6b4bbfb8ea1c8db2f678c36c6f6406ec6", size = 672917, upload-time = "2026-10-14T22:45:56.781Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7a/26/f3c381009958642ebd300ef89aeebcd98e37960145b7d3a21a413c74ba1f/strands_agents_evals-1.4.0-py3-none-any.whl", hash = "sha256:b25123798f148d581a0cdda557607e079e328905ccb0621d1be9f28b6680b76b", size = 425121, upload-time = "2026-09-22T19:56:55Z" },
+    { url = "https://files.pythonhosted.org/packages/42/10/81fe3b01eb6ff367009e827012c2087e1eb5ab87c4de9807fc6f8e310565/strands_agents_evals-1.6.0-py3-none-any.whl", hash = "sha256:842b5a0bf3275109f4035cca5de8695aa52daad6c28c15f4f42626aaac7307e1", size = 439894, upload-time = "2026-10-14T22:45:55.044Z" },
 ]
 
 [[package]]
