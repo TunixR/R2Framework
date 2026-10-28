@@ -11,7 +11,6 @@ from sqlmodel import (
     SQLModel,
 )
 
-from database.agents.models import Agent
 from database.keys.models import RobotKey
 from database.tools.models import Tool
 from s3 import S3Client
@@ -31,7 +30,7 @@ class AgentTrace(SQLModel, table=True):
     robot_exception: "RobotException" = Relationship(back_populates="agent_traces")
 
     agent_id: UUID = Field(foreign_key="agent.id")
-    agent: Agent = Relationship(back_populates="traces")
+    agent: "Agent" = Relationship(back_populates="traces")  # noqa: F821 # pyright:ignore[reportUndefinedVariable]
 
     gui_traces: list["GUITrace"] = Relationship(
         back_populates="agent_trace",

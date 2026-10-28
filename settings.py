@@ -21,6 +21,7 @@ PROVIDER_MODEL = os.getenv("PROVIDER_MODEL", "")
 PROVIDER_VISION_MODEL = os.getenv("PROVIDER_VISION_MODEL", "")
 PROVIDER_VISION_TOOL_MODEL = os.getenv("PROVIDER_VISION_TOOL_MODEL", "")
 PROVIDER_GROUNDING_MODEL = os.getenv("PROVIDER_GROUNDING_MODEL", "")
+MAX_GUI_IMAGES = int(os.getenv("MAX_GUI_IMAGES", "5"))
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 
 UI_ERROR_PLANNING = os.getenv("UI_ERROR_PLANNING", "false").lower() == "true"

@@ -9,11 +9,68 @@ from sqlmodel import Session
 from strands.hooks import (
     AfterToolCallEvent,
     BeforeInvocationEvent,
+    BeforeModelCallEvent,
     BeforeToolCallEvent,
     HookProvider,
     HookRegistry,
     MessageAddedEvent,
 )
+from strands.types.content import ContentBlock, Message
+from strands.types.tools import ToolResultContent
+
+from settings import MAX_GUI_IMAGES
+
+OMITTED_IMAGE_TEXT = "ommited screenshot due to max allowed images per message"
+
+
+class MaxGuiImagesHook(HookProvider):
+    """Keep only the most recent images in the conversation before each model call."""
+
+    def __init__(self, max_images: int = MAX_GUI_IMAGES):
+        """
+        Initializer.
+
+        Args:
+            max_images: Maximum number of screenshots to keep. Older images are
+                replaced with a text placeholder.
+        """
+        if max_images < 0:
+            raise ValueError("max_images must be non-negative")
+        self.max_images = max_images
+
+    @override
+    def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
+        registry.add_callback(BeforeModelCallEvent, self.limit_images)
+
+    def limit_images(self, event: BeforeModelCallEvent) -> None:
+        remaining = self.max_images
+        for message in reversed(event.agent.messages):
+            remaining = self._limit_message_images(message, remaining)
+
+    def _limit_message_images(self, message: Message, remaining: int) -> int:
+        content = message["content"]
+        for index in range(len(content) - 1, -1, -1):
+            block = content[index]
+            if "image" in block:
+                remaining = self._handle_image_block(block, remaining)
+            elif "toolResult" in block:
+                result_content = block["toolResult"].get("content", [])
+                for result_index in range(len(result_content) - 1, -1, -1):
+                    result_block = result_content[result_index]
+                    if "image" in result_block:
+                        remaining = self._handle_image_block(result_block, remaining)
+        return remaining
+
+    @staticmethod
+    def _handle_image_block(
+        block: ContentBlock | ToolResultContent, remaining: int
+    ) -> int:
+        if remaining > 0:
+            return remaining - 1
+
+        _ = block.pop("image", None)
+        block["text"] = OMITTED_IMAGE_TEXT
+        return remaining
 
 
 class LimitToolCounts(HookProvider):
@@ -98,7 +155,7 @@ class ToolLoggingHook(HookProvider):
         registry.add_callback(AfterToolCallEvent, self.log_tool_response)
 
     def log_tool_call(self, event: BeforeToolCallEvent) -> None:
-        from database.general import general_engine
+        from database.engine import general_engine
         from database.logging.models import ToolTrace
 
         tool_name = event.tool_use.get("name", "")
@@ -118,7 +175,7 @@ class ToolLoggingHook(HookProvider):
             self.trace_id = trace_id
 
     def log_tool_response(self, event: AfterToolCallEvent) -> None:
-        from database.general import general_engine
+        from database.engine import general_engine
         from database.logging.models import ToolTrace
 
         tool_name = event.tool_use.get("name", "")
@@ -181,7 +238,7 @@ class AgentLoggingHook(HookProvider):
         # Skip if already logged, can happen if multiple invocations are made
         if self.created:
             return
-        from database.general import general_engine
+        from database.engine import general_engine
         from database.logging.models import AgentTrace, SubAgentTrace
 
         with Session(general_engine) as session:
@@ -226,7 +283,7 @@ class AgentLoggingHook(HookProvider):
         self.update_trace()
 
     def update_trace(self, finished: bool = False, cost: float = 0.0):
-        from database.general import general_engine
+        from database.engine import general_engine
         from database.logging.models import AgentTrace
 
         with Session(general_engine) as session:
@@ -256,7 +313,7 @@ class AgentLoggingHook(HookProvider):
         if not self.is_gui_agent:
             raise RuntimeError("Cannot register GUI trace for non-GUI agent.")
 
-        from database.general import general_engine
+        from database.engine import general_engine
         from database.logging.models import GUITrace
 
         with Session(general_engine) as session:
