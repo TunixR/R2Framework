@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from typing import Any
 
 import pyautogui
@@ -66,13 +68,23 @@ def execute_action(action: dict[str, Any], dry_run: bool = False) -> ActionResul
             pyautogui.dragTo(x=ex, y=ey, duration=1.0)
         elif action_type == "scroll":
             direction = str(action_inputs.get("direction", "")).lower()
+            match direction:
+                case d if d in ["up", "down"]:
+                    scroll_fn = pyautogui.scroll
+                case d if d in ["left", "right"]:
+                    scroll_fn = pyautogui.hscroll
+                case _:
+                    raise ValueError(
+                        f"Invalid scroll direction: {direction}. Must be 'up', 'down', 'left', or 'right'."
+                    )
+
             start_box = action_inputs.get("start_box")
-            amount = 5 if "up" in direction else -5
+            x, y = _center_to_pixels(start_box)
+            amount = 200 if direction in ["up", "left"] else -200
             if start_box is None:
-                pyautogui.scroll(amount)
+                scroll_fn(amount, x=x, y=y)
             else:
-                x, y = _center_to_pixels(start_box)
-                pyautogui.scroll(amount, x=x, y=y)
+                scroll_fn(amount, x=x, y=y)
         elif action_type == "hotkey":
             hotkey = str(action_inputs.get("hotkey") or action_inputs.get("key") or "")
             keys = [k for k in hotkey.split(" ") if k]
@@ -95,6 +107,17 @@ def execute_action(action: dict[str, Any], dry_run: bool = False) -> ActionResul
             pyautogui.hotkey("ctrl", "v")
             if content.endswith("\n"):
                 pyautogui.press("enter")
+        elif action_type == "wait":
+            seconds = action_inputs.get(
+                "seconds", action_inputs.get("duration", action_inputs.get("time", 0))
+            )
+            try:
+                seconds_float = float(seconds)
+            except (TypeError, ValueError):
+                raise ValueError("wait requires a numeric seconds/duration")
+            if seconds_float < 0:
+                raise ValueError("wait seconds must be non-negative")
+            time.sleep(seconds_float)
         else:
             raise ValueError(f"Unsupported action_type: {action_type}")
 
