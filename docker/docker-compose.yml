@@ -38,10 +38,11 @@ services:
   swfs-volume:
     image: chrislusf/seaweedfs # use a remote image
     ports:
-      - 8080:8080
       - 18080:18080
       - 9325:9325
     command: 'volume -ip=swfs-volume -master="swfs-master:9333" -ip.bind=0.0.0.0 -port=8080 -metricsPort=9325'
+    volumes:
+      - swfs-volume-data:/data
     depends_on:
       - swfs-master
   swfs-filer:
@@ -100,6 +101,8 @@ services:
 volumes:
   db-data:
   pgadmin-data:
+  swfs-volume-data:
+    name: eb810b7b6c1a7573ba078e18e17e861a53bcf5147bac19605a9fc8b592da4acd
 
 networks:
   postgres-network:
