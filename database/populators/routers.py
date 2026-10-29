@@ -107,6 +107,8 @@ def _resolve_provider_type(name: str | None) -> Router.Provider | None:
         return Router.Provider.OPENROUTER
     if upper == "OPENAI":
         return Router.Provider.OPENAI
+    if upper == "VLLM":
+        return Router.Provider.VLLM
     raise ValueError(f"Unknown provider_type '{name}'.")
 
 

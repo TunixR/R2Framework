@@ -13,6 +13,7 @@ class Router(SQLModel, table=True):
     class Provider(str, enum.Enum):
         OPENAI = "openai"
         OPENROUTER = "openrouter"
+        VLLM = "vllm"
 
     id: uuid.UUID = Field(
         default_factory=uuid.uuid4,
@@ -59,6 +60,7 @@ class Router(SQLModel, table=True):
         """Return the model instance for the router."""
         if (
             self.provider_type == self.Provider.OPENAI
+            or self.provider_type == self.Provider.VLLM
             or self.provider_type == self.Provider.OPENROUTER
         ):
             return OpenAIModel(
@@ -66,6 +68,7 @@ class Router(SQLModel, table=True):
                     "api_key": self.api_key,
                     "base_url": self.api_endpoint,
                 },
+                stream=True,
                 model_id=self.model_name,
             )
 
