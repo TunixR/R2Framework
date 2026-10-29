@@ -1,16 +1,18 @@
+from collections.abc import Callable
 from typing import Any
 
 import pytest
+from sqlmodel import Session
 from strands.types.tools import JSONSchema
 
-from database.agents.models import Agent, AgentType, Argument
+from database.agents.models import Agent, AgentType, AgentUpdate, Argument
 from database.logging.models import (
     ToolTrace,  # pyright: ignore[reportUnusedImport] # noqa: F401 Needs to be imported to register with SQLModel
 )
 from database.provider.models import Router
 
 
-def make_router() -> Router:
+def _make_router() -> Router:
     return Router(
         api_key="test-key",
         model_name="test-model",
@@ -54,7 +56,7 @@ def make_arguments() -> list[Argument]:
     ]
 
 
-def make_agent(router: Router) -> Agent:
+def _make_agent(router: Router) -> Agent:
     """
     Create an in-memory Agent instance (not persisted) for validation tests.
     """
@@ -87,13 +89,13 @@ def valid_kwargs() -> dict[str, Any]:
 
 
 def test_validate_input_success():
-    agent = make_agent(make_router())
+    agent = _make_agent(_make_router())
     # Should not raise
     agent.validate_input(**valid_kwargs())
 
 
 def test_validate_input_missing_argument():
-    agent = make_agent(make_router())
+    agent = _make_agent(_make_router())
     bad_args = valid_kwargs()
     bad_args.pop("variables")
     with pytest.raises(ValueError) as e:
@@ -102,7 +104,7 @@ def test_validate_input_missing_argument():
 
 
 def test_validate_input_wrong_type():
-    agent = make_agent(make_router())
+    agent = _make_agent(_make_router())
     bad_args = valid_kwargs()
     bad_args["action_history"] = "not-a-list"
     with pytest.raises(TypeError) as e:
@@ -111,7 +113,7 @@ def test_validate_input_wrong_type():
 
 
 def test_validate_input_positional_arguments():
-    agent = make_agent(make_router())
+    agent = _make_agent(_make_router())
     # Provide all arguments positionally in correct order
     args = [
         "Process invoice",
@@ -129,7 +131,7 @@ def test_validate_input_positional_arguments():
 
 
 def test_validate_input_mixed_args_kwargs():
-    agent = make_agent(make_router())
+    agent = _make_agent(_make_router())
     # First two as positional, rest as kwargs
     agent.validate_input(
         "Process invoice",
@@ -177,7 +179,7 @@ def test_argument_incompatible_json_type():
 
 
 def test_get_input_schema_matches_arguments():
-    agent = make_agent(make_router())
+    agent = _make_agent(_make_router())
     schema: dict[str, Any] = agent.get_input_schema().get("json", {})
     assert schema["type"] == "object"
     props = schema["properties"]
@@ -191,7 +193,7 @@ def test_get_input_schema_matches_arguments():
 
 
 def test_as_tool_reflects_agent_metadata():
-    agent = make_agent(make_router())
+    agent = _make_agent(_make_router())
     decorated = agent.as_tool()
     assert decorated._tool_name == agent.get_tool_name()  # pyright: ignore[reportPrivateUsage]
     assert decorated._tool_spec.get("description", "") == agent.description  # pyright: ignore[reportPrivateUsage]
@@ -213,7 +215,98 @@ def test_agent_call_execution():
     """
     Placeholder test for future integration where model invocation can be mocked.
     """
-    agent = make_agent(make_router())
+    agent = _make_agent(_make_router())
     # Would require mocking StrandsAgent to avoid network
     _ = agent  # For linter silence
     assert True
+
+
+# ---------------------------------------------------------------------------
+# Router capability alignment
+# ---------------------------------------------------------------------------
+
+
+def test_text_agent_aligns_with_text_capability(
+    make_agent: Callable[..., Agent],
+    make_router: Callable[..., Router],
+):
+    agent = make_agent(
+        router=make_router(),
+        input_type=Agent.InputType.TEXT,
+    )
+
+    assert agent.input_type == Agent.InputType.TEXT
+
+
+def test_agent_construction_rejects_text_agent_on_vision_only_router(
+    make_agent: Callable[..., Agent],
+    make_router: Callable[..., Router],
+):
+    router = make_router(
+        capabilities=[Router.Capability.VISION],
+        persist=False,
+    )
+
+    with pytest.raises(ValueError, match="TEXT"):
+        make_agent(router=router, input_type=Agent.InputType.TEXT)
+
+
+def test_agent_construction_rejects_image_agent_without_vision(
+    make_agent: Callable[..., Agent],
+    make_router: Callable[..., Router],
+):
+    router = make_router(
+        capabilities=[Router.Capability.TEXT],
+        persist=False,
+    )
+
+    with pytest.raises(ValueError, match="VISION"):
+        make_agent(router=router, input_type=Agent.InputType.IMAGETEXT)
+
+
+def test_imagtext_agent_aligns_with_text_and_vision_capabilities(
+    make_agent: Callable[..., Agent],
+    make_router: Callable[..., Router],
+):
+    agent = make_agent(
+        router=make_router(
+            capabilities=[Router.Capability.TEXT, Router.Capability.VISION]
+        ),
+        input_type=Agent.InputType.IMAGETEXT,
+    )
+
+    assert agent.input_type == Agent.InputType.IMAGETEXT
+
+
+def test_agent_update_rejects_input_type_not_supported_by_router(
+    make_agent: Callable[..., Agent],
+    make_router: Callable[..., Router],
+):
+    router = make_router(capabilities=[Router.Capability.TEXT])
+    agent = make_agent(router=router, input_type=Agent.InputType.TEXT)
+
+    with pytest.raises(ValueError, match="VISION"):
+        agent.apply_update(
+            AgentUpdate(input_type=Agent.InputType.IMAGETEXT),
+            router,
+        )
+
+
+def test_agent_update_accepts_compatible_input_type(
+    session: Session,
+    make_agent: Callable[..., Agent],
+    make_router: Callable[..., Router],
+):
+    router = make_router(
+        capabilities=[Router.Capability.TEXT, Router.Capability.VISION]
+    )
+    agent = make_agent(router=router, input_type=Agent.InputType.TEXT)
+
+    agent.apply_update(
+        AgentUpdate(input_type=Agent.InputType.IMAGETEXT),
+        router,
+    )
+    session.add(agent)
+    session.commit()
+
+    assert agent.input_type == Agent.InputType.IMAGETEXT

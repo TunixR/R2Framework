@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Any, override
 
 import requests
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Column, Enum, Field, Relationship, SQLModel
 from strands.models import Model
 from strands.models.openai import OpenAIModel
@@ -14,6 +15,10 @@ class Router(SQLModel, table=True):
         OPENAI = "openai"
         OPENROUTER = "openrouter"
         VLLM = "vllm"
+
+    class Capability(str, enum.Enum):
+        TEXT = "TEXT"
+        VISION = "VISION"
 
     id: uuid.UUID = Field(
         default_factory=uuid.uuid4,
@@ -32,6 +37,11 @@ class Router(SQLModel, table=True):
             default=Provider.OPENAI,
         ),
         description="The type of input the agent can process.",
+    )
+    capabilities: list[Capability] = Field(
+        default_factory=lambda: [Router.Capability.TEXT],
+        sa_type=JSONB,
+        description="Capabilities supported by the model behind this router.",
     )
 
     agents: list["Agent"] = (  # noqa: F821 # pyright: ignore[reportUndefinedVariable]
@@ -55,6 +65,11 @@ class Router(SQLModel, table=True):
         data = super().model_dump(*args, **kwargs)
         data.pop("api_key", None)
         return data
+
+    def supports_capabilities(self, *capabilities: Capability) -> bool:
+        """Return whether the router supports every requested capability."""
+        available = {self.Capability(capability) for capability in self.capabilities}
+        return all(capability in available for capability in capabilities)
 
     def get_model(self) -> Model:
         """Return the model instance for the router."""
@@ -117,6 +132,7 @@ class RouterPublic(SQLModel):
     model_name: str
     api_endpoint: str
     provider_type: Router.Provider
+    capabilities: list[Router.Capability]
     created_at: datetime
     updated_at: datetime
 
@@ -130,6 +146,10 @@ class RouterCreate(SQLModel):
     provider_type: Router.Provider = Field(
         default=Router.Provider.OPENROUTER,
         description="The provider type backing this router.",
+    )
+    capabilities: list[Router.Capability] = Field(
+        default_factory=lambda: [Router.Capability.TEXT],
+        description="Capabilities supported by the model behind this router.",
     )
 
 
@@ -147,4 +167,8 @@ class RouterUpdate(SQLModel):
     )
     provider_type: Router.Provider | None = Field(
         default=None, description="The provider type backing this router."
+    )
+    capabilities: list[Router.Capability] | None = Field(
+        default=None,
+        description="Capabilities supported by the model behind this router.",
     )

@@ -8,6 +8,7 @@ from sqlmodel import select
 from database.agents.models import Agent, AgentCreate, AgentUpdate
 from database.auth.models import User
 from database.general import SessionDep
+from database.provider.models import Router
 from middlewares.auth import get_current_user, require_admin
 
 router = APIRouter(
@@ -49,7 +50,20 @@ def create_agent(
     session: SessionDep,
     _current_user: Annotated[User, Depends(require_admin)],
 ) -> Agent:
-    agent = Agent(**payload.model_dump())
+    router_obj = session.get(Router, payload.router_id)
+    if not router_obj:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Router not found",
+        )
+
+    try:
+        agent = Agent(**payload.model_dump(), router=router_obj)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
 
     session.add(agent)
     try:
@@ -78,14 +92,20 @@ def update_agent(
             detail="Agent not found",
         )
 
-    for key, value in payload.model_dump(exclude_unset=True, exclude_none=True).items():
-        try:
-            setattr(agent, key, value)
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to set field '{key}': {str(e)}",
-            )
+    router_obj = session.get(Router, payload.router_id or agent.router_id)
+    if not router_obj:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Router not found",
+        )
+
+    try:
+        agent.apply_update(payload, router_obj)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
 
     try:
         session.add(agent)

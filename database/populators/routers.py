@@ -38,6 +38,7 @@ def _create_router(
     model_name: str,
     api_endpoint: str,
     provider_type: Router.Provider | None = None,
+    capabilities: list[Router.Capability] | None = None,
 ) -> Router:
     """
     Create and persist a Router record.
@@ -47,6 +48,7 @@ def _create_router(
         model_name=model_name,
         api_endpoint=api_endpoint,
         provider_type=provider_type or Router.Provider.OPENROUTER,
+        capabilities=capabilities or [Router.Capability.TEXT],
     )
     session.add(router)
     session.commit()
@@ -67,7 +69,8 @@ def _load_json_config() -> dict[str, Any]:
           "model_name": "$PROVIDER_MODEL" | "$PROVIDER_VISION_MODEL" | "$PROVIDER_VISION_TOOL_MODEL" | "$PROVIDER_GROUNDING_MODEL" | "literal-model-name",
           "api_key": "$FREE_PROVIDER_API_KEY" | "$PROVIDER_API_KEY" | "literal-api-key",
           "api_endpoint": "$PROVIDER_API_BASE" | "https://api.example.com/v1",
-          "provider_type": "OPENROUTER"  // optional, defaults to OPENROUTER
+          "provider_type": "OPENROUTER",  // optional, defaults to OPENROUTER
+          "capabilities": ["TEXT", "VISION"]  // optional, defaults to ["TEXT"]
         }
       ]
     }
@@ -112,6 +115,22 @@ def _resolve_provider_type(name: str | None) -> Router.Provider | None:
     raise ValueError(f"Unknown provider_type '{name}'.")
 
 
+def _resolve_capabilities(values: list[str] | None) -> list[Router.Capability]:
+    """Resolve configured capability names, defaulting to text-only."""
+    if not values:
+        return [Router.Capability.TEXT]
+
+    capabilities: list[Router.Capability] = []
+    for value in values:
+        try:
+            capability = Router.Capability(value.upper())
+        except ValueError as e:
+            raise ValueError(f"Unknown router capability '{value}'.") from e
+        if capability not in capabilities:
+            capabilities.append(capability)
+    return capabilities
+
+
 def populate_routers(engine: Engine) -> None:
     """
     Populate Router entries based on JSON configuration.
@@ -132,6 +151,7 @@ def populate_routers(engine: Engine) -> None:
             api_key = _resolve_token(item["api_key"])
             api_endpoint = _resolve_token(item["api_endpoint"])
             provider_type = _resolve_provider_type(item.get("provider_type"))
+            capabilities = _resolve_capabilities(item.get("capabilities"))
 
             if _existing_router(session, model_name, api_endpoint):
                 skipped += 1
@@ -143,6 +163,7 @@ def populate_routers(engine: Engine) -> None:
                 model_name=model_name,
                 api_endpoint=api_endpoint,
                 provider_type=provider_type,
+                capabilities=capabilities,
             )
             created += 1
 

@@ -1,19 +1,27 @@
+from collections.abc import Callable
+
 from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
+from database.agents.models import Agent
 from database.auth.models import User
 from database.provider.models import Router, RouterCreate, RouterPublic, RouterUpdate
 from tests.unit.shared.auth_helpers import make_auth_headers
 
 
-def make_router_create() -> RouterCreate:
-    return RouterCreate(
+def make_router_create(
+    capabilities: list[Router.Capability] | None = None,
+) -> RouterCreate:
+    payload = RouterCreate(
         api_key="super-secret",
         model_name="gpt-4o-mini",
         api_endpoint="https://example.test/v1",
         provider_type=Router.Provider.OPENAI,
     )
+    if capabilities is not None:
+        payload.capabilities = capabilities
+    return payload
 
 
 def persist_router(session: Session) -> Router:
@@ -190,3 +198,106 @@ def test_router_admin_patch_patches(
     assert obj.api_endpoint == "https://example.test/v2"
     assert obj.model_name == router_obj.model_name  # Unchanged
     assert obj.provider_type == router_obj.provider_type  # Unchanged
+
+
+##############################
+# -- Capabilities
+##############################
+
+
+def test_router_create_defaults_capabilities_to_text(
+    session: Session, mock_admin: User, client: TestClient
+):
+    headers = make_auth_headers(mock_admin, session)
+
+    response = client.post(
+        "/provider/", json=make_router_create().model_dump(mode="json"), headers=headers
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.json()["capabilities"] == ["TEXT"]
+
+
+def test_router_create_accepts_vision_capability(
+    session: Session, mock_admin: User, client: TestClient
+):
+    headers = make_auth_headers(mock_admin, session)
+    payload = make_router_create(
+        capabilities=[Router.Capability.TEXT, Router.Capability.VISION]
+    )
+
+    response = client.post(
+        "/provider/", json=payload.model_dump(mode="json"), headers=headers
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.json()["capabilities"] == ["TEXT", "VISION"]
+
+
+def test_router_patch_updates_capabilities(
+    session: Session,
+    mock_admin: User,
+    client: TestClient,
+    mock_router: Router,
+):
+    headers = make_auth_headers(mock_admin, session)
+    payload = RouterUpdate(
+        capabilities=[Router.Capability.TEXT, Router.Capability.VISION]
+    )
+
+    response = client.patch(
+        f"/provider/{mock_router.id}",
+        json=payload.model_dump(mode="json", exclude_unset=True),
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["capabilities"] == ["TEXT", "VISION"]
+
+
+def test_router_patch_rejects_removing_capability_required_by_agent(
+    session: Session,
+    mock_admin: User,
+    client: TestClient,
+    make_agent: Callable[..., Agent],
+    mock_vision_router: Router,
+):
+    _ = make_agent(
+        router=mock_vision_router,
+        input_type=Agent.InputType.IMAGETEXT,
+    )
+    headers = make_auth_headers(mock_admin, session)
+    payload = RouterUpdate(capabilities=[Router.Capability.TEXT])
+
+    response = client.patch(
+        f"/provider/{mock_vision_router.id}",
+        json=payload.model_dump(mode="json", exclude_unset=True),
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "VISION" in response.json()["detail"]
+
+
+def test_router_replace_rejects_removing_capability_required_by_agent(
+    session: Session,
+    mock_admin: User,
+    client: TestClient,
+    make_agent: Callable[..., Agent],
+    mock_vision_router: Router,
+):
+    _ = make_agent(
+        router=mock_vision_router,
+        input_type=Agent.InputType.IMAGETEXT,
+    )
+    headers = make_auth_headers(mock_admin, session)
+    payload = make_router_create(capabilities=[Router.Capability.TEXT])
+
+    response = client.put(
+        f"/provider/{mock_vision_router.id}",
+        json=payload.model_dump(mode="json"),
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "VISION" in response.json()["detail"]

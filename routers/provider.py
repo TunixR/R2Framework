@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import select
 
+from database.agents.models import Agent
 from database.auth.models import User
 from database.general import SessionDep
 from database.provider.models import (
@@ -19,6 +20,31 @@ from middlewares.auth import get_current_user, require_admin
 router = APIRouter(
     prefix="/provider", tags=["Provider"], dependencies=[Depends(get_current_user)]
 )
+
+
+def _validate_capabilities_against_agents(
+    session: SessionDep,
+    router_obj: Router,
+    capabilities: list[Router.Capability],
+) -> None:
+    """Reject capability changes that would break agents using this router."""
+    agents = (
+        session.exec(select(Agent).where(Agent.router_id == router_obj.id))
+        .unique()
+        .all()
+    )
+    for agent in agents:
+        try:
+            Agent.validate_capabilities_support_input_type(
+                capabilities,
+                agent.input_type,
+                router_name=router_obj.model_name,
+            )
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            ) from e
 
 
 @router.get(
@@ -89,10 +115,13 @@ def replace_router(
             status_code=status.HTTP_404_NOT_FOUND, detail="Router not found"
         )
 
+    _validate_capabilities_against_agents(session, router_obj, payload.capabilities)
+
     router_obj.api_key = payload.api_key
     router_obj.model_name = payload.model_name
     router_obj.api_endpoint = payload.api_endpoint
     router_obj.provider_type = payload.provider_type
+    router_obj.capabilities = payload.capabilities
     router_obj.updated_at = datetime.now(timezone.utc)
 
     try:
@@ -133,6 +162,9 @@ def update_router(
         router_obj.api_endpoint = payload.api_endpoint
     if payload.provider_type is not None:
         router_obj.provider_type = payload.provider_type
+    if payload.capabilities is not None:
+        _validate_capabilities_against_agents(session, router_obj, payload.capabilities)
+        router_obj.capabilities = payload.capabilities
 
     router_obj.updated_at = datetime.now(timezone.utc)
 

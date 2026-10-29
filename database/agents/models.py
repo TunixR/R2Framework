@@ -350,6 +350,58 @@ class Agent(SQLModel, table=True):
                     f"Argument '{arg.name}' expected type '{arg.type}', got '{type(value).__name__}'."
                 )
 
+    @classmethod
+    def required_capabilities_for(
+        cls, input_type: "Agent.InputType"
+    ) -> set[Router.Capability]:
+        """Return the router capabilities required by an agent input type."""
+        normalized = cls.InputType(input_type)
+        if normalized == cls.InputType.IMAGETEXT:
+            return {Router.Capability.TEXT, Router.Capability.VISION}
+        return {Router.Capability.TEXT}
+
+    @classmethod
+    def validate_capabilities_support_input_type(
+        cls,
+        capabilities: "list[Router.Capability]",
+        input_type: "Agent.InputType",
+        *,
+        router_name: str = "router",
+    ) -> None:
+        """Raise when the given router capabilities cannot support the input type."""
+        normalized = cls.InputType(input_type)
+        available = {Router.Capability(capability) for capability in capabilities}
+        missing = sorted(
+            capability.value
+            for capability in cls.required_capabilities_for(normalized)
+            if capability not in available
+        )
+        if missing:
+            available_values = sorted(capability.value for capability in available)
+            raise ValueError(
+                f"Agent input type '{normalized.value}' requires router capabilities \
+                {missing}, but router '{router_name}' only supports {available_values}."
+            )
+
+    def apply_update(self, payload: "AgentUpdate", router: Router) -> None:
+        """Apply an update payload, validating the resulting router alignment."""
+        data = payload.model_dump(exclude_unset=True, exclude_none=True)
+        input_type = data.get("input_type", self.input_type)
+        self.validate_capabilities_support_input_type(
+            router.capabilities,
+            input_type,
+            router_name=router.model_name,
+        )
+
+        for key, value in data.items():
+            try:
+                setattr(self, key, value)
+            except Exception as e:
+                raise ValueError(f"Failed to set field '{key}': {str(e)}") from e
+
+        self.router = router
+        self.router_id = router.id
+
     def get_pydantic_response_model(self) -> BaseModel | None:
         """Dynamically import and return the agent's structured response pydantic model."""
         if not self.response_model:
@@ -482,9 +534,19 @@ class Agent(SQLModel, table=True):
                 agent_logging_hook.update_trace(finished=True, cost=cost)
 
     def __init__(self, **data: Any) -> None:
+        # Routers are passed as objects so their capabilities can be validated
+        # before the agent is attached to a session; a router_id alone would
+        # require a database lookup this model cannot perform during __init__.
+        router = data.get("router")
         super().__init__(**data)
         # Validate that the response model can be imported successfully
         _ = self.get_pydantic_response_model()
+        if router is not None:
+            self.validate_capabilities_support_input_type(
+                router.capabilities,
+                self.input_type,
+                router_name=router.model_name,
+            )
 
 
 class AgentCreate(SQLModel):
