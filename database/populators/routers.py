@@ -39,6 +39,7 @@ def _create_router(
     api_endpoint: str,
     provider_type: Router.Provider | None = None,
     capabilities: list[Router.Capability] | None = None,
+    vision_backbone: Router.VisionBackbone | None = None,
 ) -> Router:
     """
     Create and persist a Router record.
@@ -49,6 +50,7 @@ def _create_router(
         api_endpoint=api_endpoint,
         provider_type=provider_type or Router.Provider.OPENROUTER,
         capabilities=capabilities or [Router.Capability.TEXT],
+        vision_backbone=vision_backbone,
     )
     session.add(router)
     session.commit()
@@ -70,7 +72,8 @@ def _load_json_config() -> dict[str, Any]:
           "api_key": "$FREE_PROVIDER_API_KEY" | "$PROVIDER_API_KEY" | "literal-api-key",
           "api_endpoint": "$PROVIDER_API_BASE" | "https://api.example.com/v1",
           "provider_type": "OPENROUTER",  // optional, defaults to OPENROUTER
-          "capabilities": ["TEXT", "VISION"]  // optional, defaults to ["TEXT"]
+          "capabilities": ["TEXT", "VISION"],  // optional, defaults to ["TEXT"]
+          "vision_backbone": "QWEN3.5"  // optional, defaults to OTHER for vision routers
         }
       ]
     }
@@ -131,6 +134,16 @@ def _resolve_capabilities(values: list[str] | None) -> list[Router.Capability]:
     return capabilities
 
 
+def _resolve_vision_backbone(name: str | None) -> Router.VisionBackbone | None:
+    """Resolve a configured vision backbone name, if any."""
+    if not name:
+        return None
+    try:
+        return Router.VisionBackbone(name.upper())
+    except ValueError as e:
+        raise ValueError(f"Unknown vision backbone '{name}'.") from e
+
+
 def populate_routers(engine: Engine) -> None:
     """
     Populate Router entries based on JSON configuration.
@@ -152,6 +165,7 @@ def populate_routers(engine: Engine) -> None:
             api_endpoint = _resolve_token(item["api_endpoint"])
             provider_type = _resolve_provider_type(item.get("provider_type"))
             capabilities = _resolve_capabilities(item.get("capabilities"))
+            vision_backbone = _resolve_vision_backbone(item.get("vision_backbone"))
 
             if _existing_router(session, model_name, api_endpoint):
                 skipped += 1
@@ -164,6 +178,7 @@ def populate_routers(engine: Engine) -> None:
                 api_endpoint=api_endpoint,
                 provider_type=provider_type,
                 capabilities=capabilities,
+                vision_backbone=vision_backbone,
             )
             created += 1
 

@@ -12,6 +12,7 @@ from tests.unit.shared.auth_helpers import make_auth_headers
 
 def make_router_create(
     capabilities: list[Router.Capability] | None = None,
+    vision_backbone: Router.VisionBackbone | None = None,
 ) -> RouterCreate:
     payload = RouterCreate(
         api_key="super-secret",
@@ -21,6 +22,8 @@ def make_router_create(
     )
     if capabilities is not None:
         payload.capabilities = capabilities
+    if vision_backbone is not None:
+        payload.vision_backbone = vision_backbone
     return payload
 
 
@@ -301,3 +304,170 @@ def test_router_replace_rejects_removing_capability_required_by_agent(
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "VISION" in response.json()["detail"]
+
+
+##############################
+# -- Vision backbone
+##############################
+
+
+def test_router_create_defaults_vision_backbone_to_none_for_text(
+    session: Session, mock_admin: User, client: TestClient
+):
+    headers = make_auth_headers(mock_admin, session)
+
+    response = client.post(
+        "/provider/", json=make_router_create().model_dump(mode="json"), headers=headers
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.json()["vision_backbone"] is None
+
+
+def test_router_create_defaults_vision_backbone_to_other_for_vision(
+    session: Session, mock_admin: User, client: TestClient
+):
+    headers = make_auth_headers(mock_admin, session)
+    payload = make_router_create(
+        capabilities=[Router.Capability.TEXT, Router.Capability.VISION]
+    )
+
+    response = client.post(
+        "/provider/", json=payload.model_dump(mode="json"), headers=headers
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.json()["vision_backbone"] == "OTHER"
+
+
+def test_router_create_accepts_vision_backbone(
+    session: Session, mock_admin: User, client: TestClient
+):
+    headers = make_auth_headers(mock_admin, session)
+    payload = make_router_create(
+        capabilities=[Router.Capability.TEXT, Router.Capability.VISION],
+        vision_backbone=Router.VisionBackbone.QWEN3_5,
+    )
+
+    response = client.post(
+        "/provider/", json=payload.model_dump(mode="json"), headers=headers
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.json()["vision_backbone"] == "QWEN3.5"
+
+
+def test_router_create_ignores_vision_backbone_without_vision(
+    session: Session, mock_admin: User, client: TestClient
+):
+    headers = make_auth_headers(mock_admin, session)
+    payload = make_router_create(
+        capabilities=[Router.Capability.TEXT],
+        vision_backbone=Router.VisionBackbone.QWEN2_5,
+    )
+
+    response = client.post(
+        "/provider/", json=payload.model_dump(mode="json"), headers=headers
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.json()["vision_backbone"] is None
+
+
+def test_router_create_rejects_unknown_vision_backbone(
+    session: Session, mock_admin: User, client: TestClient
+):
+    headers = make_auth_headers(mock_admin, session)
+    payload = {
+        "api_key": "super-secret",
+        "model_name": "gpt-4o-mini",
+        "api_endpoint": "https://example.test/v1",
+        "provider_type": "OPENAI",
+        "capabilities": ["TEXT", "VISION"],
+        "vision_backbone": "UNKNOWN",
+    }
+
+    response = client.post("/provider/", json=payload, headers=headers)
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+
+
+def test_router_patch_updates_vision_backbone(
+    session: Session,
+    mock_admin: User,
+    client: TestClient,
+    mock_vision_router: Router,
+):
+    headers = make_auth_headers(mock_admin, session)
+    payload = RouterUpdate(vision_backbone=Router.VisionBackbone.QWEN2_5)
+
+    response = client.patch(
+        f"/provider/{mock_vision_router.id}",
+        json=payload.model_dump(mode="json", exclude_unset=True),
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["vision_backbone"] == "QWEN2.5"
+
+
+def test_router_patch_adding_vision_defaults_vision_backbone_to_other(
+    session: Session,
+    mock_admin: User,
+    client: TestClient,
+    mock_router: Router,
+):
+    headers = make_auth_headers(mock_admin, session)
+    payload = RouterUpdate(
+        capabilities=[Router.Capability.TEXT, Router.Capability.VISION]
+    )
+
+    response = client.patch(
+        f"/provider/{mock_router.id}",
+        json=payload.model_dump(mode="json", exclude_unset=True),
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["vision_backbone"] == "OTHER"
+
+
+def test_router_patch_removing_vision_clears_vision_backbone(
+    session: Session,
+    mock_admin: User,
+    client: TestClient,
+    mock_vision_router: Router,
+):
+    headers = make_auth_headers(mock_admin, session)
+    payload = RouterUpdate(capabilities=[Router.Capability.TEXT])
+
+    response = client.patch(
+        f"/provider/{mock_vision_router.id}",
+        json=payload.model_dump(mode="json", exclude_unset=True),
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["vision_backbone"] is None
+
+
+def test_router_replace_updates_vision_backbone(
+    session: Session,
+    mock_admin: User,
+    client: TestClient,
+    mock_vision_router: Router,
+):
+    headers = make_auth_headers(mock_admin, session)
+    payload = make_router_create(
+        capabilities=[Router.Capability.TEXT, Router.Capability.VISION],
+        vision_backbone=Router.VisionBackbone.QWEN3_8,
+    )
+
+    response = client.put(
+        f"/provider/{mock_vision_router.id}",
+        json=payload.model_dump(mode="json"),
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["vision_backbone"] == "QWEN3.8"

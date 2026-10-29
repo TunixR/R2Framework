@@ -13,6 +13,7 @@ def make_router(session: Session) -> Callable[..., Router]:
     def _make_router(
         *,
         capabilities: list[Router.Capability] | None = None,
+        vision_backbone: Router.VisionBackbone | None = None,
         model_name: str = "gpt-4o-mini",
         api_endpoint: str = "https://example.test/v1",
         provider_type: Router.Provider = Router.Provider.OPENAI,
@@ -24,9 +25,9 @@ def make_router(session: Session) -> Callable[..., Router]:
             model_name=model_name,
             api_endpoint=api_endpoint,
             provider_type=provider_type,
+            capabilities=capabilities or [Router.Capability.TEXT],
+            vision_backbone=vision_backbone,
         )
-        if capabilities is not None:
-            router.capabilities = capabilities
 
         if persist:
             session.add(router)

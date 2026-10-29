@@ -122,6 +122,8 @@ def replace_router(
     router_obj.api_endpoint = payload.api_endpoint
     router_obj.provider_type = payload.provider_type
     router_obj.capabilities = payload.capabilities
+    router_obj.vision_backbone = payload.vision_backbone
+    router_obj.normalize_vision_backbone()
     router_obj.updated_at = datetime.now(timezone.utc)
 
     try:
@@ -165,6 +167,9 @@ def update_router(
     if payload.capabilities is not None:
         _validate_capabilities_against_agents(session, router_obj, payload.capabilities)
         router_obj.capabilities = payload.capabilities
+    if payload.vision_backbone is not None:
+        router_obj.vision_backbone = payload.vision_backbone
+    router_obj.normalize_vision_backbone()
 
     router_obj.updated_at = datetime.now(timezone.utc)
 
