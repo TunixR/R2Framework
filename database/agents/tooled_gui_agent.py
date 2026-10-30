@@ -39,7 +39,6 @@ class TooledGuiAgent:
     def _box_to_coords(self, box: list[float]) -> tuple[float, float]:
         if len(box) == 2:
             return box[0], box[1]
-        print((box[0] + box[2]) / 2, (box[1] + box[3]) / 2)
         return (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
 
     async def _execute_gui_action(
@@ -132,11 +131,9 @@ class TooledGuiAgent:
                 absolute pixel coords (> 1.0) or normalized [0.0, 1.0].
         """
         image_size: tuple[int, int] = tool_context.invocation_state["image_size"]
-        print(start_box)
         box = self.original_coords(
             *self._box_to_coords(start_box), image_size[0], image_size[1]
         )
-        print(box)
         return await self._execute_gui_action(
             "left_single", {"start_box": box}, tool_context
         )
@@ -298,7 +295,6 @@ class TooledGuiAgent:
         action_inputs["start_box"] = self.original_coords(
             *self._box_to_coords(start_box), image_size[0], image_size[1]
         )
-        print(action_inputs)
         return await self._execute_gui_action("scroll", action_inputs, tool_context)
 
     @tool(

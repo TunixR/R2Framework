@@ -54,9 +54,7 @@ def execute_action(action: dict[str, Any], dry_run: bool = False) -> ActionResul
             return ActionResult(success=True, action_type=action_type)
 
         if action_type in {"click", "left_single"}:
-            print(action_inputs.get("start_box"))
             x, y = _center_to_pixels(action_inputs.get("start_box"))
-            print(x, y)
             pyautogui.click(x=x, y=y, button="left")
         elif action_type == "left_double":
             x, y = _center_to_pixels(action_inputs.get("start_box"))
