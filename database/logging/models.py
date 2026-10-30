@@ -106,6 +106,22 @@ class AgentTrace(SQLModel, table=True):
                                 log_msg += f"![Image]({image_url})\n"
                             else:
                                 log_msg += "_Image no longer available_\n"
+                    elif "toolResult" in part:
+                        content = part["toolResult"].get("content", [])
+                        for item in content:
+                            if item.get("image", None):
+                                image_uuid: str = item["image"].get("uuid", "")
+                                if image_uuid == "<uuid_pending>":
+                                    log_msg += "_Image upload pending..._\n"
+                                else:
+                                    image_b = await S3Client.download_bytes(image_uuid)
+                                    if image_b:
+                                        image_url = f"data:image/jpeg;base64,{b64encode(image_b).decode()}"
+                                        log_msg += f"![Image]({image_url})\n"
+                                    else:
+                                        log_msg += "_Image no longer available_\n"
+                            else:
+                                log_msg += f"{item}\n"
                     else:  # Unknown dict format
                         log_msg += f"{part}\n"
                 date = msg.get("timestamp", datetime.now(timezone.utc))
@@ -114,7 +130,7 @@ class AgentTrace(SQLModel, table=True):
                         (
                             datetime.strptime(
                                 date.replace(" ", "T"),
-                                "%Y-%m-%dT%H:%M:%S.%f",
+                                "%Y-%m-%dT%H:%M:%S.%f%z",
                             ),
                             log_msg,
                         )

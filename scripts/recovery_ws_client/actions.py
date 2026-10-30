@@ -25,8 +25,14 @@ def _center_to_pixels(start_box: Any) -> tuple[int, int]:
         raise ValueError("start_box must have length 2 or 4")
 
     width, height = pyautogui.size()
-    x = int(((x1 + x2) / 2.0) * width)
-    y = int(((y1 + y2) / 2.0) * height)
+    if x1 <= 1.0 and x2 <= 1.0:
+        x = int(((x1 + x2) / 2.0) * width)
+    else:
+        x = int((x1 + x2) / 2.0)
+    if y1 <= 1.0 and y2 <= 1.0:
+        y = int(((y1 + y2) / 2.0) * height)
+    else:
+        y = int((y1 + y2) / 2.0)
     return x, y
 
 
@@ -48,7 +54,9 @@ def execute_action(action: dict[str, Any], dry_run: bool = False) -> ActionResul
             return ActionResult(success=True, action_type=action_type)
 
         if action_type in {"click", "left_single"}:
+            print(action_inputs.get("start_box"))
             x, y = _center_to_pixels(action_inputs.get("start_box"))
+            print(x, y)
             pyautogui.click(x=x, y=y, button="left")
         elif action_type == "left_double":
             x, y = _center_to_pixels(action_inputs.get("start_box"))
@@ -80,11 +88,10 @@ def execute_action(action: dict[str, Any], dry_run: bool = False) -> ActionResul
 
             start_box = action_inputs.get("start_box")
             x, y = _center_to_pixels(start_box)
+            pyautogui.moveTo(x=x, y=y)
             amount = 200 if direction in ["up", "left"] else -200
-            if start_box is None:
-                scroll_fn(amount, x=x, y=y)
-            else:
-                scroll_fn(amount, x=x, y=y)
+            scroll_fn(amount, x=x, y=y)
+
         elif action_type == "hotkey":
             hotkey = str(action_inputs.get("hotkey") or action_inputs.get("key") or "")
             keys = [k for k in hotkey.split(" ") if k]

@@ -8,6 +8,7 @@ from pathlib import Path
 class ClientConfig:
     ws_url: str
     robot_key: str
+    agent_id: str
     payload_file: Path
     payload_id: int
     action_delay_seconds: float = 1.0

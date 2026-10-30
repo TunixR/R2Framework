@@ -45,6 +45,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Robot key for authentication (leave blank for eval)",
     )
     _ = parser.add_argument(
+        "--agent-id",
+        default="",
+        help="Agent ID to use for the eval",
+    )
+    _ = parser.add_argument(
         "--log-json",
         default=None,
         help="Path to write the debug log JSON",
@@ -141,6 +146,8 @@ def main() -> int:
             ws_url,
             "--robot-key",
             args.robot_key or "eval-key",
+            "--agent-id",
+            str(args.agent_id),
             "--payload-id",
             str(args.payload_id),
             "--payload-file",

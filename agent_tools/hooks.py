@@ -278,6 +278,17 @@ class AgentLoggingHook(HookProvider):
                     "image"  # pyright: ignore[reportGeneralTypeIssues]
                 ] = {}  # We reset the dict to remove the possibly large data
                 part["image"]["uuid"] = "<uuid_pending>"
+            elif (
+                isinstance(part, dict)
+                and (toolresult := part.get("toolResult", None))
+                and (content := toolresult.get("content", None))
+            ):
+                for item in content:
+                    if item.get("image", None):
+                        item[  # pyright: ignore[reportGeneralTypeIssues]
+                            "image"
+                        ] = {}
+                        item["image"]["uuid"] = "<uuid_pending>"
 
         self.messages.append(message)
         self.update_trace()
@@ -343,3 +354,15 @@ class AgentLoggingHook(HookProvider):
                         part["image"]["uuid"] = str(gui_trace.screenshot_key)
                         self.update_trace()
                         return
+
+                    elif (
+                        isinstance(part, dict)
+                        and (toolresult := part.get("toolResult", None))
+                        and (content := toolresult.get("content", None))
+                    ):
+                        for item in content:
+                            if item.get("image", None) and item["image"].get(
+                                "uuid", None
+                            ):
+                                item["image"]["uuid"] = str(gui_trace.screenshot_key)
+                                return

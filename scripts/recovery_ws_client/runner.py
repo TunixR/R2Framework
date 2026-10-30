@@ -82,7 +82,10 @@ class RecoveryWsRunner:
         try:
             async with connect(
                 self.config.ws_url,
-                additional_headers={"X-ROBOT-KEY": self.config.robot_key},
+                additional_headers={
+                    "X-ROBOT-KEY": self.config.robot_key,
+                    "X-AGENT-ID": self.config.agent_id,
+                },
                 max_size=None,
             ) as websocket:
                 await websocket.send(json.dumps(self.payload))

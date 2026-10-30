@@ -17,9 +17,9 @@ from strands.types.content import Messages
 from agent_tools.hooks import AgentLoggingHook, LimitToolCounts, ToolLoggingHook
 from agent_tools.image import screenshot_bytes
 
-from ..provider.models import Router
-from ..tools.models import Tool
-from .uitars import standalone_uitars
+from database.provider.models import Router
+from database.tools.models import Tool
+from database.agents.tooled_gui_agent import TooledGuiAgent
 
 
 class Argument(SQLModel, table=True):
@@ -260,7 +260,7 @@ class Agent(SQLModel, table=True):
 
         ## Temporary fix until polymorphism is supported by sqlmodel
         if self.type == AgentType.GuiAgent:  # Actually only supports uitars
-            return standalone_uitars
+            return TooledGuiAgent(self).tooled_guiagent
 
         @tool(
             name=self.get_tool_name(),

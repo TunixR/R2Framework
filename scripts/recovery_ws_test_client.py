@@ -19,6 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _ = parser.add_argument("--ws-url", required=True)
     _ = parser.add_argument("--robot-key", required=True)
+    _ = parser.add_argument("--agent-id", default=None)
     _ = parser.add_argument("--payload-id", type=int, required=True)
     _ = parser.add_argument(
         "--payload-file",
@@ -87,6 +88,7 @@ def main() -> int:
         config = ClientConfig(
             ws_url=args.ws_url,
             robot_key=args.robot_key,
+            agent_id=args.agent_id,
             payload_file=payload_file,
             payload_id=args.payload_id,
             action_delay_seconds=args.action_delay_seconds,
