@@ -455,7 +455,15 @@ class TooledGuiAgent:
                     reasoningSignature="",
                 ),
                 agent=None,
-                invocation_state={},
+                invocation_state={
+                    "inputs": {
+                        "task": task,
+                        "variables": variables,
+                        "ui_log": ui_log,
+                        "errored_act": errored_act,
+                        "model": model,
+                    },
+                },
             )
 
         if override_invocation_state is not None:
@@ -505,7 +513,6 @@ class TooledGuiAgent:
 
         agent = StrandsAgent(  # type: ignore
             model=agent_model,
-            messages=messages,
             tools=self.get_gui_tools(variables),
             hooks=[hook, MaxGuiImagesHook()],
         )
@@ -514,7 +521,7 @@ class TooledGuiAgent:
             tool_context.agent = agent
 
         try:
-            _ = await agent.invoke_async("", invocation_state=inner_state)
+            _ = await agent.invoke_async(messages, invocation_state=inner_state)
 
             conversation_history = list(
                 map(
