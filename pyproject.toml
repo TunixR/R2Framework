@@ -50,6 +50,7 @@ reportUnknownParameterType = false
 reportUnknownVariableType = false
 reportUnknownMemberType = false
 reportUnknownArgumentType = false
+reportIncompatibleMethodOverride = false
 reportAny = false
 reportExplicitAny = false
 reportUnannotatedClassAttribute = false

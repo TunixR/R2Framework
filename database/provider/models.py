@@ -137,7 +137,7 @@ class Router(SQLModel, table=True):
         ):
             return OpenAIModel(
                 client_args={
-                    "api_key": self.api_key,
+                    "api_key": self.api_key or "api-key",
                     "base_url": self.api_endpoint,
                 },
                 stream=True,
