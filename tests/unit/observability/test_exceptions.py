@@ -103,7 +103,7 @@ def test_unhandled_error_is_generic_and_recorded(boom_app: Harness) -> None:
     error_logs = [
         record
         for record in logs
-        if "unhandled_exception" in str(record.log_record.body)
+        if record.log_record.event_name == "http.unhandled_exception"
     ]
     assert error_logs
     for record in error_logs:

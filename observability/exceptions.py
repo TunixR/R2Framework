@@ -12,8 +12,10 @@ from fastapi.responses import JSONResponse
 from opentelemetry import trace
 from opentelemetry.trace import Span, Status, StatusCode
 
+from observability import attributes as attrs
 from observability.correlation import get_request_id
-from observability.logging import redact
+from observability.events import log_event
+from observability.redaction import redact
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -65,24 +67,34 @@ def record_exception(
     span.set_status(Status(StatusCode.ERROR, type(exc).__name__))
 
 
+def _request_attributes(request: Request, status_code: int) -> dict[str, object]:
+    return {
+        attrs.HTTP_REQUEST_METHOD: request.method,
+        attrs.URL_PATH: request.url.path,
+        attrs.HTTP_RESPONSE_STATUS_CODE: status_code,
+    }
+
+
 async def http_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     error = cast(HTTPException, exc)
     if error.status_code >= 500:
-        logger.error(
-            "http_error status=%d method=%s path=%s",
-            error.status_code,
-            request.method,
-            request.url.path,
+        log_event(
+            logger,
+            attrs.EVENT_HTTP_SERVER_ERROR,
+            _request_attributes(request, error.status_code),
+            logging.ERROR,
             exc_info=exc,
         )
         record_exception(trace.get_current_span(), exc)
     else:
-        logger.warning(
-            "http_client_error status=%d method=%s path=%s detail=%s",
-            error.status_code,
-            request.method,
-            request.url.path,
-            error.detail,
+        log_event(
+            logger,
+            attrs.EVENT_HTTP_CLIENT_ERROR,
+            {
+                **_request_attributes(request, error.status_code),
+                attrs.EXCEPTION_MESSAGE: str(error.detail),
+            },
+            logging.WARNING,
         )
     return JSONResponse(
         status_code=error.status_code,
@@ -103,11 +115,17 @@ async def validation_exception_handler(
         }
         for detail in error.errors()
     ]
-    logger.warning(
-        "request_validation_failed method=%s path=%s errors=%s",
-        request.method,
-        request.url.path,
-        details,
+    log_event(
+        logger,
+        attrs.EVENT_HTTP_VALIDATION_FAILED,
+        {
+            **_request_attributes(request, 422),
+            attrs.REQUEST_INVALID_FIELDS: [
+                ".".join(str(part) for part in detail["loc"])  # pyright: ignore[reportGeneralTypeIssues]
+                for detail in details
+            ],
+        },
+        logging.WARNING,
     )
     return JSONResponse(status_code=422, content={"detail": details})
 
@@ -137,10 +155,15 @@ class UnhandledExceptionMiddleware:
         except Exception as exc:
             if scope["type"] != "http" or response_started:
                 raise
-            logger.error(
-                "unhandled_exception method=%s path=%s",
-                scope.get("method"),
-                scope.get("path"),
+            log_event(
+                logger,
+                attrs.EVENT_HTTP_UNHANDLED_EXCEPTION,
+                {
+                    attrs.HTTP_REQUEST_METHOD: scope.get("method"),
+                    attrs.URL_PATH: scope.get("path"),
+                    attrs.ERROR_TYPE: type(exc).__name__,
+                },
+                logging.ERROR,
                 exc_info=exc,
             )
             record_exception(trace.get_current_span(), exc)

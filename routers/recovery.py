@@ -1,8 +1,7 @@
 import asyncio
 import json
 import logging
-import time
-from typing import Any, TypedDict
+from typing import Any
 from uuid import UUID
 
 from fastapi import (
@@ -22,7 +21,8 @@ import database.general as database
 from database.agents.models import Agent, AgentType
 from database.keys.models import RobotKey
 from database.logging.models import RecoveryContext, RobotException
-from observability.events import brief, elapsed_ms, error_type, log_event
+from observability import attributes as attrs
+from observability.events import brief, error_type, log_event
 from observability.exceptions import record_exception
 from security.utils import robot_key_hash
 from templates.common import TemplateModel
@@ -78,20 +78,17 @@ def find_enabled_robot_key(
     return robot_key
 
 
-class _PayloadSummary(TypedDict):
-    ui_log_count: int
-    has_errored_activity: bool
-    payload_bytes: int
-
-
-def _summarize_payload(raw: str, data: Any) -> _PayloadSummary:
-    """Describe a raw recovery payload without logging any of its values."""
+def _payload_attributes(raw: str, data: Any) -> dict[str, int | bool]:
+    """Describe a raw recovery payload without exposing any of its values."""
     ui_log = data.get("ui_log") if isinstance(data, dict) else None
     return {
-        "ui_log_count": len(ui_log) if isinstance(ui_log, list) else 0,
-        "has_errored_activity": isinstance(data, dict)
-        and bool(data.get("errored_act")),
-        "payload_bytes": len(raw.encode()),
+        attrs.RECOVERY_PAYLOAD_SIZE: len(raw.encode()),
+        attrs.RECOVERY_PAYLOAD_UI_LOG_COUNT: (
+            len(ui_log) if isinstance(ui_log, list) else 0  # pyright: ignore[reportUnknownArgumentType]
+        ),
+        attrs.RECOVERY_PAYLOAD_HAS_ERRORED_ACTIVITY: (
+            isinstance(data, dict) and bool(data.get("errored_act"))
+        ),
     }
 
 
@@ -195,33 +192,25 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
     if not robot_key:
         log_event(
             logger,
-            "recovery.auth_failed",
+            attrs.EVENT_RECOVERY_AUTH_FAILED,
+            {
+                attrs.ERROR_TYPE: "invalid_robot_key",
+                attrs.CLIENT_ADDRESS: websocket.client.host
+                if websocket.client
+                else None,
+            },
             logging.WARNING,
-            reason="invalid_robot_key",
-            client=websocket.client,
         )
         raise WebSocketDisconnect(code=1008, reason="Invalid robot key")
 
     await websocket.accept()
 
     with tracer.start_as_current_span(
-        "recovery.turn",
-        attributes={
-            "recovery.ws_path": "/recovery/robot_exception/ws",
-            "recovery.client": str(websocket.client),
-        },
+        attrs.SPAN_RECOVERY_TURN,
+        attributes={attrs.ROBOT_KEY_ID: str(robot_key.id)},
         record_exception=False,
         set_status_on_exception=False,
     ) as span:
-        turn_start = time.perf_counter()
-        robot_key_id = str(robot_key.id)
-        span.set_attribute("recovery.robot_key_id", robot_key_id)
-        log_event(
-            logger,
-            "recovery.connected",
-            robot_key_id=robot_key_id,
-            client=websocket.client,
-        )
 
         async def keep_alive():
             try:
@@ -229,20 +218,13 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
                     await asyncio.sleep(10)
                     await websocket.send_json({"type": "ping"})
             except WebSocketDisconnect:
-                log_event(
-                    logger,
-                    "recovery.keep_alive_disconnected",
-                    logging.DEBUG,
-                    robot_key_id=robot_key_id,
-                )
                 return
             except Exception as exc:  # noqa: BLE001 - keep-alive must not crash the turn
                 log_event(
                     logger,
-                    "recovery.keep_alive_failed",
+                    attrs.EVENT_RECOVERY_KEEP_ALIVE_FAILED,
+                    {attrs.ERROR_TYPE: error_type(exc)},
                     logging.WARNING,
-                    robot_key_id=robot_key_id,
-                    error_type=error_type(exc),
                 )
                 return
 
@@ -252,26 +234,15 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
             # so the payload size is known without re-serializing it.
             raw = await websocket.receive_text()
             data = json.loads(raw)
-
-            summary = _summarize_payload(raw, data)
-            log_event(
-                logger,
-                "recovery.payload_received",
-                robot_key_id=robot_key_id,
-                **summary,
-            )
-            span.set_attribute("recovery.ui_log_count", summary["ui_log_count"])
+            span.set_attributes(_payload_attributes(raw, data))
 
             agent = _get_gateway_agent(session)
 
             if not agent:
                 log_event(
-                    logger,
-                    "recovery.no_gateway_agent",
-                    logging.ERROR,
-                    robot_key_id=robot_key_id,
+                    logger, attrs.EVENT_RECOVERY_NO_GATEWAY_AGENT, None, logging.ERROR
                 )
-                span.set_attribute("recovery.outcome", "no_gateway_agent")
+                span.set_attribute(attrs.RECOVERY_OUTCOME, "no_gateway_agent")
                 span.set_status(Status(StatusCode.ERROR, "no_gateway_agent"))
                 await websocket.send_json(
                     {
@@ -282,60 +253,31 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
                 await websocket.close()
                 return
 
-            agent_id = str(agent.id)
-            span.set_attribute("agent.id", agent_id)
+            span.set_attribute(attrs.AGENT_ID, str(agent.id))
 
             try:
                 recovery_context = _build_recovery_context_or_raise(data)
-                task_name = brief(recovery_context.task_name)
-                model = brief(recovery_context.model)
                 span.set_attributes(
                     {
-                        "recovery.task_name": task_name,
-                        "recovery.platform": recovery_context.platform,
-                        "recovery.os": recovery_context.os,
-                        "inference.model": model,
+                        attrs.RECOVERY_TASK_NAME: brief(recovery_context.task_name),
+                        attrs.RECOVERY_PLATFORM: recovery_context.platform,
+                        attrs.RECOVERY_OS: recovery_context.os,
+                        attrs.RECOVERY_PROCESS_MODEL: brief(recovery_context.model),
                     }
                 )
 
-                persist_start = time.perf_counter()
-                exception = _persist_exception_with_context(
-                    session, data, robot_key, recovery_context
-                )
+                with tracer.start_as_current_span(attrs.SPAN_RECOVERY_PERSIST):
+                    exception = _persist_exception_with_context(
+                        session, data, robot_key, recovery_context
+                    )
                 recovery_id = str(exception.id)
-                span.set_attribute("recovery.id", recovery_id)
-                log_event(
-                    logger,
-                    "recovery.persisted",
-                    recovery_id=recovery_id,
-                    robot_key_id=robot_key_id,
-                    duration_ms=elapsed_ms(persist_start),
-                )
+                span.set_attribute(attrs.RECOVERY_ID, recovery_id)
 
-                log_event(
-                    logger,
-                    "recovery.agent_started",
-                    recovery_id=recovery_id,
-                    agent_id=agent_id,
-                    model=model,
-                    task_name=task_name,
-                    platform=recovery_context.platform,
-                    os=recovery_context.os,
-                    ui_log_count=len(recovery_context.ui_log_entries),
-                )
-                agent_start = time.perf_counter()
+                # Strands traces the agent run as a child span of this turn.
                 response = await _invoke_gateway_agent(
                     agent, websocket, exception, recovery_context
                 )
                 success = bool(response.get("success", False))
-                log_event(
-                    logger,
-                    "recovery.agent_finished",
-                    recovery_id=recovery_id,
-                    agent_id=agent_id,
-                    success=success,
-                    duration_ms=elapsed_ms(agent_start),
-                )
 
                 await websocket.send_json(
                     {"type": "done", "content": response, "id": recovery_id}
@@ -346,39 +288,30 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
                 session.add(exception)
                 session.commit()
 
-                outcome = "success" if success else "completed_unsuccessful"
                 span.set_attributes(
-                    {"recovery.success": success, "recovery.outcome": outcome}
-                )
-                log_event(
-                    logger,
-                    "recovery.turn_finished",
-                    recovery_id=recovery_id,
-                    outcome=outcome,
-                    success=success,
-                    duration_ms=elapsed_ms(turn_start),
+                    {
+                        attrs.RECOVERY_SUCCESS: success,
+                        attrs.RECOVERY_OUTCOME: (
+                            "success" if success else "completed_unsuccessful"
+                        ),
+                    }
                 )
             except WebSocketDisconnect:
-                log_event(
-                    logger,
-                    "recovery.client_disconnected",
-                    recovery_id=recovery_id,
-                    robot_key_id=robot_key_id,
-                )
-                span.set_attribute("recovery.outcome", "client_disconnected")
+                span.set_attribute(attrs.RECOVERY_OUTCOME, "client_disconnected")
             except RecoveryWsDomainError as exc:
                 field_paths = _payload_field_paths(exc)
                 log_event(
                     logger,
-                    "recovery.payload_invalid",
+                    attrs.EVENT_RECOVERY_PAYLOAD_INVALID,
+                    {attrs.RECOVERY_PAYLOAD_INVALID_FIELDS: field_paths},
                     logging.WARNING,
-                    recovery_id=recovery_id,
-                    robot_key_id=robot_key_id,
-                    error_count=len(field_paths),
-                    field_paths=field_paths,
                 )
-                span.set_attribute("recovery.outcome", "invalid_payload")
-                span.set_attribute("recovery.field_paths", field_paths)
+                span.set_attributes(
+                    {
+                        attrs.RECOVERY_OUTCOME: "invalid_payload",
+                        attrs.RECOVERY_PAYLOAD_INVALID_FIELDS: field_paths,
+                    }
+                )
                 record_exception(
                     span,
                     exc,
@@ -395,14 +328,12 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
             except Exception as exc:  # noqa: BLE001 - reported to the client and the span
                 log_event(
                     logger,
-                    "recovery.turn_failed",
+                    attrs.EVENT_RECOVERY_TURN_FAILED,
+                    {attrs.RECOVERY_ID: recovery_id, attrs.ERROR_TYPE: error_type(exc)},
                     logging.ERROR,
-                    exc_info=True,
-                    recovery_id=recovery_id,
-                    robot_key_id=robot_key_id,
-                    error_type=error_type(exc),
+                    exc_info=exc,
                 )
-                span.set_attribute("recovery.outcome", "internal_error")
+                span.set_attribute(attrs.RECOVERY_OUTCOME, "internal_error")
                 record_exception(span, exc, escaped=False)
                 await websocket.send_json(
                     {"type": "error", "content": "Internal server error"}
@@ -422,39 +353,20 @@ async def handle_robot_exception(websocket: WebSocket, session: database.Session
 async def report_recovery_result(
     request: Request, recovery_id: str, session: database.SessionDep
 ):
+    # Rejections below are logged by the global HTTP exception handler.
     try:
         recovery_uuid = UUID(recovery_id)
     except ValueError as exc:
-        log_event(
-            logger,
-            "recovery.report_result_invalid_id",
-            logging.WARNING,
-            recovery_id=recovery_id,
-        )
         raise HTTPException(
             status_code=400, detail="Invalid recovery ID format. Must be a UUID."
         ) from exc
 
     key_raw = request.headers.get(ROBOT_KEY_HEADER)
     if not key_raw:
-        log_event(
-            logger,
-            "recovery.report_result_auth_failed",
-            logging.WARNING,
-            recovery_id=recovery_id,
-            reason="no_robot_key",
-        )
         raise HTTPException(status_code=401, detail="No robot key provided")
 
     robot_key = find_enabled_robot_key(session, key_raw)
     if not robot_key:
-        log_event(
-            logger,
-            "recovery.report_result_auth_failed",
-            logging.WARNING,
-            recovery_id=recovery_id,
-            reason="invalid_robot_key",
-        )
         raise HTTPException(status_code=403, detail="Invalid robot key")
 
     body = await request.json()
@@ -462,22 +374,16 @@ async def report_recovery_result(
 
     exception = session.get(RobotException, recovery_uuid)
     if not exception:
-        log_event(
-            logger,
-            "recovery.report_result_not_found",
-            logging.WARNING,
-            recovery_id=recovery_uuid,
-        )
         raise HTTPException(status_code=404, detail="Recovery ID not found")
 
     exception.infered_success = success
     session.add(exception)
     session.commit()
-    log_event(
-        logger,
-        "recovery.report_result",
-        recovery_id=recovery_uuid,
-        robot_key_id=robot_key.id,
-        success=success,
+    trace.get_current_span().set_attributes(
+        {
+            attrs.RECOVERY_ID: str(recovery_uuid),
+            attrs.ROBOT_KEY_ID: str(robot_key.id),
+            attrs.RECOVERY_SUCCESS: bool(success),
+        }
     )
     return Response(status_code=204)
