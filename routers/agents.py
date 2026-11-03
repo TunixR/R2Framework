@@ -7,6 +7,7 @@ from sqlmodel import select
 
 from database.agents.models import Agent, AgentCreate, AgentUpdate
 from database.auth.models import User
+from database.engine import commit_or_500
 from database.general import SessionDep
 from database.provider.models import Router
 from middlewares.auth import get_current_user, require_admin
@@ -66,14 +67,7 @@ def create_agent(
         ) from e
 
     session.add(agent)
-    try:
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to create agent: {str(e)}",
-        )
+    commit_or_500(session, "create agent")
     session.refresh(agent)
     return agent
 
@@ -107,15 +101,8 @@ def update_agent(
             detail=str(e),
         ) from e
 
-    try:
-        session.add(agent)
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to update agent: {str(e)}",
-        )
+    session.add(agent)
+    commit_or_500(session, "update agent")
     session.refresh(agent)
     return agent
 
@@ -138,12 +125,4 @@ def delete_agent(
         )
 
     session.delete(agent)
-    try:
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to delete agent: {str(e)}",
-        )
-    return
+    commit_or_500(session, "delete agent")

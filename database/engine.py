@@ -1,5 +1,6 @@
 from typing import Annotated
 
+from fastapi import HTTPException, status
 from fastapi.params import Depends
 from sqlmodel import Session, create_engine
 
@@ -16,3 +17,19 @@ def get_session():
 
 
 SessionDep = Annotated[Session, Depends(get_session)]
+
+
+def commit_or_500(session: Session, action: str) -> None:
+    """Commit, or roll back and raise a generic 500.
+
+    The global HTTP exception handler logs the chained database error and
+    records it on the request span, so callers need no logging of their own.
+    """
+    try:
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to {action}.",
+        ) from exc

@@ -6,11 +6,10 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from opentelemetry import trace
-from opentelemetry.trace import StatusCode
 from sqlmodel import select
 
 from database.auth.models import User
+from database.engine import commit_or_500
 from database.general import SessionDep
 from database.keys.models import (
     RobotKey,
@@ -24,8 +23,6 @@ from security.utils import robot_key_hash
 router = APIRouter(
     prefix="/keys", tags=["Keys"], dependencies=[Depends(get_current_user)]
 )
-
-tracer = trace.get_tracer(__name__)
 
 
 @router.get("", response_model=Sequence[RobotKeyPublic], summary="List RobotKeys")
@@ -87,17 +84,7 @@ def create_robot_key(
     )
 
     session.add(key)
-    try:
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        span = trace.get_current_span()
-        span.record_exception(e)
-        span.set_status(StatusCode.ERROR, "Failed to create key")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to create key.",
-        )
+    commit_or_500(session, "create key")
     session.refresh(key)
 
     return RobotKeyCreated(
@@ -126,18 +113,7 @@ def delete_robot_key(
             status_code=status.HTTP_404_NOT_FOUND, detail="Key not found"
         )
     session.delete(key)
-    try:
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        span = trace.get_current_span()
-        span.record_exception(e)
-        span.set_status(StatusCode.ERROR, "Failed to delete key")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to delete key.",
-        )
-    return
+    commit_or_500(session, "delete key")
 
 
 @router.post(
@@ -158,17 +134,7 @@ def toggle_robot_key(
 
     key.enabled = not key.enabled
     session.add(key)
-    try:
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        span = trace.get_current_span()
-        span.record_exception(e)
-        span.set_status(StatusCode.ERROR, "Failed to toggle key")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to toggle key.",
-        )
+    commit_or_500(session, "toggle key")
     session.refresh(key)
 
     return RobotKeyPublic(

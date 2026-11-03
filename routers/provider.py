@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -8,6 +8,7 @@ from sqlmodel import select
 
 from database.agents.models import Agent
 from database.auth.models import User
+from database.engine import commit_or_500
 from database.general import SessionDep
 from database.provider.models import (
     Router,
@@ -86,14 +87,7 @@ def create_router(
 ) -> RouterPublic:
     router_obj = Router(**payload.model_dump())
     session.add(router_obj)
-    try:
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to create router: {str(e)}",
-        )
+    commit_or_500(session, "create router")
     session.refresh(router_obj)
     return RouterPublic.model_validate(router_obj)
 
@@ -124,17 +118,10 @@ def replace_router(
     router_obj.capabilities = payload.capabilities
     router_obj.vision_backbone = payload.vision_backbone
     router_obj.normalize_vision_backbone()
-    router_obj.updated_at = datetime.now(timezone.utc)
+    router_obj.updated_at = datetime.now(UTC)
 
-    try:
-        session.add(router_obj)
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to update router: {str(e)}",
-        )
+    session.add(router_obj)
+    commit_or_500(session, "update router")
     session.refresh(router_obj)
     return RouterPublic.model_validate(router_obj)
 
@@ -171,17 +158,10 @@ def update_router(
         router_obj.vision_backbone = payload.vision_backbone
     router_obj.normalize_vision_backbone()
 
-    router_obj.updated_at = datetime.now(timezone.utc)
+    router_obj.updated_at = datetime.now(UTC)
 
-    try:
-        session.add(router_obj)
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to update router: {str(e)}",
-        )
+    session.add(router_obj)
+    commit_or_500(session, "update router")
     session.refresh(router_obj)
     return RouterPublic.model_validate(router_obj)
 
@@ -203,12 +183,4 @@ def delete_router(
         )
 
     session.delete(router_obj)
-    try:
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to delete router: {str(e)}",
-        )
-    return
+    commit_or_500(session, "delete router")
