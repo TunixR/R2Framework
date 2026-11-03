@@ -118,10 +118,11 @@ WebSocket /recovery/robot_exception/ws            (FastAPI instrumentation)
 | `recovery.turn` | `robot_key.id`, `agent.id`, `recovery.id`, `recovery.outcome` (`success`, `completed_unsuccessful`, `invalid_payload`, `client_disconnected`, `no_gateway_agent`, `internal_error`), `recovery.success`, `recovery.task_name`, `recovery.platform`, `recovery.os`, `recovery.process_model`, `recovery.payload.size`, `recovery.payload.ui_log_count`, `recovery.payload.has_errored_activity`, `recovery.payload.invalid_fields` |
 | `recovery.persist` | none |
 | `invoke_agent` (Strands) | `agent.id`, `agent_trace.id` (joins the trace to the `AgentTrace` row) |
-| `execute_tool` (GUI agent) | `gui.task.name`, `gui.task.process_model`, `gui.task.ui_log_count`, `gui.task.has_errored_activity`, `gui.task.iterations`, `gui.task.outcome` (`done`, `max_actions_exceeded`) |
+| `execute_tool` (GUI agent) | `gui.task.name`, `gui.task.process_model`, `gui.task.ui_log_count`, `gui.task.has_errored_activity`, `gui.task.iterations`, `gui.task.outcome` (`done`, `max_actions_exceeded`, `unparseable_response`) |
 | `gui.action` | `gui.action.iteration`, `gui.action.type`, `gui.action.success`; failed actions carry a redacted exception |
 | `gui.screenshot` | `gui.screenshot.width`, `gui.screenshot.height`, `gui.screenshot.size` |
 | `POST /recovery/report_result/{recovery_id}` | `recovery.id`, `robot_key.id`, `recovery.success` |
+| `recovery.eval` (`/evals/recovery/eval/ws`) | `robot_key.id`, `agent.id`; unexpected failures carry a redacted exception |
 
 Log events:
 
@@ -132,6 +133,7 @@ Log events:
 | `recovery.no_gateway_agent` | ERROR | none |
 | `recovery.payload_invalid` | WARN | `recovery.payload.invalid_fields` (paths only) |
 | `recovery.turn_failed` | ERROR | `recovery.id`, `error.type`, redacted `exception.*` |
+| `recovery.eval_invalid` | WARN | `error.type` |
 | `gui.action_retry` | WARN | `gui.action.iteration`, `error.type`, `exception.message` |
 | `gui.max_actions_exceeded` | WARN | `gui.task.max_actions` |
 | `agent.usage` | INFO | `agent.id`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `agent.cost` |
@@ -141,6 +143,37 @@ Log events:
 Every event carries the active trace and span ids, so filtering logs by trace shows every problem
 within a recovery. The Postgres audit tables (`AgentTrace`, `ToolTrace`, `GUITrace`) remain the
 record of payloads, messages and screenshots; telemetry does not duplicate them.
+
+### Where the instrumentation lives
+
+Business code reports milestones; small per-flow telemetry objects decide how they become spans,
+attributes and events:
+
+- `routers/recovery_telemetry.py`: `recovery_turn()` / `RecoveryTurnTelemetry` for the recovery
+  websocket (`payload_received`, `persisting`, `persisted`, `completed`, `invalid_payload`,
+  `failed`, ...).
+- `database/agents/gui_telemetry.py`: `GuiTaskTelemetry` for the GUI agent loop (`screenshot`,
+  `action`, `retry`, `done`, `max_actions_exceeded`, `stopped`).
+
+## Conventions for new code
+
+- **Span or event?** Work with a duration, or that other work nests under, is a span. A point-in-
+  time problem that is not already a span (rejection, recovered failure, misconfiguration,
+  accounting) is a `log_event`. Do not log "started"/"finished" pairs or successful steps.
+- **Check what is already traced.** FastAPI requests and websockets, Strands agents, model calls and
+  tool calls already have spans. Add attributes to the current span instead of wrapping it again.
+- **Names.** Add every span, event and attribute name to `observability/attributes.py`; reuse a
+  semantic-convention key when one exists; keep project keys under a domain namespace, lowercase
+  and dotted. Update the tables above in the same change.
+- **Values.** Never export payloads, prompts, UI log `input` values, screenshots or credentials.
+  Describe data by shape (counts, sizes, field paths) and pass free text through `brief()`.
+- **Exceptions.** Use `observability.exceptions.record_exception` (redacted) rather than
+  `span.record_exception`. Expected domain failures are WARN events; unexpected ones are ERROR events
+  with `exc_info` plus `record_exception`. Never return raw exception text to clients.
+- **Keep business code readable.** When a flow needs more than one or two telemetry calls, give it
+  a telemetry object next to it (see above) and test that object with in-memory exporters.
+- **Correlate with the database.** When code creates an audit row (`RobotException`,
+  `AgentTrace`, ...), put its id on the current span (`recovery.id`, `agent_trace.id`).
 
 ## SigNoz queries
 
@@ -228,7 +261,7 @@ The tests use `InMemorySpanExporter` / `InMemoryLogRecordExporter` and never mak
 
 ## Privacy
 
-Redaction is a known gap and is tracked as future work. Today:
+Redaction is a known gap, tracked in [#202](https://github.com/TunixR/R2Framework/issues/202). Today:
 
 - Regex redaction misses quoted keys, e.g. `{"password": "..."}` in JSON or Python reprs.
 - Strands exports prompts and completions as `gen_ai.*` span data. They include the task, the UI
