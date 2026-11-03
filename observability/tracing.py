@@ -10,6 +10,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 
 from observability.config import ObservabilitySettings
+from observability.redaction import RedactingSpanProcessor
 
 if TYPE_CHECKING:
     from opentelemetry.sdk.trace.export import SpanExporter
@@ -51,5 +52,6 @@ def create_tracer_provider(
         resource=build_resource(settings),
         sampler=ParentBased(TraceIdRatioBased(settings.sample_ratio)),
     )
-    provider.add_span_processor(BatchSpanProcessor(exporter))
+    # Every exported span goes through the redaction choke point.
+    provider.add_span_processor(RedactingSpanProcessor(BatchSpanProcessor(exporter)))
     return provider
