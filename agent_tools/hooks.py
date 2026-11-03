@@ -1,5 +1,6 @@
+import logging
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from threading import Lock
 from typing import Any, override
 from uuid import UUID, uuid4
@@ -18,9 +19,12 @@ from strands.hooks import (
 from strands.types.content import ContentBlock, Message
 from strands.types.tools import ToolResultContent
 
+from observability.events import error_type, log_event
 from settings import MAX_GUI_IMAGES
 
 OMITTED_IMAGE_TEXT = "ommited screenshot due to max allowed images per message"
+
+logger = logging.getLogger(__name__)
 
 
 class MaxGuiImagesHook(HookProvider):
@@ -173,6 +177,14 @@ class ToolLoggingHook(HookProvider):
             session.add(tool_trace)
             session.commit()
             self.trace_id = trace_id
+            log_event(
+                logger,
+                "tool.started",
+                logging.DEBUG,
+                tool_name=tool_name,
+                tool_trace_id=trace_id,
+                agent_trace_id=self.agent_trace_id,
+            )
 
     def log_tool_response(self, event: AfterToolCallEvent) -> None:
         from database.engine import general_engine
@@ -188,7 +200,7 @@ class ToolLoggingHook(HookProvider):
             if not tool_trace:
                 raise RuntimeError(f"ToolTrace with id {self.trace_id} not found.")
 
-            tool_trace.finished_at = datetime.now(timezone.utc)
+            tool_trace.finished_at = datetime.now(UTC)
 
             if event.exception:
                 tool_trace.output = str(event.exception)
@@ -201,6 +213,15 @@ class ToolLoggingHook(HookProvider):
 
             session.add(tool_trace)
             session.commit()
+            log_event(
+                logger,
+                "tool.finished",
+                tool_name=tool_name,
+                tool_trace_id=self.trace_id,
+                agent_trace_id=self.agent_trace_id,
+                success=tool_trace.success,
+                error_type=error_type(event.exception),
+            )
 
 
 class AgentLoggingHook(HookProvider):
@@ -262,6 +283,15 @@ class AgentLoggingHook(HookProvider):
 
             session.commit()
             self.created = True
+            log_event(
+                logger,
+                "agent.trace_started",
+                agent_id=self.agent_id,
+                agent_trace_id=self.agent_trace_id,
+                robot_exception_id=self.invocation_state.get("robot_exception_id"),
+                parent_trace_id=self.parent_trace_id,
+                is_gui_agent=self.is_gui_agent,
+            )
 
     def log_message(self, event: MessageAddedEvent) -> None:
         message = {
@@ -269,7 +299,7 @@ class AgentLoggingHook(HookProvider):
             "content": deepcopy(
                 event.message.get("content", [])
             ),  # Includes text, toolcalls, images, etc.
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         for part in message["content"]:
@@ -306,11 +336,21 @@ class AgentLoggingHook(HookProvider):
 
             trace.messages = self.messages
             if finished:
-                trace.finished_at = datetime.now(timezone.utc)
+                trace.finished_at = datetime.now(UTC)
                 trace.cost = cost
 
             session.add(trace)
             session.commit()
+            if finished:
+                log_event(
+                    logger,
+                    "agent.trace_finished",
+                    agent_id=self.agent_id,
+                    agent_trace_id=self.agent_trace_id,
+                    robot_exception_id=self.invocation_state.get("robot_exception_id"),
+                    cost=cost,
+                    is_gui_agent=self.is_gui_agent,
+                )
 
     async def register_gui_trace(
         self,
@@ -340,6 +380,15 @@ class AgentLoggingHook(HookProvider):
             session.add(gui_trace)
             session.commit()
             session.refresh(gui_trace)
+            log_event(
+                logger,
+                "gui.trace_registered",
+                logging.DEBUG,
+                action_type=action_type,
+                success=success,
+                agent_trace_id=self.agent_trace_id,
+                screenshot_bytes=len(screenshot_bytes),
+            )
 
             # This is a fucking hack if I've ever seen one
             # We need to update the agent trace messages with images so that they contain the uuid of the image stored in S3

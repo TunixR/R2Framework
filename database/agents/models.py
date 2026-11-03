@@ -1,10 +1,10 @@
 import enum
+import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from importlib import import_module
 from typing import Any, override
 
-from fastapi import WebSocketDisconnect
 from pydantic import BaseModel
 from sqlalchemy import Column
 from sqlmodel import Enum, Field, Relationship, SQLModel
@@ -16,10 +16,12 @@ from strands.types.content import Messages
 
 from agent_tools.hooks import AgentLoggingHook, LimitToolCounts, ToolLoggingHook
 from agent_tools.image import screenshot_bytes
-
+from database.agents.tooled_gui_agent import TooledGuiAgent
 from database.provider.models import Router
 from database.tools.models import Tool
-from database.agents.tooled_gui_agent import TooledGuiAgent
+from observability.events import log_event
+
+logger = logging.getLogger(__name__)
 
 
 class Argument(SQLModel, table=True):
@@ -191,11 +193,11 @@ class Agent(SQLModel, table=True):
     )
 
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         description="Timestamp of when the agent was created.",
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         description="Timestamp of when the agent was last updated.",
     )
 
@@ -397,7 +399,7 @@ class Agent(SQLModel, table=True):
             try:
                 setattr(self, key, value)
             except Exception as e:
-                raise ValueError(f"Failed to set field '{key}': {str(e)}") from e
+                raise ValueError(f"Failed to set field '{key}': {e!s}") from e
 
         self.router = router
         self.router_id = router.id
@@ -411,13 +413,13 @@ class Agent(SQLModel, table=True):
         try:
             module = import_module(module_path)
         except Exception as e:
-            raise ImportError(f"Could not import module '{module_path}': {e}")
+            raise ImportError(f"Could not import module '{module_path}': {e}") from e
         try:
             model_class: type[Any] = getattr(module, class_name)
         except Exception as e:
             raise ImportError(
                 f"Could not find class '{class_name}' in module '{module_path}': {e}"
-            )
+            ) from e
         if not issubclass(model_class, BaseModel):
             raise ValueError(
                 f"The class '{self.response_model}' is not a valid Pydantic model."
@@ -518,10 +520,6 @@ class Agent(SQLModel, table=True):
             if response is None:
                 raise ValueError("Agent did not return a structured response.")
             return response.model_dump()
-        except WebSocketDisconnect:
-            raise
-        except Exception as e:
-            raise e
         finally:
             cost = self.router.get_conversation_cost(input_tokens, output_tokens)
             agent_logging_hook: AgentLoggingHook | None = next(
@@ -532,6 +530,14 @@ class Agent(SQLModel, table=True):
             )
             if agent_logging_hook:
                 agent_logging_hook.update_trace(finished=True, cost=cost)
+            log_event(
+                logger,
+                "agent.usage",
+                agent_id=self.id,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cost=cost,
+            )
 
     def __init__(self, **data: Any) -> None:
         # Routers are passed as objects so their capabilities can be validated
@@ -652,7 +658,7 @@ class SubAgent(SQLModel, table=True):
     )
 
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         description="Timestamp of when the sub-agent association was created.",
     )
 
@@ -694,6 +700,6 @@ class AgentTool(SQLModel, table=True):
     )
 
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         description="Timestamp of when the agent-tool association was created.",
     )

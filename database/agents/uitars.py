@@ -45,17 +45,20 @@ Normalization:
 # Yes we need this shit until polymorphism is allowed in SQLModel
 import ast
 import asyncio
+import logging
 import math
 
 # Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
 # SPDX-License-Identifier: Apache-2.0
 import re
+import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import BytesIO
 from typing import Any
 
 from fastapi import WebSocketDisconnect
+from opentelemetry import trace
 from PIL import Image
 from strands import Agent, ToolContext, tool
 from strands.models.openai import OpenAIModel
@@ -64,6 +67,8 @@ from strands.types.content import ContentBlock, Messages
 from agent_tools.hooks import AgentLoggingHook
 from agent_tools.image import screenshot_bytes
 from config import Config
+from observability.events import brief, elapsed_ms, error_type, log_event
+from observability.exceptions import record_exception
 from prompts.gui_agent import (
     STANDALONE_COMPUTER_USE_DOUBAO,
 )
@@ -77,6 +82,24 @@ IMAGE_FACTOR = 28
 MIN_PIXELS = 100 * 28 * 28
 MAX_PIXELS = 16384 * 28 * 28
 MAX_RATIO = 200
+
+logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
+
+
+async def _capture_screenshot(websocket: Any) -> tuple[bytes, tuple[int, int]]:
+    """Fetch a client screenshot and return its bytes and (width, height)."""
+    image = await screenshot_bytes(websocket)
+    width, height = Image.open(BytesIO(image)).size
+    log_event(
+        logger,
+        "gui.screenshot",
+        logging.DEBUG,
+        width=width,
+        height=height,
+        screenshot_bytes=len(image),
+    )
+    return image, (width, height)
 
 
 def convert_point_to_coordinates(text, is_answer=False):
@@ -137,7 +160,7 @@ def parse_action(action_str):
         return {"function": func_name, "args": kwargs}
 
     except Exception as e:
-        print(f"Failed to parse action '{action_str}': {e}")
+        logger.warning("Failed to parse action %r: %s", action_str, e)
         return None
 
 
@@ -314,7 +337,7 @@ def parse_action_to_structure_output(
     actions = []
     for action_instance, raw_str in zip(parsed_actions, all_action):
         if not action_instance:
-            print(f"Action can't parse: {raw_str}")
+            logger.warning("Action can't parse: %s", raw_str)
             raise ValueError(f"Action can't parse: {raw_str}")
         action_type = action_instance["function"]
         params = action_instance["args"]
@@ -491,7 +514,7 @@ def parsing_response_to_pyautogui_code(
 
             if key_to_press:
                 # Simulate pressing a single key
-                pyautogui_code += f"\npyautogui.keyDown({repr(key_to_press)})"
+                pyautogui_code += f"\npyautogui.keyDown({key_to_press!r})"
 
         elif action_type in ["release", "keyup"]:
             # Parsing press action
@@ -517,7 +540,7 @@ def parsing_response_to_pyautogui_code(
 
             if key_to_press:
                 # Simulate pressing a single key
-                pyautogui_code += f"\npyautogui.keyUp({repr(key_to_press)})"
+                pyautogui_code += f"\npyautogui.keyUp({key_to_press!r})"
 
         elif action_type == "type":
             # Parsing typing action using clipboard
@@ -739,8 +762,17 @@ Model Context: {model}
     if "websocket" not in tool_context.invocation_state:
         raise ValueError("WebSocket must be provided in tool context")
     websocket = tool_context.invocation_state["websocket"]
-    image = await screenshot_bytes(websocket)
-    image_size = Image.open(BytesIO(image)).size
+
+    log_event(
+        logger,
+        "gui.task_started",
+        model=brief(model),
+        task_name=brief(task),
+        ui_log_count=len(ui_log),
+        has_errored_act=bool(errored_act),
+    )
+
+    image, image_size = await _capture_screenshot(websocket)
 
     messages: Messages = [
         {
@@ -784,6 +816,13 @@ Model Context: {model}
         while True:
             iteration += 1
             if iteration > Config.MAX_ACTIONS_ALLOWED:
+                log_event(
+                    logger,
+                    "gui.max_actions_exceeded",
+                    logging.WARNING,
+                    iterations=iteration - 1,
+                    max_actions=Config.MAX_ACTIONS_ALLOWED,
+                )
                 return "Exceeded maximum allowed actions."
 
             ui_tars_response = ""
@@ -804,51 +843,83 @@ Model Context: {model}
                 code = parsing_response_to_pyautogui_code(
                     action, image_size[1], image_size[0]
                 )
+                action_type = action.get("action_type", "unknown")
 
                 if code == "DONE":
+                    now = datetime.now(UTC)
+                    log_event(
+                        logger,
+                        "gui.action_done",
+                        iteration=iteration,
+                        action_type=action_type,
+                    )
                     await hook.register_gui_trace(
-                        action_type=action.get("action_type", "unknown"),
+                        action_type=action_type,
                         action_content=action.get("action_inputs", {}),
                         screenshot_bytes=image,
                         success=True,
-                        started_at=datetime.now(timezone.utc),
-                        finished_at=datetime.now(timezone.utc),
+                        started_at=now,
+                        finished_at=now,
                     )
                     break
 
-                start_datetime = datetime.now(timezone.utc)
-                await websocket.send_json(
-                    {"type": "action", "content": action}
-                )  # Action will be parsed and executed by the client
-                # Wait for action result
-                result = await websocket.receive_json()
-                finish_datetime = datetime.now(timezone.utc)
-                if not result.get("success"):
+                start_datetime = datetime.now(UTC)
+                action_start = time.perf_counter()
+                log_event(
+                    logger,
+                    "gui.action_sent",
+                    iteration=iteration,
+                    action_type=action_type,
+                )
+                with tracer.start_as_current_span(
+                    "gui.action",
+                    attributes={
+                        "gui.iteration": iteration,
+                        "gui.action_type": action_type,
+                    },
+                    record_exception=False,
+                    set_status_on_exception=False,
+                ) as action_span:
+                    await websocket.send_json(
+                        {"type": "action", "content": action}
+                    )  # Action will be parsed and executed by the client
+                    # Wait for action result
+                    result = await websocket.receive_json()
+                    finish_datetime = datetime.now(UTC)
+                    action_ms = elapsed_ms(action_start)
+                    success = bool(result.get("success"))
+                    action_span.set_attribute("gui.success", success)
+                    action_span.set_attribute("gui.duration_ms", action_ms)
+
                     await hook.register_gui_trace(
-                        action_type=action.get("action_type", "unknown"),
+                        action_type=action_type,
                         action_content=action.get("action_inputs", {}),
                         screenshot_bytes=image,
-                        success=False,
+                        success=success,
                         started_at=start_datetime,
                         finished_at=finish_datetime,
                     )
-                    raise RuntimeError(
-                        f"Action execution failed on client side. With action: {action}"
+                    log_event(
+                        logger,
+                        "gui.action_result",
+                        logging.INFO if success else logging.WARNING,
+                        iteration=iteration,
+                        action_type=action_type,
+                        success=success,
+                        duration_ms=action_ms,
                     )
-
-                await hook.register_gui_trace(
-                    action_type=action.get("action_type", "unknown"),
-                    action_content=action.get("action_inputs", {}),
-                    screenshot_bytes=image,
-                    success=True,
-                    started_at=start_datetime,
-                    finished_at=finish_datetime,
-                )
+                    if not success:
+                        # Keep user-typed content out of the span event.
+                        error = RuntimeError(
+                            "Action execution failed on client side "
+                            f"(action_type={action_type})."
+                        )
+                        record_exception(action_span, error)
+                        raise error
 
                 # Artificial delay to allow UI to update
                 await asyncio.sleep(0.5)
-                image = await screenshot_bytes(websocket)
-                image_size = Image.open(BytesIO(image)).size
+                image, image_size = await _capture_screenshot(websocket)
 
                 new_messages: Messages = [
                     {
@@ -867,13 +938,23 @@ Model Context: {model}
                 response = await agent.invoke_async(
                     new_messages  # type: ignore
                 )
-            except WebSocketDisconnect as _:
+            except WebSocketDisconnect:
                 raise
-            except RuntimeError as _:
+            except RuntimeError:
                 raise
-            except Exception as _:
+            except Exception as exc:
+                log_event(
+                    logger,
+                    "gui.action_retry",
+                    logging.WARNING,
+                    iteration=iteration,
+                    error_type=error_type(exc),
+                    detail=brief(exc),
+                )
                 response = agent("The action failed. Try again")
                 continue
+
+        log_event(logger, "gui.task_finished", iterations=iteration)
 
         conversation_history = list(
             map(
