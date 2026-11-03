@@ -7,9 +7,10 @@ This module provides:
 - Session token generation and validation
 """
 
-from datetime import datetime, timedelta, timezone
-import hmac
 import hashlib
+import hmac
+import logging
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 import jwt
@@ -17,6 +18,8 @@ from pydantic import SecretStr
 
 from security.token import TokenData
 from settings import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
+
+logger = logging.getLogger(__name__)
 
 
 def hash_password(password: SecretStr | str) -> str:
@@ -59,6 +62,7 @@ def verify_password(
             plain_password.encode("utf-8"), hashed_password.encode("utf-8")
         )
     except Exception:
+        logger.warning("bcrypt verification failed", exc_info=True)
         return False
 
 
@@ -74,9 +78,9 @@ def generate_session_token(
     """
     to_encode = data.model_dump(mode="json").copy()
     if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
+        expire = datetime.now(UTC) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expire = datetime.now(UTC) + timedelta(minutes=15)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -92,7 +96,7 @@ def get_session_expiry(hours: int = 24) -> datetime:
     Returns:
         Datetime of when session should expire
     """
-    return datetime.now(timezone.utc) + timedelta(hours=hours)
+    return datetime.now(UTC) + timedelta(hours=hours)
 
 
 def is_session_valid(valid_until: datetime) -> bool:
@@ -110,7 +114,7 @@ def is_session_valid(valid_until: datetime) -> bool:
             "valid_until must be a timezone-aware datetime; got a naive datetime. "
             + "Use datetime.now(timezone.utc) when constructing expiry timestamps."
         )
-    return datetime.now(timezone.utc) < valid_until
+    return datetime.now(UTC) < valid_until
 
 
 def robot_key_hash(key: str) -> str:
