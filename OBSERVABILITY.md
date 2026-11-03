@@ -43,7 +43,7 @@ uv run uvicorn main:app --port 8000
 ```
 
 - `GET /health` returns `{"status": "ok"}` and is **not** traced.
-- Logs are JSON lines on stdout, including `trace_id`, `span_id`, and `request_id`.
+- Logs are JSON lines on stdout, including `trace_id`, `span_id`, and `request.id`.
 - Every response carries `X-Request-ID`; an inbound value is reused.
 
 ## What is recorded
@@ -52,13 +52,13 @@ uv run uvicorn main:app --port 8000
 - **Exceptions:** `record_exception(escaped=True)` plus `ERROR` span status for unhandled errors and
   for 5xx `HTTPException`s. 4xx responses are logged at WARNING without a stack trace.
   Client responses are generic (`{"detail": "Internal server error", "request_id": ...}`).
-- **Logs:** exported through `RedactingLoggingHandler` → `BatchLogRecordProcessor` → OTLP. Values
-  matching `api_key`, `token`, `password`, `secret`, `authorization`, robot keys, `sk-*`, and
-  `Bearer ...` are replaced with `[REDACTED]`. Request bodies are never logged.
-- **Redaction covers every sink.** The JSON formatter redacts the message, `exception` text, and
-  event fields. The OTel handler redacts `exception.message`/`exception.stacktrace` and all
-  string attributes. `record_exception` overrides both exception fields on the span event, so
-  secrets inside exception text never reach SigNoz.
+- **Logs:** exported through the `LoggingHandler` from `opentelemetry-instrumentation-logging` →
+  `RedactingLogRecordProcessor` → `BatchLogRecordProcessor` → OTLP. Request bodies are never
+  logged.
+- **Redaction (best effort, see [Privacy](#privacy)).** Values matching `api_key`, `token`,
+  `password`, `secret`, `authorization`, robot keys, `sk-*`, and `Bearer ...` are replaced with
+  `[REDACTED]` in log bodies, log attributes (including `exception.*`), the JSON formatter, and
+  exception events recorded through `record_exception`.
 - **Sanitized validation errors.** Invalid recovery payloads are logged with field paths only
   (never submitted values), and the span exception carries
   `Invalid recovery payload: fields=[...]` instead of the raw Pydantic message.
@@ -66,51 +66,81 @@ uv run uvicorn main:app --port 8000
 Excluded from tracing: `/health`, `/docs`, `/redoc`, `/openapi.json`, `/scalar`, `/favicon.ico`.
 The `http send` / `http receive` sub-spans are disabled.
 
-### Structured log fields
+### Spans or logs?
 
-Callers emit events through `observability.events.log_event`:
+Anything with a duration or a parent is a **span**; a **log event** is reserved for something that
+happened at a point in time and is not already a span: a rejection, a recovered failure, a
+misconfiguration, an accounting record. Successful work produces no logs. Strands already traces
+agent invocations (`invoke_agent`), model calls (`chat`, with `gen_ai.usage.*`) and tool calls
+(`execute_tool <name>`), so the code enriches those spans instead of logging around them.
+
+### Naming
+
+Names follow the OpenTelemetry rules: lowercase, dot-separated namespaces, `snake_case` within a
+component. Standard semantic-convention keys are reused where they exist (`error.type`,
+`exception.message`, `client.address`, `http.*`, `url.path`, `gen_ai.usage.*`); project keys live
+under `recovery.*`, `robot_key.*`, `agent.*`, `agent_trace.*`, `gui.*` and `request.*`. All of them
+are defined in `observability/attributes.py`; change them there and here together.
+
+Log events are emitted with `observability.events.log_event`:
 
 ```python
-log_event(logger, "recovery.persisted", recovery_id=rid, duration_ms=elapsed_ms(start))
+log_event(
+    logger,
+    attrs.EVENT_RECOVERY_TURN_FAILED,
+    {attrs.ERROR_TYPE: "RuntimeError"},
+    logging.ERROR,
+)
 ```
 
-It renders a readable `event key=value ...` message and attaches each keyword as a record extra,
-which `JsonFormatter` copies into the JSON line and the OTel handler exports as a log attribute, so
-SigNoz can filter without parsing messages. Only fields passed to `log_event` are copied; ad-hoc
-`extra=` values are ignored by the JSON formatter. UUIDs and other objects are stringified.
-Free text (`task_name`, `model`, exception `detail`) is truncated to 120 characters with `brief()`;
-request bodies and screenshots are never logged.
+The event name travels as `otel.event.name`, which the logging handler promotes to the OTLP
+LogRecord `event_name` field. Each attribute is exported under its key and copied into the JSON
+line; ad-hoc `extra=` values are not. Free text (task names, process models, exception messages)
+is truncated to 120 characters with `brief()`.
 
 ## Recovery turn instrumentation
 
-`/recovery/robot_exception/ws` opens one `recovery.turn` span, and every robot action gets a child
-`gui.action` span (`gui.iteration`, `gui.action_type`, `gui.success`, `gui.duration_ms`). The turn
-span carries `recovery.robot_key_id`, `recovery.id`, `agent.id`, `recovery.outcome`,
-`recovery.success`, and truncated `recovery.task_name` / `inference.model`.
+```
+WebSocket /recovery/robot_exception/ws            (FastAPI instrumentation)
+└── recovery.turn
+    ├── recovery.persist                           (RobotException + RecoveryContext insert)
+    └── invoke_agent <gateway>                     (Strands)
+        ├── chat                                   (Strands, gen_ai.usage.*)
+        └── execute_tool <gui agent>               (Strands, enriched with gui.task.*)
+            ├── gui.screenshot
+            ├── invoke_agent / chat                (UI-TARS, Strands)
+            └── gui.action                         (one per robot action)
+                └── gui.screenshot
+```
 
-Lifecycle events (all include `event` and the relevant ids):
+| Span | Attributes |
+| --- | --- |
+| `recovery.turn` | `robot_key.id`, `agent.id`, `recovery.id`, `recovery.outcome` (`success`, `completed_unsuccessful`, `invalid_payload`, `client_disconnected`, `no_gateway_agent`, `internal_error`), `recovery.success`, `recovery.task_name`, `recovery.platform`, `recovery.os`, `recovery.process_model`, `recovery.payload.size`, `recovery.payload.ui_log_count`, `recovery.payload.has_errored_activity`, `recovery.payload.invalid_fields` |
+| `recovery.persist` | none |
+| `invoke_agent` (Strands) | `agent.id`, `agent_trace.id` (joins the trace to the `AgentTrace` row) |
+| `execute_tool` (GUI agent) | `gui.task.name`, `gui.task.process_model`, `gui.task.ui_log_count`, `gui.task.has_errored_activity`, `gui.task.iterations`, `gui.task.outcome` (`done`, `max_actions_exceeded`) |
+| `gui.action` | `gui.action.iteration`, `gui.action.type`, `gui.action.success`; failed actions carry a redacted exception |
+| `gui.screenshot` | `gui.screenshot.width`, `gui.screenshot.height`, `gui.screenshot.size` |
+| `POST /recovery/report_result/{recovery_id}` | `recovery.id`, `robot_key.id`, `recovery.success` |
 
-| Event | Level | Notes |
+Log events:
+
+| Event | Level | Attributes |
 | --- | --- | --- |
-| `recovery.auth_failed` | WARNING | Invalid/disabled robot key; connection closed with 1008 |
-| `recovery.connected` | INFO | Robot key accepted, turn span started |
-| `recovery.payload_received` | INFO | `ui_log_count`, `has_errored_activity`, `payload_bytes` |
-| `recovery.payload_invalid` | WARNING | Field paths only; no submitted values |
-| `recovery.no_gateway_agent` | ERROR | Gateway agent missing; turn marked `no_gateway_agent` |
-| `recovery.persisted` | INFO | Row committed with `duration_ms` |
-| `recovery.agent_started` / `recovery.agent_finished` | INFO | Agent id, model, task name, `success`, `duration_ms` |
-| `recovery.turn_finished` | INFO | `outcome` (`success` / `completed_unsuccessful`), `success`, total `duration_ms` |
-| `recovery.turn_failed` | ERROR | Unexpected failure; redacted exception recorded on the span |
-| `recovery.client_disconnected` | INFO | Robot closed the socket first |
-| `recovery.report_result*` | INFO/WARNING | `/report_result/{recovery_id}` outcomes |
+| `recovery.auth_failed` | WARN | `error.type`, `client.address` |
+| `recovery.keep_alive_failed` | WARN | `error.type` |
+| `recovery.no_gateway_agent` | ERROR | none |
+| `recovery.payload_invalid` | WARN | `recovery.payload.invalid_fields` (paths only) |
+| `recovery.turn_failed` | ERROR | `recovery.id`, `error.type`, redacted `exception.*` |
+| `gui.action_retry` | WARN | `gui.action.iteration`, `error.type`, `exception.message` |
+| `gui.max_actions_exceeded` | WARN | `gui.task.max_actions` |
+| `agent.usage` | INFO | `agent.id`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `agent.cost` |
+| `http.server_error`, `http.unhandled_exception` | ERROR | `http.request.method`, `url.path`, `http.response.status_code` or `error.type` |
+| `http.client_error`, `http.validation_failed` | WARN | the same request keys, `exception.message` or `request.invalid_fields` |
 
-GUI-agent and hook events: `gui.task_started`, `gui.screenshot` (DEBUG), `gui.action_sent`,
-`gui.action_result`, `gui.action_done`, `gui.action_retry` (unparseable or failed step),
-`gui.max_actions_exceeded`, `gui.task_finished`, `gui.trace_registered` (DEBUG), `tool.started`
-(DEBUG), `tool.finished`, `agent.trace_started`, `agent.trace_finished`, `agent.usage`.
-
-These logs complement the Postgres audit tables (`AgentTrace`, `ToolTrace`, `GUITrace`); they do not
-duplicate payloads or screenshots.
+Every event carries the active trace and span ids, so filtering logs by trace shows every problem
+within a recovery. The Postgres audit tables (`AgentTrace`, `ToolTrace`, `GUITrace`) remain the
+record of payloads, messages and screenshots; telemetry does not duplicate them.
 
 ## SigNoz queries
 
@@ -135,50 +165,35 @@ ORDER BY p95_ms DESC
 LIMIT 20
 ```
 
-Logs for one trace:
-
-```sql
-SELECT timestamp, severity_text, body
-FROM signoz_logs.distributed_logs_v2
-WHERE timestamp > now() - INTERVAL 1 DAY
-  AND attributes_string['trace_id'] = '<trace_id>'
-ORDER BY timestamp
-```
-
-Recovery outcomes and timings (last 24h):
+Recovery outcomes and turn latency (last 24h):
 
 ```sql
 SELECT
-  attributes_string['outcome'] AS outcome,
+  attributes_string['recovery.outcome'] AS outcome,
   count() AS turns,
-  quantile(0.95)(toFloat64(attributes_number['duration_ms'])) AS p95_ms
-FROM signoz_logs.distributed_logs_v2
-WHERE timestamp > now() - INTERVAL 1 DAY
-  AND attributes_string['event'] = 'recovery.turn_finished'
+  quantile(0.95)(durationNano) / 1e6 AS p95_ms
+FROM signoz_traces.distributed_signoz_index_v3
+WHERE timestamp > now() - INTERVAL 1 DAY AND name = 'recovery.turn'
 GROUP BY outcome
 ORDER BY turns DESC
 ```
 
-Recovery failures by type:
+GUI actions by type and success:
 
 ```sql
-SELECT attributes_string['error_type'] AS error_type, count() AS failures
-FROM signoz_logs.distributed_logs_v2
-WHERE timestamp > now() - INTERVAL 1 DAY
-  AND attributes_string['event'] IN ('recovery.turn_failed', 'gui.action_retry')
-GROUP BY error_type
-ORDER BY failures DESC
+SELECT
+  attributes_string['gui.action.type'] AS action_type,
+  attributes_bool['gui.action.success'] AS success,
+  count() AS actions,
+  quantile(0.95)(durationNano) / 1e6 AS p95_ms
+FROM signoz_traces.distributed_signoz_index_v3
+WHERE timestamp > now() - INTERVAL 1 DAY AND name = 'gui.action'
+GROUP BY action_type, success
+ORDER BY actions DESC
 ```
 
-One recovery end to end:
-
-```sql
-SELECT timestamp, body, attributes_string
-FROM signoz_logs.distributed_logs_v2
-WHERE timestamp > now() - INTERVAL 1 DAY
-  AND attributes_string['recovery_id'] = '<recovery_id>'
-ORDER BY timestamp
-```
+One recovery end to end: find the `recovery.turn` span by its `recovery.id` attribute in the trace
+explorer, open its trace, and use the related-logs view to see every event logged within it.
 
 ## Containerized backend
 
@@ -210,3 +225,15 @@ uv run pytest tests/unit/observability -q
 ```
 
 The tests use `InMemorySpanExporter` / `InMemoryLogRecordExporter` and never make network calls.
+
+## Privacy
+
+Redaction is a known gap and is tracked as future work. Today:
+
+- Regex redaction misses quoted keys, e.g. `{"password": "..."}` in JSON or Python reprs.
+- Strands exports prompts and completions as `gen_ai.*` span data. They include the task, the UI
+  log, variables and user-typed input, and reach SigNoz unredacted.
+
+Every exported span already flows through `RedactingSpanProcessor` and every log record through
+`RedactingLogRecordProcessor` (`observability/redaction.py`), so the fix lands in one module. The
+span processor is a pass-through placeholder until then.
