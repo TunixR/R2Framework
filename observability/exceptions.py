@@ -14,7 +14,7 @@ from opentelemetry.trace import Span, Status, StatusCode
 
 from observability import attributes as attrs
 from observability.correlation import get_request_id
-from observability.events import log_event
+from observability.events import field_paths, log_event
 from observability.redaction import redact
 
 if TYPE_CHECKING:
@@ -59,8 +59,8 @@ def record_exception(
     span.record_exception(
         exc,
         attributes={
-            "exception.message": safe_message,
-            "exception.stacktrace": stacktrace,
+            attrs.EXCEPTION_MESSAGE: safe_message,
+            attrs.EXCEPTION_STACKTRACE: stacktrace,
         },
         escaped=escaped,
     )
@@ -120,10 +120,7 @@ async def validation_exception_handler(
         attrs.EVENT_HTTP_VALIDATION_FAILED,
         {
             **_request_attributes(request, 422),
-            attrs.REQUEST_INVALID_FIELDS: [
-                ".".join(str(part) for part in detail["loc"])  # pyright: ignore[reportGeneralTypeIssues]
-                for detail in details
-            ],
+            attrs.REQUEST_INVALID_FIELDS: field_paths(error.errors()),
         },
         logging.WARNING,
     )

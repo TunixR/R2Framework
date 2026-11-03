@@ -95,13 +95,13 @@ class RedactingLogRecordProcessor(LogRecordProcessor):
 class RedactingSpanProcessor(SpanProcessor):
     """Route finished spans through a redaction step before exporting them.
 
-    TODO(privacy): not implemented yet; spans are forwarded unchanged. Strands
-    exports prompts and completions (task, UI log, variables, user-typed
-    input) as ``gen_ai.*`` span data, so those currently reach SigNoz in
-    clear text. Implement here by exporting a sanitized copy of the span
-    (``ReadableSpan`` is immutable) or by disabling Strands content capture.
-    Exception events recorded through ``observability.exceptions`` are
-    already redacted.
+    TODO(privacy, TunixR/R2Framework#202): not implemented yet; spans are
+    forwarded unchanged. Strands exports prompts and completions (task, UI
+    log, variables, user-typed input) as ``gen_ai.*`` span data, so those
+    currently reach SigNoz in clear text. Implement here by exporting a
+    sanitized copy of the span (``ReadableSpan`` is immutable) or by
+    disabling Strands content capture. Exception events recorded through
+    ``observability.exceptions`` are already redacted.
     """
 
     def __init__(self, delegate: SpanProcessor) -> None:

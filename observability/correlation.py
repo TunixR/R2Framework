@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 from opentelemetry import trace
 from starlette.datastructures import Headers, MutableHeaders
 
+from observability.attributes import REQUEST_ID
+
 if TYPE_CHECKING:
     from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -40,7 +42,7 @@ class RequestContextMiddleware:
 
         span = trace.get_current_span()
         if span.is_recording():
-            span.set_attribute("request.id", request_id)
+            span.set_attribute(REQUEST_ID, request_id)
 
         async def send_with_request_id(message: Message) -> None:
             if scope["type"] == "http" and message["type"] == "http.response.start":
