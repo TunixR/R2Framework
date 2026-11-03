@@ -4,61 +4,39 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import sys
-import warnings
 from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from opentelemetry import trace
-from opentelemetry.sdk._logs import LoggingHandler
+from opentelemetry.instrumentation.logging.handler import LoggingHandler
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 
+from observability.attributes import OTEL_EVENT_NAME, REQUEST_ID
 from observability.config import DEFAULT_SERVICE_NAME, ObservabilitySettings
 from observability.correlation import get_request_id
 from observability.events import EVENT_FIELDS_ATTR
+from observability.redaction import (
+    RedactingLogRecordProcessor,
+    RedactionFilter,
+    redact,
+)
 from observability.tracing import build_resource
 
 if TYPE_CHECKING:
     from opentelemetry.sdk._logs import LoggerProvider
     from opentelemetry.sdk._logs.export import LogRecordExporter
-    from opentelemetry.util.types import Attributes
 
 # Marks handlers installed by ``configure_logging`` so reconfiguring replaces
 # them without touching handlers owned by anyone else.
 _MANAGED_HANDLER_FLAG = "_observability_managed"
-_REDACTED = "[REDACTED]"
-
-_SECRET_PATTERN = re.compile(
-    r"(?i)\b(api[_-]?key|access[_-]?key|secret|password|passwd|token|authorization|robot[_-]?key)"
-    r"\b(\s*[:=]\s*)(\S+)"
-)
-_TOKEN_PATTERN = re.compile(r"\b(sk-[A-Za-z0-9_\-]{8,}|Bearer\s+[A-Za-z0-9._\-]{8,})")
-
-
-def redact(value: str) -> str:
-    """Mask bearer/OpenAI-style tokens and secret assignments."""
-    tokenless = _TOKEN_PATTERN.sub(_REDACTED, value)
-    return _SECRET_PATTERN.sub(
-        lambda match: f"{match.group(1)}{match.group(2)}{_REDACTED}", tokenless
-    )
-
-
-class RedactionFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        try:
-            message = record.getMessage()
-        except Exception:  # noqa: BLE001 - logging must never raise
-            return True
-        redacted = redact(message)
-        if redacted != message:
-            record.msg = redacted
-            record.args = ()
-        return True
 
 
 class TraceContextFilter(logging.Filter):
+    """Stamp trace, span and request ids on records for the stdout formatter."""
+
+    @override
     def filter(self, record: logging.LogRecord) -> bool:
         span_context = trace.get_current_span().get_span_context()
         record.trace_id = (
@@ -67,7 +45,7 @@ class TraceContextFilter(logging.Filter):
         record.span_id = (
             format(span_context.span_id, "016x") if span_context.is_valid else None
         )
-        record.request_id = get_request_id()
+        setattr(record, REQUEST_ID, get_request_id())
         return True
 
 
@@ -76,6 +54,7 @@ class JsonFormatter(logging.Formatter):
         super().__init__()
         self.service_name = service_name
 
+    @override
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, object] = {
             "timestamp": datetime.fromtimestamp(record.created, tz=UTC)
@@ -86,8 +65,11 @@ class JsonFormatter(logging.Formatter):
             "message": redact(record.getMessage()),
             "service": self.service_name,
         }
+        event_name = getattr(record, OTEL_EVENT_NAME, None)
+        if event_name is not None:
+            payload["event"] = event_name
         event_fields: tuple[str, ...] = getattr(record, EVENT_FIELDS_ATTR, ())
-        for key in ("trace_id", "span_id", "request_id", *event_fields):
+        for key in ("trace_id", "span_id", REQUEST_ID, *event_fields):
             value = getattr(record, key, None)
             if value is not None:
                 payload[key] = redact(value) if isinstance(value, str) else value
@@ -96,28 +78,10 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, default=str)
 
 
-class RedactingLoggingHandler(LoggingHandler):
-    """OTel log handler that redacts exception fields before they are exported.
-
-    The SDK handler reads ``record.exc_info`` directly, so the logging
-    ``RedactionFilter`` (which only rewrites the rendered message) is not
-    enough: secrets inside an exception message or traceback would still reach
-    SigNoz.
-    """
-
-    @staticmethod
-    def _get_attributes(record: logging.LogRecord) -> Attributes:
-        attributes = LoggingHandler._get_attributes(record) or {}
-        return {
-            key: redact(value) if isinstance(value, str) else value
-            for key, value in attributes.items()
-            if key != EVENT_FIELDS_ATTR
-        }
-
-
 class _ExcludeExporterLogs(logging.Filter):
     """Prevent exporter failures from re-entering the OTLP handler."""
 
+    @override
     def filter(self, record: logging.LogRecord) -> bool:
         return not record.name.startswith("opentelemetry.exporter")
 
@@ -136,6 +100,8 @@ def create_logger_provider(
         exporter = OTLPLogExporter(endpoint=settings.otlp_endpoint("logs"))
 
     provider = SdkLoggerProvider(resource=build_resource(settings))
+    # Processors run in order on the same record: redact before exporting.
+    provider.add_log_record_processor(RedactingLogRecordProcessor())
     provider.add_log_record_processor(BatchLogRecordProcessor(exporter))
     if set_global:
         set_logger_provider(provider)
@@ -189,13 +155,9 @@ def configure_logging(
         _install(root, file_handler, formatter=text_formatter)
 
     if logger_provider is not None:
-        with warnings.catch_warnings():
-            # The SDK handler is deprecated in favour of the logging
-            # instrumentation package, which is not installed.
-            warnings.simplefilter("ignore", DeprecationWarning)
-            otel_handler = RedactingLoggingHandler(
-                level=logging.NOTSET, logger_provider=logger_provider
-            )
+        otel_handler = LoggingHandler(
+            level=logging.NOTSET, logger_provider=logger_provider
+        )
         _install(root, otel_handler, _ExcludeExporterLogs())
 
     # uvicorn installs its own handlers; fold them into the root JSON stream.
