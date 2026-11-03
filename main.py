@@ -1,13 +1,15 @@
 # Initializes the FastAPI application and includes the main entry point.
 # It also sets up the database connection and includes the necessary routers.
-import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from opentelemetry.instrumentation.asgi import OpenTelemetryMiddleware
 from scalar_fastapi import get_scalar_api_reference
-from strands.telemetry import StrandsTelemetry
 
+from observability import (
+    configure_observability,
+    setup_strands_telemetry,
+    shutdown_observability,
+)
 from routers.agents import router as agents_router
 from routers.auth import router as auth_router
 from routers.evals import router as evals_router
@@ -20,30 +22,13 @@ from routers.tools import router as tools_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # pyright: ignore[reportUnusedParameter]
-    """
-    Lifespan event handler to initialize and clean up the database connection.
-    """
-    strands_telemetry = StrandsTelemetry()
-    _ = strands_telemetry.setup_otlp_exporter()  # Send traces to OTLP endpoint
-    _ = strands_telemetry.setup_meter(
-        enable_console_exporter=False, enable_otlp_exporter=True
-    )  # Setup new meter provider and sets it as global
-
-    logging.getLogger("strands").setLevel(logging.DEBUG)
-    logging.basicConfig(
-        format="%(levelname)s | %(name)s | %(message)s",
-        filename="strands.log",
-        filemode="a",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    """Set up Strands telemetry and flush observability data on shutdown."""
+    setup_strands_telemetry()
     yield
+    shutdown_observability()
 
 
 app = FastAPI(lifespan=lifespan)
-app.add_middleware(
-    OpenTelemetryMiddleware,
-    excluded_urls=r".+/ws$",
-)
 
 app.include_router(logging_router)
 app.include_router(keys_router)
@@ -56,6 +41,11 @@ app.include_router(provider_router)
 app.include_router(auth_router)
 
 
+@app.get("/health", include_in_schema=False)
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 @app.get("/scalar", include_in_schema=False)
 async def root():
     return get_scalar_api_reference(
@@ -64,3 +54,6 @@ async def root():
         # Avoid CORS issues (optional)
         scalar_proxy_url="https://proxy.scalar.com",
     )
+
+
+configure_observability(app)

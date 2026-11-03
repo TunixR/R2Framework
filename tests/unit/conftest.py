@@ -5,6 +5,15 @@ This module imports all fixtures from the conftest package to make them
 available to all tests in the tests/unit directory.
 """
 
+import os
+
+# Telemetry must be disabled before `main` is imported by fixtures, otherwise
+# every test run would try to export OTLP data to localhost:4318.
+# `OTEL_SDK_DISABLED` must stay unset: the OTel SDK turns every provider into a
+# no-op when it is true, which would also disable the in-memory test providers.
+os.environ["OBSERVABILITY_ENABLED"] = "false"
+os.environ.pop("OTEL_SDK_DISABLED", None)
+
 # Import all fixtures from the conftest package modules
 pytest_plugins = [
     "tests.unit.fixtures",
