@@ -57,7 +57,6 @@ from io import BytesIO
 from typing import Any
 
 from fastapi import WebSocketDisconnect
-from opentelemetry import trace
 from PIL import Image
 from strands import Agent, ToolContext, tool
 from strands.models.openai import OpenAIModel
@@ -66,9 +65,7 @@ from strands.types.content import ContentBlock, Messages
 from agent_tools.hooks import AgentLoggingHook
 from agent_tools.image import screenshot_bytes
 from config import Config
-from observability import attributes as attrs
-from observability.events import brief, error_type, log_event
-from observability.exceptions import record_exception
+from database.agents.gui_telemetry import GuiTaskTelemetry
 from prompts.gui_agent import (
     STANDALONE_COMPUTER_USE_DOUBAO,
 )
@@ -84,21 +81,16 @@ MAX_PIXELS = 16384 * 28 * 28
 MAX_RATIO = 200
 
 logger = logging.getLogger(__name__)
-tracer = trace.get_tracer(__name__)
 
 
-async def _capture_screenshot(websocket: Any) -> tuple[bytes, tuple[int, int]]:
+async def _capture_screenshot(
+    websocket: Any, telemetry: GuiTaskTelemetry
+) -> tuple[bytes, tuple[int, int]]:
     """Fetch a client screenshot and return its bytes and (width, height)."""
-    with tracer.start_as_current_span(attrs.SPAN_GUI_SCREENSHOT) as span:
+    with telemetry.screenshot() as shot:
         image = await screenshot_bytes(websocket)
         width, height = Image.open(BytesIO(image)).size
-        span.set_attributes(
-            {
-                attrs.GUI_SCREENSHOT_WIDTH: width,
-                attrs.GUI_SCREENSHOT_HEIGHT: height,
-                attrs.GUI_SCREENSHOT_SIZE: len(image),
-            }
-        )
+        shot.taken(image, width, height)
     return image, (width, height)
 
 
@@ -160,7 +152,8 @@ def parse_action(action_str):
         return {"function": func_name, "args": kwargs}
 
     except Exception as e:
-        logger.warning("Failed to parse action %r: %s", action_str, e)
+        # The caller raises on None; the agent loop reports it as gui.action_retry.
+        logger.debug("Failed to parse action %r: %s", action_str, e)
         return None
 
 
@@ -337,7 +330,6 @@ def parse_action_to_structure_output(
     actions = []
     for action_instance, raw_str in zip(parsed_actions, all_action):
         if not action_instance:
-            logger.warning("Action can't parse: %s", raw_str)
             raise ValueError(f"Action can't parse: {raw_str}")
         action_type = action_instance["function"]
         params = action_instance["args"]
@@ -763,19 +755,10 @@ Model Context: {model}
         raise ValueError("WebSocket must be provided in tool context")
     websocket = tool_context.invocation_state["websocket"]
 
-    # Runs inside the Strands ``execute_tool`` span: describe the task on it
-    # rather than opening a redundant span of our own.
-    task_span = trace.get_current_span()
-    task_span.set_attributes(
-        {
-            attrs.GUI_TASK_NAME: brief(task),
-            attrs.GUI_TASK_PROCESS_MODEL: brief(model),
-            attrs.GUI_TASK_UI_LOG_COUNT: len(ui_log),
-            attrs.GUI_TASK_HAS_ERRORED_ACTIVITY: bool(errored_act),
-        }
+    telemetry = GuiTaskTelemetry(
+        task=task, model=model, ui_log=ui_log, errored_act=errored_act
     )
-
-    image, image_size = await _capture_screenshot(websocket)
+    image, image_size = await _capture_screenshot(websocket, telemetry)
 
     messages: Messages = [
         {
@@ -819,17 +802,8 @@ Model Context: {model}
         while True:
             iteration += 1
             if iteration > Config.MAX_ACTIONS_ALLOWED:
-                task_span.set_attributes(
-                    {
-                        attrs.GUI_TASK_ITERATIONS: iteration - 1,
-                        attrs.GUI_TASK_OUTCOME: "max_actions_exceeded",
-                    }
-                )
-                log_event(
-                    logger,
-                    attrs.EVENT_GUI_MAX_ACTIONS_EXCEEDED,
-                    {attrs.GUI_TASK_MAX_ACTIONS: Config.MAX_ACTIONS_ALLOWED},
-                    logging.WARNING,
+                telemetry.max_actions_exceeded(
+                    iteration - 1, Config.MAX_ACTIONS_ALLOWED
                 )
                 return "Exceeded maximum allowed actions."
 
@@ -840,6 +814,7 @@ Model Context: {model}
                 )
             except Exception:
                 ui_tars_response = str(response)
+                telemetry.stopped(iteration)
                 break
 
             try:
@@ -855,7 +830,7 @@ Model Context: {model}
 
                 if code == "DONE":
                     now = datetime.now(UTC)
-                    task_span.set_attribute(attrs.GUI_TASK_OUTCOME, "done")
+                    telemetry.done(iteration)
                     await hook.register_gui_trace(
                         action_type=action_type,
                         action_content=action.get("action_inputs", {}),
@@ -867,15 +842,7 @@ Model Context: {model}
                     break
 
                 start_datetime = datetime.now(UTC)
-                with tracer.start_as_current_span(
-                    attrs.SPAN_GUI_ACTION,
-                    attributes={
-                        attrs.GUI_ACTION_ITERATION: iteration,
-                        attrs.GUI_ACTION_TYPE: action_type,
-                    },
-                    record_exception=False,
-                    set_status_on_exception=False,
-                ) as action_span:
+                with telemetry.action(iteration, action_type) as action_telemetry:
                     await websocket.send_json(
                         {"type": "action", "content": action}
                     )  # Action will be parsed and executed by the client
@@ -883,7 +850,7 @@ Model Context: {model}
                     result = await websocket.receive_json()
                     finish_datetime = datetime.now(UTC)
                     success = bool(result.get("success"))
-                    action_span.set_attribute(attrs.GUI_ACTION_SUCCESS, success)
+                    action_telemetry.result(success)
 
                     await hook.register_gui_trace(
                         action_type=action_type,
@@ -899,12 +866,12 @@ Model Context: {model}
                             "Action execution failed on client side "
                             f"(action_type={action_type})."
                         )
-                        record_exception(action_span, error)
+                        action_telemetry.failed(error)
                         raise error
 
                 # Artificial delay to allow UI to update
                 await asyncio.sleep(0.5)
-                image, image_size = await _capture_screenshot(websocket)
+                image, image_size = await _capture_screenshot(websocket, telemetry)
 
                 new_messages: Messages = [
                     {
@@ -928,20 +895,9 @@ Model Context: {model}
             except RuntimeError:
                 raise
             except Exception as exc:
-                log_event(
-                    logger,
-                    attrs.EVENT_GUI_ACTION_RETRY,
-                    {
-                        attrs.GUI_ACTION_ITERATION: iteration,
-                        attrs.ERROR_TYPE: error_type(exc),
-                        attrs.EXCEPTION_MESSAGE: brief(exc),
-                    },
-                    logging.WARNING,
-                )
+                telemetry.retry(iteration, exc)
                 response = agent("The action failed. Try again")
                 continue
-
-        task_span.set_attribute(attrs.GUI_TASK_ITERATIONS, iteration)
 
         conversation_history = list(
             map(
