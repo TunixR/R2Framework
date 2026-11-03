@@ -19,6 +19,7 @@ from agent_tools.image import screenshot_bytes
 from database.agents.tooled_gui_agent import TooledGuiAgent
 from database.provider.models import Router
 from database.tools.models import Tool
+from observability import attributes as attrs
 from observability.events import log_event
 
 logger = logging.getLogger(__name__)
@@ -532,11 +533,13 @@ class Agent(SQLModel, table=True):
                 agent_logging_hook.update_trace(finished=True, cost=cost)
             log_event(
                 logger,
-                "agent.usage",
-                agent_id=self.id,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                cost=cost,
+                attrs.EVENT_AGENT_USAGE,
+                {
+                    attrs.AGENT_ID: self.id,
+                    attrs.GEN_AI_USAGE_INPUT_TOKENS: input_tokens,
+                    attrs.GEN_AI_USAGE_OUTPUT_TOKENS: output_tokens,
+                    attrs.AGENT_COST: cost,
+                },
             )
 
     def __init__(self, **data: Any) -> None:

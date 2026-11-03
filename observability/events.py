@@ -1,36 +1,38 @@
-"""Structured log events: one call yields a readable line and indexed fields."""
+"""Structured log events: one call yields a readable line and indexed attributes.
+
+Use an event for something that happened at a point in time and is not
+already a span: a rejection, a recovered failure, a misconfiguration, an
+accounting record. Durations and nesting belong on spans instead.
+"""
 
 from __future__ import annotations
 
 import logging
-import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
-# Names of the fields a ``log_event`` call attached to the record. Formatters
-# read this instead of keeping their own allowlist of known field names.
+from observability.attributes import OTEL_EVENT_NAME
+
+# Names of the attributes a ``log_event`` call attached to the record. The JSON
+# formatter reads this instead of keeping its own allowlist; the OTel export
+# pipeline drops it.
 EVENT_FIELDS_ATTR = "event_fields"
 
 _MAX_TEXT = 120
 
-type FieldValue = str | bool | int | float | Sequence[str] | None
+type AttributeValue = str | bool | int | float | Sequence[str] | None
 
 
 def brief(value: object, limit: int = _MAX_TEXT) -> str:
-    """Bound free text (task names, model context) before it reaches telemetry."""
+    """Bound free text (task names, process models) before it reaches telemetry."""
     text = "" if value is None else str(value)
     return text if len(text) <= limit else f"{text[: limit - 3]}..."
-
-
-def elapsed_ms(start: float) -> float:
-    """Milliseconds since a ``time.perf_counter()`` reading, rounded to 0.1."""
-    return round((time.perf_counter() - start) * 1000, 1)
 
 
 def error_type(exc: BaseException | None) -> str | None:
     return type(exc).__name__ if exc is not None else None
 
 
-def _normalize(value: object) -> FieldValue:
+def _normalize(value: object) -> AttributeValue:
     if value is None or isinstance(value, str | bool | int | float):
         return value
     if isinstance(value, list):
@@ -42,22 +44,23 @@ def _normalize(value: object) -> FieldValue:
 def log_event(
     logger: logging.Logger,
     event: str,
+    attributes: Mapping[str, object] | None = None,
     /,
     level: int = logging.INFO,
     *,
-    exc_info: bool = False,
-    **fields: object,
+    exc_info: bool | BaseException = False,
 ) -> None:
-    """Log ``event`` with ``fields`` both in the message and as record extras.
+    """Log ``event`` with ``attributes`` both in the message and as record extras.
 
-    The message reads ``event key=value ...`` for console output, while the
-    extras let the JSON formatter and the OTLP exporter index each field.
-    Non-primitive values (UUIDs, addresses) are stringified so every exporter
-    sees the same value.
+    The message reads ``event key=value ...`` for console output. The event
+    name is attached as ``otel.event.name``, which the OTel logging handler
+    promotes to the LogRecord ``event_name`` field, and each attribute is
+    exported under its (dotted) key. Non-primitive values are stringified so
+    every exporter sees the same value.
     """
     if not logger.isEnabledFor(level):
         return
-    normalized = {key: _normalize(value) for key, value in fields.items()}
+    normalized = {key: _normalize(value) for key, value in (attributes or {}).items()}
     message = " ".join(
         [event, *(f"{key}={value}" for key, value in normalized.items())]
     )
@@ -67,8 +70,8 @@ def log_event(
         exc_info=exc_info,
         stacklevel=2,
         extra={
-            "event": event,
+            OTEL_EVENT_NAME: event,
             **normalized,
-            EVENT_FIELDS_ATTR: ("event", *normalized),
+            EVENT_FIELDS_ATTR: tuple(normalized),
         },
     )

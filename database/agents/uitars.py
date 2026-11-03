@@ -51,7 +51,6 @@ import math
 # Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
 # SPDX-License-Identifier: Apache-2.0
 import re
-import time
 import uuid
 from datetime import UTC, datetime
 from io import BytesIO
@@ -67,7 +66,8 @@ from strands.types.content import ContentBlock, Messages
 from agent_tools.hooks import AgentLoggingHook
 from agent_tools.image import screenshot_bytes
 from config import Config
-from observability.events import brief, elapsed_ms, error_type, log_event
+from observability import attributes as attrs
+from observability.events import brief, error_type, log_event
 from observability.exceptions import record_exception
 from prompts.gui_agent import (
     STANDALONE_COMPUTER_USE_DOUBAO,
@@ -89,16 +89,16 @@ tracer = trace.get_tracer(__name__)
 
 async def _capture_screenshot(websocket: Any) -> tuple[bytes, tuple[int, int]]:
     """Fetch a client screenshot and return its bytes and (width, height)."""
-    image = await screenshot_bytes(websocket)
-    width, height = Image.open(BytesIO(image)).size
-    log_event(
-        logger,
-        "gui.screenshot",
-        logging.DEBUG,
-        width=width,
-        height=height,
-        screenshot_bytes=len(image),
-    )
+    with tracer.start_as_current_span(attrs.SPAN_GUI_SCREENSHOT) as span:
+        image = await screenshot_bytes(websocket)
+        width, height = Image.open(BytesIO(image)).size
+        span.set_attributes(
+            {
+                attrs.GUI_SCREENSHOT_WIDTH: width,
+                attrs.GUI_SCREENSHOT_HEIGHT: height,
+                attrs.GUI_SCREENSHOT_SIZE: len(image),
+            }
+        )
     return image, (width, height)
 
 
@@ -763,13 +763,16 @@ Model Context: {model}
         raise ValueError("WebSocket must be provided in tool context")
     websocket = tool_context.invocation_state["websocket"]
 
-    log_event(
-        logger,
-        "gui.task_started",
-        model=brief(model),
-        task_name=brief(task),
-        ui_log_count=len(ui_log),
-        has_errored_act=bool(errored_act),
+    # Runs inside the Strands ``execute_tool`` span: describe the task on it
+    # rather than opening a redundant span of our own.
+    task_span = trace.get_current_span()
+    task_span.set_attributes(
+        {
+            attrs.GUI_TASK_NAME: brief(task),
+            attrs.GUI_TASK_PROCESS_MODEL: brief(model),
+            attrs.GUI_TASK_UI_LOG_COUNT: len(ui_log),
+            attrs.GUI_TASK_HAS_ERRORED_ACTIVITY: bool(errored_act),
+        }
     )
 
     image, image_size = await _capture_screenshot(websocket)
@@ -816,12 +819,17 @@ Model Context: {model}
         while True:
             iteration += 1
             if iteration > Config.MAX_ACTIONS_ALLOWED:
+                task_span.set_attributes(
+                    {
+                        attrs.GUI_TASK_ITERATIONS: iteration - 1,
+                        attrs.GUI_TASK_OUTCOME: "max_actions_exceeded",
+                    }
+                )
                 log_event(
                     logger,
-                    "gui.max_actions_exceeded",
+                    attrs.EVENT_GUI_MAX_ACTIONS_EXCEEDED,
+                    {attrs.GUI_TASK_MAX_ACTIONS: Config.MAX_ACTIONS_ALLOWED},
                     logging.WARNING,
-                    iterations=iteration - 1,
-                    max_actions=Config.MAX_ACTIONS_ALLOWED,
                 )
                 return "Exceeded maximum allowed actions."
 
@@ -847,12 +855,7 @@ Model Context: {model}
 
                 if code == "DONE":
                     now = datetime.now(UTC)
-                    log_event(
-                        logger,
-                        "gui.action_done",
-                        iteration=iteration,
-                        action_type=action_type,
-                    )
+                    task_span.set_attribute(attrs.GUI_TASK_OUTCOME, "done")
                     await hook.register_gui_trace(
                         action_type=action_type,
                         action_content=action.get("action_inputs", {}),
@@ -864,18 +867,11 @@ Model Context: {model}
                     break
 
                 start_datetime = datetime.now(UTC)
-                action_start = time.perf_counter()
-                log_event(
-                    logger,
-                    "gui.action_sent",
-                    iteration=iteration,
-                    action_type=action_type,
-                )
                 with tracer.start_as_current_span(
-                    "gui.action",
+                    attrs.SPAN_GUI_ACTION,
                     attributes={
-                        "gui.iteration": iteration,
-                        "gui.action_type": action_type,
+                        attrs.GUI_ACTION_ITERATION: iteration,
+                        attrs.GUI_ACTION_TYPE: action_type,
                     },
                     record_exception=False,
                     set_status_on_exception=False,
@@ -886,10 +882,8 @@ Model Context: {model}
                     # Wait for action result
                     result = await websocket.receive_json()
                     finish_datetime = datetime.now(UTC)
-                    action_ms = elapsed_ms(action_start)
                     success = bool(result.get("success"))
-                    action_span.set_attribute("gui.success", success)
-                    action_span.set_attribute("gui.duration_ms", action_ms)
+                    action_span.set_attribute(attrs.GUI_ACTION_SUCCESS, success)
 
                     await hook.register_gui_trace(
                         action_type=action_type,
@@ -898,15 +892,6 @@ Model Context: {model}
                         success=success,
                         started_at=start_datetime,
                         finished_at=finish_datetime,
-                    )
-                    log_event(
-                        logger,
-                        "gui.action_result",
-                        logging.INFO if success else logging.WARNING,
-                        iteration=iteration,
-                        action_type=action_type,
-                        success=success,
-                        duration_ms=action_ms,
                     )
                     if not success:
                         # Keep user-typed content out of the span event.
@@ -945,16 +930,18 @@ Model Context: {model}
             except Exception as exc:
                 log_event(
                     logger,
-                    "gui.action_retry",
+                    attrs.EVENT_GUI_ACTION_RETRY,
+                    {
+                        attrs.GUI_ACTION_ITERATION: iteration,
+                        attrs.ERROR_TYPE: error_type(exc),
+                        attrs.EXCEPTION_MESSAGE: brief(exc),
+                    },
                     logging.WARNING,
-                    iteration=iteration,
-                    error_type=error_type(exc),
-                    detail=brief(exc),
                 )
                 response = agent("The action failed. Try again")
                 continue
 
-        log_event(logger, "gui.task_finished", iterations=iteration)
+        task_span.set_attribute(attrs.GUI_TASK_ITERATIONS, iteration)
 
         conversation_history = list(
             map(

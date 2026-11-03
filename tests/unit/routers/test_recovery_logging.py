@@ -13,6 +13,7 @@ from sqlmodel import Session
 
 import routers.recovery as recovery_module
 from database.agents.models import Agent
+from observability.attributes import OTEL_EVENT_NAME, RECOVERY_PAYLOAD_INVALID_FIELDS
 
 PASSWORD = "hunter2-sk-abcdef123456"
 
@@ -45,25 +46,24 @@ def recovery_tracer(
 
 
 def _extra(record: logging.LogRecord, name: str) -> Any:
-    return getattr(record, name)
+    return vars(record)[name]
 
 
 def _records_by_event(caplog: pytest.LogCaptureFixture) -> dict[str, logging.LogRecord]:
     return {
-        _extra(record, "event"): record
+        _extra(record, OTEL_EVENT_NAME): record
         for record in caplog.records
-        if getattr(record, "event", None)
-        and str(getattr(record, "event")).startswith("recovery.")
+        if str(vars(record).get(OTEL_EVENT_NAME, "")).startswith("recovery.")
     }
 
 
 def _assert_no_secret(caplog: pytest.LogCaptureFixture) -> None:
     for record in caplog.records:
         assert PASSWORD not in record.getMessage()
-        assert PASSWORD not in str(getattr(record, "field_paths", ""))
+        assert PASSWORD not in str(vars(record).get(RECOVERY_PAYLOAD_INVALID_FIELDS))
 
 
-def test_recovery_turn_logs_ids_and_records_span(
+def test_recovery_turn_is_traced_without_lifecycle_logs(
     session: Session,  # pyright: ignore[reportUnusedParameter]
     client: TestClient,
     valid_recovery_payload: dict[str, Any],
@@ -93,39 +93,27 @@ def test_recovery_turn_logs_ids_and_records_span(
 
     assert message["type"] == "done"
     recovery_id = message["id"]
-    events = _records_by_event(caplog)
-
-    for name in (
-        "recovery.connected",
-        "recovery.payload_received",
-        "recovery.persisted",
-        "recovery.agent_started",
-        "recovery.agent_finished",
-        "recovery.turn_finished",
-    ):
-        assert name in events, f"missing log event {name}"
-
-    assert _extra(events["recovery.connected"], "robot_key_id")
-    assert _extra(events["recovery.payload_received"], "ui_log_count") == 1
-    assert _extra(events["recovery.persisted"], "recovery_id") == recovery_id
-    assert _extra(events["recovery.agent_started"], "agent_id") == str(gateway_agent.id)
-    assert _extra(events["recovery.agent_finished"], "success") is True
-    assert _extra(events["recovery.turn_finished"], "outcome") == "success"
-    assert _extra(events["recovery.turn_finished"], "success") is True
-    assert isinstance(_extra(events["recovery.turn_finished"], "duration_ms"), float)
-
+    # Successful turns are described by spans; only problems are logged.
+    assert _records_by_event(caplog) == {}
     for record in caplog.records:
         assert robot_key_raw not in record.getMessage()
 
     recovery_tracer.force_flush()
-    spans = span_exporter.get_finished_spans()
-    turn = next(span for span in spans if span.name == "recovery.turn")
+    spans = {span.name: span for span in span_exporter.get_finished_spans()}
+    turn = spans["recovery.turn"]
     assert turn.attributes is not None
     assert turn.attributes["recovery.id"] == recovery_id
     assert turn.attributes["recovery.success"] is True
     assert turn.attributes["recovery.outcome"] == "success"
     assert turn.attributes["agent.id"] == str(gateway_agent.id)
-    assert turn.attributes["recovery.robot_key_id"]
+    assert turn.attributes["robot_key.id"]
+    assert turn.attributes["recovery.payload.ui_log_count"] == 1
+    assert turn.attributes["recovery.payload.size"] > 0  # pyright: ignore[reportOperatorIssue]
+
+    persist = spans["recovery.persist"]
+    assert persist.parent is not None
+    assert turn.context is not None
+    assert persist.parent.span_id == turn.context.span_id
 
 
 def test_invalid_payload_logs_field_paths_not_values(
@@ -149,14 +137,14 @@ def test_invalid_payload_logs_field_paths_not_values(
     assert message["code"] == "INVALID_RECOVERY_PAYLOAD"
     events = _records_by_event(caplog)
     invalid = events["recovery.payload_invalid"]
-    error_count = _extra(invalid, "error_count")
-    field_paths = _extra(invalid, "field_paths")
-    assert error_count
+    field_paths = _extra(invalid, RECOVERY_PAYLOAD_INVALID_FIELDS)
     assert field_paths
     assert all(not path.startswith("task_name.") for path in field_paths)
     for record in caplog.records:
         assert secret_value not in record.getMessage()
-        assert secret_value not in str(getattr(record, "field_paths", ""))
+        assert secret_value not in str(
+            vars(record).get(RECOVERY_PAYLOAD_INVALID_FIELDS)
+        )
 
 
 def test_turn_failure_logs_and_records_redacted_exception(
@@ -189,8 +177,8 @@ def test_turn_failure_logs_and_records_redacted_exception(
 
     assert message == {"type": "error", "content": "Internal server error"}
     events = _records_by_event(caplog)
-    assert _extra(events["recovery.turn_failed"], "recovery_id")
-    assert _extra(events["recovery.turn_failed"], "error_type") == "RuntimeError"
+    assert _extra(events["recovery.turn_failed"], "recovery.id")
+    assert _extra(events["recovery.turn_failed"], "error.type") == "RuntimeError"
     _assert_no_secret(caplog)
 
     recovery_tracer.force_flush()

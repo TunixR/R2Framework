@@ -12,6 +12,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from observability.config import ObservabilitySettings
+from observability.events import EVENT_FIELDS_ATTR, log_event
 from observability.logging import configure_logging, create_logger_provider
 from observability.redaction import (
     RedactingLogRecordProcessor,
@@ -49,6 +50,27 @@ def test_filter_redacts_the_record() -> None:
     )
     assert RedactionFilter().filter(record) is True
     assert "super-secret" not in record.getMessage()
+
+
+def test_events_are_exported_with_event_name(
+    otel_logs: InMemoryLogRecordExporter,
+) -> None:
+    log_event(
+        logging.getLogger("tests.redaction"),
+        "recovery.turn_failed",
+        {"recovery.id": "rid-1", "recovery.task_name": "password=hunter2"},
+        logging.WARNING,
+    )
+
+    [exported] = otel_logs.get_finished_logs()
+    record = exported.log_record
+    attributes = dict(record.attributes or {})
+    assert record.event_name == "recovery.turn_failed"
+    assert attributes["recovery.id"] == "rid-1"
+    assert "hunter2" not in str(attributes["recovery.task_name"])
+    assert "hunter2" not in str(record.body)
+    for local_only in (EVENT_FIELDS_ATTR, "trace_id", "span_id", "otel.event.name"):
+        assert local_only not in attributes
 
 
 def test_exception_attributes_are_redacted(

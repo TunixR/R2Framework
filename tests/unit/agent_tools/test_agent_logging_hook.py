@@ -3,6 +3,9 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from agent_tools.hooks import AgentLoggingHook
 from database.logging.models import AgentTrace, GUITrace
@@ -43,6 +46,23 @@ def test_register_hooks_adds_callbacks():
 # ---------------------------------------------------------------------------
 # log_start
 # ---------------------------------------------------------------------------
+
+
+def test_log_start_links_the_current_span_to_the_agent_trace():
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    agent_id = uuid4()
+    hook = AgentLoggingHook(agent_id=agent_id, invocation_state={})
+
+    with provider.get_tracer("tests").start_as_current_span("invoke_agent"):
+        hook.log_start(FakeBeforeInvocationEvent())
+    provider.shutdown()
+
+    [span] = exporter.get_finished_spans()
+    assert span.attributes is not None
+    assert span.attributes["agent.id"] == str(agent_id)
+    assert span.attributes["agent_trace.id"] == str(hook.agent_trace_id)
 
 
 def test_log_start_creates_agent_trace():
