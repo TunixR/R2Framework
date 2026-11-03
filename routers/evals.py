@@ -12,15 +12,14 @@ from strands.models.openai import OpenAIModel
 
 import database.general as database
 from database.agents.models import Agent, AgentType
-from database.keys.models import RobotKey
-from security.utils import robot_key_hash
-from settings import PROVIDER_API_BASE, PROVIDER_API_KEY, PROVIDER_MODEL
-from templates.recovery_payload import RecoveryPayload
-
 from routers.recovery import (
+    ROBOT_KEY_HEADER,
     _build_recovery_context_or_raise,
     _persist_exception_with_context,
+    find_enabled_robot_key,
 )  # basedpyright: ignore[reportPrivateUsage]
+from settings import PROVIDER_API_BASE, PROVIDER_API_KEY, PROVIDER_MODEL
+from templates.recovery_payload import RecoveryPayload
 
 router = APIRouter(prefix="/evals")
 tracer = trace.get_tracer(__name__)
@@ -56,23 +55,6 @@ Based on this information, determine:
 - If the recovery task has been fulfilled: set continuation to the index of the next activity that should be executed (1-based index of activities in the process model, meaning activities start at 1, not 0)
 - If the recovery task has NOT been fulfilled: set continuation to -1
 - If the activity is within a loop: specify which iteration of the loop it should be (integer, 0-based). If not in a loop or loop iteration is irrelevant, set loop to 0."""
-
-
-def _get_valid_robot_key(
-    websocket: WebSocket, session: database.SessionDep
-) -> RobotKey | None:
-    key_raw = websocket.headers.get("X-ROBOT-KEY")
-    if not key_raw:
-        return None
-
-    key_hash = robot_key_hash(key_raw)
-    robot_key = session.exec(
-        select(RobotKey).where(RobotKey.key_hash == key_hash)
-    ).first()
-    if not robot_key or not robot_key.enabled:
-        return None
-
-    return robot_key
 
 
 def _get_valid_agent(
@@ -164,7 +146,7 @@ Process Model:
 async def handle_recovery_eval(
     websocket: WebSocket, session: database.SessionDep
 ) -> None:
-    robot_key = _get_valid_robot_key(websocket, session)
+    robot_key = find_enabled_robot_key(session, websocket.headers.get(ROBOT_KEY_HEADER))
     agent = _get_valid_agent(websocket, session)
     if robot_key and agent:
         await websocket.accept()
@@ -209,18 +191,20 @@ async def handle_recovery_eval(
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected during eval.")
         except ValueError as exc:
-            logger.error(f"Validation error during eval: {exc}")
+            logger.exception("Validation error during eval")
             try:
                 await websocket.send_json(
                     {"type": "error", "code": "VALIDATION_ERROR", "content": str(exc)}
                 )
                 await websocket.close(code=1003, reason=str(exc))
-            except Exception:  # nosec
-                pass
-        except Exception as e:
-            logger.error(f"Error during eval: {e}")
+            except Exception:
+                logger.debug("Failed to send eval validation error", exc_info=True)
+        except Exception:
+            logger.exception("Error during eval")
             try:
-                await websocket.send_json({"type": "error", "content": str(e)})
+                await websocket.send_json(
+                    {"type": "error", "content": "Internal server error"}
+                )
                 await websocket.close()
-            except Exception:  # nosec
-                pass
+            except Exception:
+                logger.debug("Failed to send eval error", exc_info=True)
