@@ -12,6 +12,9 @@ from strands.models.openai import OpenAIModel
 
 import database.general as database
 from database.agents.models import Agent, AgentType
+from observability import attributes as attrs
+from observability.events import error_type, log_event
+from observability.exceptions import record_exception
 from routers.recovery import (
     ROBOT_KEY_HEADER,
     _build_recovery_context_or_raise,
@@ -154,14 +157,14 @@ async def handle_recovery_eval(
         raise WebSocketDisconnect(code=1008, reason="Invalid robot key or agent id")
 
     with tracer.start_as_current_span(
-        "handle_recovery_eval",
+        attrs.SPAN_RECOVERY_EVAL,
         attributes={
-            "ws.path": "/evals/recovery/eval/ws",
-            "ws.client": str(websocket.client),
+            attrs.ROBOT_KEY_ID: str(robot_key.id),
+            attrs.AGENT_ID: str(agent.id),
         },
-    ):
-        logger.info("Eval WebSocket connected")
-
+        record_exception=False,
+        set_status_on_exception=False,
+    ) as span:
         try:
             payload = await websocket.receive_json()
             _validate_payload(payload)
@@ -189,9 +192,15 @@ async def handle_recovery_eval(
             )
             await websocket.close()
         except WebSocketDisconnect:
-            logger.info("WebSocket disconnected during eval.")
+            pass
         except ValueError as exc:
-            logger.exception("Validation error during eval")
+            # The client sent an unusable eval request: a warning, not an error.
+            log_event(
+                logger,
+                attrs.EVENT_RECOVERY_EVAL_INVALID,
+                {attrs.ERROR_TYPE: error_type(exc)},
+                logging.WARNING,
+            )
             try:
                 await websocket.send_json(
                     {"type": "error", "code": "VALIDATION_ERROR", "content": str(exc)}
@@ -199,8 +208,9 @@ async def handle_recovery_eval(
                 await websocket.close(code=1003, reason=str(exc))
             except Exception:
                 logger.debug("Failed to send eval validation error", exc_info=True)
-        except Exception:
+        except Exception as exc:
             logger.exception("Error during eval")
+            record_exception(span, exc, escaped=False)
             try:
                 await websocket.send_json(
                     {"type": "error", "content": "Internal server error"}

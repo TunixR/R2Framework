@@ -12,6 +12,7 @@ on these strings, so change them here and in OBSERVABILITY.md together.
 CLIENT_ADDRESS = "client.address"
 ERROR_TYPE = "error.type"
 EXCEPTION_MESSAGE = "exception.message"
+EXCEPTION_STACKTRACE = "exception.stacktrace"
 GEN_AI_USAGE_INPUT_TOKENS = "gen_ai.usage.input_tokens"
 GEN_AI_USAGE_OUTPUT_TOKENS = "gen_ai.usage.output_tokens"
 HTTP_REQUEST_METHOD = "http.request.method"
@@ -61,6 +62,7 @@ GUI_SCREENSHOT_SIZE = "gui.screenshot.size"
 
 SPAN_RECOVERY_TURN = "recovery.turn"
 SPAN_RECOVERY_PERSIST = "recovery.persist"
+SPAN_RECOVERY_EVAL = "recovery.eval"
 SPAN_GUI_ACTION = "gui.action"
 SPAN_GUI_SCREENSHOT = "gui.screenshot"
 
@@ -78,6 +80,7 @@ EVENT_RECOVERY_KEEP_ALIVE_FAILED = "recovery.keep_alive_failed"
 EVENT_RECOVERY_NO_GATEWAY_AGENT = "recovery.no_gateway_agent"
 EVENT_RECOVERY_PAYLOAD_INVALID = "recovery.payload_invalid"
 EVENT_RECOVERY_TURN_FAILED = "recovery.turn_failed"
+EVENT_RECOVERY_EVAL_INVALID = "recovery.eval_invalid"
 
 EVENT_GUI_ACTION_RETRY = "gui.action_retry"
 EVENT_GUI_MAX_ACTIONS_EXCEEDED = "gui.max_actions_exceeded"

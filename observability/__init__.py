@@ -88,10 +88,6 @@ def configure_observability(
     return _current
 
 
-def get_observability() -> Observability | None:
-    return _current
-
-
 def setup_strands_telemetry() -> None:
     """Share the app tracer provider with Strands so spans stay in one trace."""
     observability = _current

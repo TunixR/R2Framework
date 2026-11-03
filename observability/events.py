@@ -8,7 +8,8 @@ accounting record. Durations and nesting belong on spans instead.
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any
 
 from observability.attributes import OTEL_EVENT_NAME
 
@@ -26,6 +27,16 @@ def brief(value: object, limit: int = _MAX_TEXT) -> str:
     """Bound free text (task names, process models) before it reaches telemetry."""
     text = "" if value is None else str(value)
     return text if len(text) <= limit else f"{text[: limit - 3]}..."
+
+
+def field_paths(errors: Iterable[Mapping[str, Any]]) -> list[str]:
+    """Dotted locations of validation errors, deduplicated, without input values."""
+    paths: list[str] = []
+    for error in errors:
+        path = ".".join(str(part) for part in error.get("loc", ()))
+        if path and path not in paths:
+            paths.append(path)
+    return paths
 
 
 def error_type(exc: BaseException | None) -> str | None:
