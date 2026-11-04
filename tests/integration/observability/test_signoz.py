@@ -13,9 +13,9 @@ import pytest
 from opentelemetry import trace
 from sqlmodel import Session
 
-from database.agents.gui_telemetry import GuiTaskTelemetry
 from database.agents.models import Agent
 from database.logging.models import RobotException
+from observability.instrumentation.gui_agent import GuiTaskTelemetry
 from tests.integration.observability.conftest import SECRET, ScriptedModel, Telemetry
 from tests.integration.observability.signoz import Row
 

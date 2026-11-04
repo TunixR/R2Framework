@@ -7,8 +7,8 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import Tracer
 
-import database.agents.gui_telemetry as gui_telemetry_module
-from database.agents.gui_telemetry import GuiTaskTelemetry
+import observability.instrumentation.gui_agent as gui_agent_module
+from observability.instrumentation.gui_agent import GuiTaskTelemetry
 
 
 @pytest.fixture
@@ -23,7 +23,7 @@ def tracer(
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     tracer = provider.get_tracer("tests.gui")
-    monkeypatch.setattr(gui_telemetry_module, "tracer", tracer)
+    monkeypatch.setattr(gui_agent_module, "tracer", tracer)
     yield tracer
     provider.shutdown()
 

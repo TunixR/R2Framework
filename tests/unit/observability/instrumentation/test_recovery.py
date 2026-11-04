@@ -9,7 +9,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from opentelemetry.trace import Tracer
 from pydantic import BaseModel, ValidationError
 
-from routers.recovery_telemetry import invalid_field_paths, recovery_turn
+from observability.instrumentation.recovery import invalid_field_paths, recovery_turn
 
 ROBOT_KEY_ID = UUID(int=7)
 
