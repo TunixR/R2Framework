@@ -1,0 +1,12 @@
+# Production stack: the framework and every service it depends on.
+# Only the framework API and the SigNoz UI are published; everything else is
+# reachable on the internal networks only.
+#
+#   docker compose -f docker/compose.prod.yaml up -d --build
+name: r2framework
+
+include:
+  - postgres/compose.yaml
+  - seaweedfs/compose.yaml
+  - observability/compose.yaml
+  - framework/compose.yaml

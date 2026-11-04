@@ -61,10 +61,14 @@ Optional (not in CI):
 uv run pytest tests/integration -q
 ```
 - `tests/integration/observability` needs a live SigNoz (collector on `:4318`, ClickHouse via
-  `docker exec signoz-clickhouse` or `SIGNOZ_CLICKHOUSE_URL`) and skips otherwise; it deletes
+  `docker exec r2framework-signoz-clickhouse-1` or `SIGNOZ_CLICKHOUSE_URL`) and skips otherwise; it deletes
   the data it exports. See `OBSERVABILITY.md` → Tests.
 
-5) Database + migrations (Alembic)
+5) Local services (Docker)
+- Postgres, SeaweedFS S3 and SigNoz run from `docker/compose.dev.yaml`; the framework runs on the
+  host. Setup, ports, upgrades and production (`docker/compose.prod.yaml`): `docker/README.md`.
+
+6) Database + migrations (Alembic)
 - Config: `alembic.ini`, migration env: `migrations/env.py`.
 - Common commands:
 ```
@@ -76,12 +80,12 @@ uv run alembic revision --autogenerate -m "your message"
 ```
 Note: `migrations/env.py` imports models via wildcard to register tables with `SQLModel.metadata`.
 
-6) “Full verification” (recommended before PR)
+7) “Full verification” (recommended before PR)
 ```
 uv run ruff . --fix && uv run basedpyright -p pyproject.toml --level error && uv run bandit -c pyproject.toml -r . && uv run pytest tests/unit -q
 ```
 
-7) Code style (repo conventions)
+8) Code style (repo conventions)
 - Formatting: let `ruff-format` handle layout; don’t hand-align or fight the formatter.
 - Line length: follow ruff defaults/config; keep long expressions readable.
 - Imports:
@@ -117,36 +121,36 @@ Repo layout conventions (as seen in this codebase):
 - DB models live under `database/*/models.py` using SQLModel.
 - Cross-cutting auth lives in `middlewares/auth.py` and `security/*`.
 
-8) SQLModel / Alembic repo-specific patterns
+9) SQLModel / Alembic repo-specific patterns
 - Model registration: `database/general.py` and `migrations/env.py` use `from ...models import *` so `SQLModel.metadata` sees all tables.
   - If you add a new model module, ensure it is imported in those aggregation points.
   - Keep the existing `# noqa: F403` annotations and add a short “why” if you introduce a new one.
 - Unit tests use SQLite. If you introduce Postgres-only types, add a SQLite compile shim (see `tests/unit/fixtures/session_fixture.py` mapping `JSONB` -> `JSON`).
 
-9) Testing conventions
+10) Testing conventions
 - Tests should be deterministic and isolated.
 - Prefer fixtures from `tests/unit/fixtures/*` via `tests/unit/conftest.py` (it uses `pytest_plugins`).
 - When touching DB-related code, ensure tests don’t depend on external Postgres; unit tests use SQLite fixtures.
 
-10) Security / secrets / env
+11) Security / secrets / env
 - Do not commit secrets; `.env` is local-only; `.env.example` is the safe template.
 - Treat these as sensitive: `SECRET_KEY`, `PROVIDER_API_KEY`, `FREE_PROVIDER_API_KEY`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`.
 - `bandit` excludes `tests/` and `migrations/` (see `[tool.bandit]` in `pyproject.toml`).
 
-11) Repo automation files (read before changing workflows)
+12) Repo automation files (read before changing workflows)
 - `pyproject.toml`: dependencies + tool configuration (bandit, basedpyright).
 - `.pre-commit-config.yaml`: ruff, bandit, basedpyright, and unit tests.
 - `.github/workflows/unit-tests.yml`: CI uses `uv sync --all-extras --frozen` then `uv run pytest tests/unit -q`.
 
-12) Cursor / Copilot rules
+13) Cursor / Copilot rules
 - Cursor rules: no `.cursor/rules/` and no `.cursorrules` found at repo root.
 - Copilot instructions: no `.github/copilot-instructions.md` found.
 
-13) When blocked
+14) When blocked
 - If a change impacts secrets, auth, production config, billing, or data retention: stop and ask a targeted question.
 - If a check fails: rerun the exact failing command locally and report the minimal failing output needed to diagnose.
 
-14) Agent workflow (practical default)
+15) Agent workflow (practical default)
 1. `uv sync --all-extras --frozen`
 2. Make the smallest change that satisfies the request.
 3. `uv run ruff . --fix`
