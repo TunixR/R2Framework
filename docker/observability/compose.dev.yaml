@@ -1,0 +1,6 @@
+# Development: publish OTLP on localhost for the framework running on the host.
+services:
+  signoz-collector:
+    ports:
+      - 127.0.0.1:${OTLP_GRPC_HOST_PORT:-4317}:4317
+      - 127.0.0.1:${OTLP_HTTP_HOST_PORT:-4318}:4318

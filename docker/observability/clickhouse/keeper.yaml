@@ -1,0 +1,24 @@
+# ClickHouse Keeper (single node), from SigNoz Foundry's generated config.
+# For HA, run three keepers and list all of them under raft_configuration.
+listen_host: 0.0.0.0
+logger:
+  console: true
+  level: warning
+keeper_server:
+  tcp_port: 9181
+  server_id: 0
+  log_storage_path: /var/lib/clickhouse-keeper/coordination/log
+  snapshot_storage_path: /var/lib/clickhouse-keeper/coordination/snapshots
+  four_letter_word_white_list: "*"
+  coordination_settings:
+    operation_timeout_ms: 10000
+    session_timeout_ms: 30000
+    snapshot_distance: 100000
+    snapshots_to_keep: 3
+    raft_logs_level: warning
+    force_sync: false
+  raft_configuration:
+    server:
+      - id: 0
+        hostname: signoz-keeper
+        port: 9234

@@ -1,0 +1,15 @@
+# User-defined function SigNoz uses for histogram percentiles. The binary is
+# installed into user_scripts by the signoz-clickhouse-scripts service.
+functions:
+  type: executable
+  name: histogramQuantile
+  return_type: Float64
+  format: CSV
+  command: ./histogramQuantile
+  argument:
+    - name: buckets
+      type: Array(Float64)
+    - name: counts
+      type: Array(Float64)
+    - name: quantile
+      type: Float64
