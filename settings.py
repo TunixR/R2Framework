@@ -39,3 +39,31 @@ ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
+
+# Observability (traces and logs exported over OTLP to SigNoz)
+OBSERVABILITY_ENABLED = (
+    os.getenv("OBSERVABILITY_ENABLED", "true").lower() == "true"
+    and os.getenv("OTEL_SDK_DISABLED", "false").lower() != "true"
+)
+OTEL_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "r2framework-api")
+OTEL_SERVICE_NAMESPACE = os.getenv("OTEL_SERVICE_NAMESPACE", "r2framework")
+DEPLOYMENT_ENVIRONMENT = os.getenv("DEPLOYMENT_ENVIRONMENT", "development")
+OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv(
+    "OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"
+)
+OTEL_TRACES_SAMPLER_ARG = float(os.getenv("OTEL_TRACES_SAMPLER_ARG", "1.0"))
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+LOG_FORMAT = os.getenv("LOG_FORMAT", "json").lower()
+LOG_FILE = os.getenv("LOG_FILE") or None
+LOG_FILE_MAX_BYTES = int(os.getenv("LOG_FILE_MAX_BYTES", "10000000"))
+LOG_FILE_BACKUP_COUNT = int(os.getenv("LOG_FILE_BACKUP_COUNT", "5"))
+STRANDS_LOG_LEVEL = os.getenv("STRANDS_LOG_LEVEL", "INFO").upper()
+# Longest free text (task names, process models...) put on spans and events.
+TELEMETRY_MAX_TEXT_LENGTH = int(os.getenv("TELEMETRY_MAX_TEXT_LENGTH", "120"))
+
+# SigNoz access for tests/integration/observability (not used by the app)
+SIGNOZ_CLICKHOUSE_URL = os.getenv("SIGNOZ_CLICKHOUSE_URL") or None
+SIGNOZ_CLICKHOUSE_CONTAINER = os.getenv(
+    "SIGNOZ_CLICKHOUSE_CONTAINER", "signoz-clickhouse"
+)
+SIGNOZ_POLL_TIMEOUT = float(os.getenv("SIGNOZ_POLL_TIMEOUT", "60"))

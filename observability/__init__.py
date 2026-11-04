@@ -54,7 +54,7 @@ def configure_observability(
     """Configure traces, logs, correlation, and exception handlers for an app."""
     global _current
 
-    settings = settings or ObservabilitySettings.from_env()
+    settings = settings or ObservabilitySettings.from_settings()
     tracer_provider: TracerProvider | None = None
     logger_provider: LoggerProvider | None = None
 

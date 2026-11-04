@@ -47,7 +47,7 @@ def test_json_formatter_includes_exception() -> None:
         record = _record("failed")
         record.exc_info = sys.exc_info()
 
-    payload = json.loads(JsonFormatter().format(record))
+    payload = json.loads(JsonFormatter("svc").format(record))
 
     assert "RuntimeError: boom" in payload["exception"]
 
@@ -78,7 +78,7 @@ def test_json_formatter_redacts_exception_and_extras() -> None:
     setattr(record, "recovery.task_name", "password=super-secret")
     setattr(record, EVENT_FIELDS_ATTR, ("recovery.task_name",))
 
-    payload = json.loads(JsonFormatter().format(record))
+    payload = json.loads(JsonFormatter("svc").format(record))
 
     assert "hunter2" not in payload["message"]
     assert "hunter2" not in payload["exception"]

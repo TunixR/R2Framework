@@ -29,11 +29,13 @@ def otel_logs() -> Iterator[InMemoryLogRecordExporter]:
     provider = LoggerProvider()
     provider.add_log_record_processor(RedactingLogRecordProcessor())
     provider.add_log_record_processor(SimpleLogRecordProcessor(exporter))
-    configure_logging(ObservabilitySettings(log_format="console"), provider)
+    configure_logging(
+        ObservabilitySettings.from_settings(log_format="console"), provider
+    )
     try:
         yield exporter
     finally:
-        configure_logging(ObservabilitySettings(log_format="console"))
+        configure_logging(ObservabilitySettings.from_settings(log_format="console"))
         provider.shutdown()
 
 
@@ -91,14 +93,16 @@ def test_exception_attributes_are_redacted(
 def test_logger_provider_registers_redaction_before_export() -> None:
     exporter = InMemoryLogRecordExporter()
     provider = create_logger_provider(
-        ObservabilitySettings(), exporter, set_global=False
+        ObservabilitySettings.from_settings(), exporter, set_global=False
     )
-    configure_logging(ObservabilitySettings(log_format="console"), provider)
+    configure_logging(
+        ObservabilitySettings.from_settings(log_format="console"), provider
+    )
     try:
         logging.getLogger("tests.redaction").warning("token=abc12345678")
         provider.force_flush()
     finally:
-        configure_logging(ObservabilitySettings(log_format="console"))
+        configure_logging(ObservabilitySettings.from_settings(log_format="console"))
         provider.shutdown()
 
     [exported] = exporter.get_finished_logs()
@@ -120,9 +124,11 @@ def test_span_processor_forwards_spans_to_its_delegate() -> None:
 def test_logger_provider_mirrors_event_name_as_attribute() -> None:
     exporter = InMemoryLogRecordExporter()
     provider = create_logger_provider(
-        ObservabilitySettings(), exporter, set_global=False
+        ObservabilitySettings.from_settings(), exporter, set_global=False
     )
-    configure_logging(ObservabilitySettings(log_format="console"), provider)
+    configure_logging(
+        ObservabilitySettings.from_settings(log_format="console"), provider
+    )
     try:
         log_event(
             logging.getLogger("tests.redaction"),
@@ -132,7 +138,7 @@ def test_logger_provider_mirrors_event_name_as_attribute() -> None:
         )
         provider.force_flush()
     finally:
-        configure_logging(ObservabilitySettings(log_format="console"))
+        configure_logging(ObservabilitySettings.from_settings(log_format="console"))
         provider.shutdown()
 
     [exported] = exporter.get_finished_logs()

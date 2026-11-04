@@ -11,7 +11,9 @@ from observability.tracing import (
 
 
 def test_resource_uses_settings() -> None:
-    settings = ObservabilitySettings(service_name="svc", environment="test")
+    settings = ObservabilitySettings.from_settings(
+        service_name="svc", environment="test"
+    )
     resource = build_resource(settings)
 
     assert resource.attributes["service.name"] == "svc"
@@ -21,7 +23,9 @@ def test_resource_uses_settings() -> None:
 
 def test_provider_exports_spans() -> None:
     exporter = InMemorySpanExporter()
-    provider = create_tracer_provider(ObservabilitySettings(), exporter=exporter)
+    provider = create_tracer_provider(
+        ObservabilitySettings.from_settings(), exporter=exporter
+    )
     tracer = provider.get_tracer(__name__)
 
     with tracer.start_as_current_span("unit"):
