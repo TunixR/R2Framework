@@ -1,4 +1,5 @@
-# Observability: SigNoz (UI, OTLP ingest, ClickHouse storage). Architecture: docker/README.md.
+# Observability: SigNoz (UI, OTLP ingest, ClickHouse storage) and the otel-agent
+# that collects Postgres and SeaweedFS telemetry. Architecture: docker/README.md.
 #
 # Layout follows SigNoz's Foundry manifests (upstream dropped its `deploy/`
 # compose files in v0.130): ClickHouse + ClickHouse Keeper + a Postgres
@@ -180,6 +181,32 @@ services:
       retries: 12
       start_period: 30s
 
+  # Infrastructure telemetry: Postgres metrics (postgresql receiver), SeaweedFS
+  # metrics (Prometheus scrape) and the container logs of every service labelled
+  # `otel.service.name`, forwarded to signoz-collector over OTLP.
+  otel-agent:
+    <<: *signoz-defaults
+    image: otel/opentelemetry-collector-contrib:${OTEL_AGENT_VERSION:-0.164.0}
+    # Docker's container log files (read-only mount below) are readable by root only.
+    user: "0:0"
+    command:
+      - --config=/etc/otelcol/config.yaml
+      # Report the table schema as its own attribute (receiver's recommended mode).
+      - --feature-gates=receiver.postgresql.separateSchemaAttr
+    environment:
+      POSTGRES_MONITOR_USER: ${POSTGRES_MONITOR_USER:-otel_monitor}
+      POSTGRES_MONITOR_PASSWORD: ${POSTGRES_MONITOR_PASSWORD:?set POSTGRES_MONITOR_PASSWORD in docker/.env}
+      DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT:-development}
+    volumes:
+      - ./agent/config.yaml:/etc/otelcol/config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - otel-agent-data:/var/lib/otelcol
+    networks:
+      - telemetry
+      - backend
+    depends_on:
+      signoz-collector:
+        condition: service_healthy
 
 volumes:
   signoz-keeper-data:
@@ -190,7 +217,11 @@ volumes:
     name: r2framework-signoz-clickhouse-scripts
   signoz-metastore-data:
     name: r2framework-signoz-metastore-data
+  otel-agent-data:
+    name: r2framework-otel-agent-data
 
 networks:
   telemetry:
     name: r2framework-telemetry
+  backend:
+    name: r2framework-backend
