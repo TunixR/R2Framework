@@ -1,0 +1,202 @@
+# otel-agent (opentelemetry-collector-contrib): collects telemetry from the
+# infrastructure services, which do not speak OTLP themselves, and forwards it
+# to signoz-collector.
+#
+# - Postgres metrics: postgresql receiver, as the read-only pg_monitor role.
+# - SeaweedFS metrics: Prometheus scrape of each component's metricsPort.
+# - Logs: Docker's json-file logs of every container that carries the
+#   `otel.service.name` label (the compose files copy it into each line with the
+#   logging driver's `labels` option). Containers without it, such as the
+#   framework (which exports its own logs over OTLP), are skipped.
+extensions:
+  file_storage:
+    directory: /var/lib/otelcol
+    create_directory: true
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  postgresql:
+    endpoint: postgres:5432
+    transport: tcp
+    username: ${env:POSTGRES_MONITOR_USER}
+    password: ${env:POSTGRES_MONITOR_PASSWORD}
+    collection_interval: 60s
+    tls:
+      insecure: true
+
+  prometheus/seaweedfs:
+    config:
+      scrape_configs:
+        # One job per component so each one is its own service in SigNoz.
+        - job_name: seaweedfs-master
+          scrape_interval: 60s
+          static_configs:
+            - targets: [seaweedfs-master:9324]
+        - job_name: seaweedfs-volume
+          scrape_interval: 60s
+          static_configs:
+            - targets: [seaweedfs-volume:9325]
+        - job_name: seaweedfs-filer
+          scrape_interval: 60s
+          static_configs:
+            - targets: [seaweedfs-filer:9326]
+        - job_name: seaweedfs-s3
+          scrape_interval: 60s
+          static_configs:
+            - targets: [seaweedfs-s3:9327]
+
+  file_log/containers:
+    include: [/var/lib/docker/containers/*/*-json.log]
+    start_at: end
+    storage: file_storage
+    operators:
+      - type: json_parser
+        id: docker
+        timestamp:
+          parse_from: attributes.time
+          layout_type: gotime
+          layout: "2006-01-02T15:04:05.999999999Z07:00"
+      - type: filter
+        expr: 'attributes.attrs == nil || attributes.attrs["otel.service.name"] == nil'
+      - type: move
+        from: attributes.attrs["otel.service.name"]
+        to: resource["service.name"]
+      - type: move
+        from: attributes.log
+        to: body
+      - type: move
+        from: attributes.stream
+        to: attributes["log.iostream"]
+      - type: remove
+        field: attributes.attrs
+      - type: remove
+        if: "attributes.time != nil"
+        field: attributes.time
+      - type: router
+        default: done
+        routes:
+          - expr: 'resource["service.name"] == "postgres"'
+            output: postgres
+          - expr: 'resource["service.name"] matches "^seaweedfs-"'
+            output: seaweedfs
+
+      # 2026-11-04 17:11:00.123 UTC [57] user@db ERROR:  message
+      - type: regex_parser
+        id: postgres
+        on_error: send_quiet
+        regex: '^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d(?:\.\d+)? \S+ \[(?P<pid>\d+)\] (?:(?P<user>[^@\s]*)@(?P<db>\S*) )?(?P<level>[A-Z0-9]+):\s+(?P<message>.*)\n?$'
+        severity:
+          parse_from: attributes.level
+          overwrite_text: true
+          mapping:
+            debug: [DEBUG1, DEBUG2, DEBUG3, DEBUG4, DEBUG5]
+            info: [LOG, INFO, NOTICE, DETAIL, HINT, STATEMENT, CONTEXT, QUERY, LOCATION]
+            warn: WARNING
+            error: ERROR
+            fatal: [FATAL, PANIC]
+        output: postgres_fields
+      - type: move
+        id: postgres_fields
+        if: "attributes.message != nil"
+        from: attributes.message
+        to: body
+      - type: move
+        if: "attributes.pid != nil"
+        from: attributes.pid
+        to: attributes["process.pid"]
+      - type: move
+        if: 'attributes.db != nil and attributes.db != ""'
+        from: attributes.db
+        to: attributes["db.namespace"]
+      - type: move
+        if: 'attributes.user != nil and attributes.user != ""'
+        from: attributes.user
+        to: attributes["db.user"]
+      - type: remove
+        if: "attributes.level != nil"
+        field: attributes.level
+      - type: remove
+        if: "attributes.db != nil"
+        field: attributes.db
+      - type: remove
+        if: "attributes.user != nil"
+        field: attributes.user
+        output: done
+
+      # I1104 17:11:15.047972 s3.go:408 message
+      - type: regex_parser
+        id: seaweedfs
+        on_error: send_quiet
+        regex: '^(?P<level>[IWEF])\d{4} \d\d:\d\d:\d\d\.\d+\s+(?:\d+ )?(?P<source>\S+:\d+)\]? (?P<message>.*)\n?$'
+        severity:
+          parse_from: attributes.level
+          overwrite_text: true
+          mapping:
+            info: I
+            warn: W
+            error: E
+            fatal: F
+        output: seaweedfs_fields
+      - type: move
+        id: seaweedfs_fields
+        if: "attributes.message != nil"
+        from: attributes.message
+        to: body
+      - type: move
+        if: "attributes.source != nil"
+        from: attributes.source
+        to: attributes["code.location"]
+      - type: remove
+        if: "attributes.level != nil"
+        field: attributes.level
+        output: done
+
+      - type: noop
+        id: done
+
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 200
+  resource/common:
+    attributes:
+      - key: service.namespace
+        value: r2framework
+        action: upsert
+      - key: deployment.environment
+        value: ${env:DEPLOYMENT_ENVIRONMENT}
+        action: upsert
+  resource/postgres:
+    attributes:
+      - key: service.name
+        value: postgres
+        action: upsert
+  batch:
+    send_batch_size: 10000
+    timeout: 10s
+
+exporters:
+  otlp_grpc/signoz:
+    endpoint: signoz-collector:4317
+    tls:
+      insecure: true
+
+service:
+  extensions: [file_storage, health_check]
+  telemetry:
+    logs:
+      encoding: json
+  pipelines:
+    metrics/postgres:
+      receivers: [postgresql]
+      processors: [memory_limiter, resource/postgres, resource/common, batch]
+      exporters: [otlp_grpc/signoz]
+    metrics/seaweedfs:
+      receivers: [prometheus/seaweedfs]
+      processors: [memory_limiter, resource/common, batch]
+      exporters: [otlp_grpc/signoz]
+    logs/containers:
+      receivers: [file_log/containers]
+      processors: [memory_limiter, resource/common, batch]
+      exporters: [otlp_grpc/signoz]
