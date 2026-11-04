@@ -121,7 +121,7 @@ def test_span_processor_forwards_spans_to_its_delegate() -> None:
     assert [span.name for span in exporter.get_finished_spans()] == ["unit"]
 
 
-def test_logger_provider_mirrors_event_name_as_attribute() -> None:
+def test_logger_provider_exports_event_name_field_only() -> None:
     exporter = InMemoryLogRecordExporter()
     provider = create_logger_provider(
         ObservabilitySettings.from_settings(), exporter, set_global=False
@@ -143,6 +143,6 @@ def test_logger_provider_mirrors_event_name_as_attribute() -> None:
 
     [exported] = exporter.get_finished_logs()
     assert exported.log_record.event_name == "recovery.auth_failed"
-    assert dict(exported.log_record.attributes or {})["event.name"] == (
-        "recovery.auth_failed"
-    )
+    # The name travels only in the LogRecord field; the SigNoz collector maps
+    # it to an attribute (docker/observability/collector/config.yaml).
+    assert "event.name" not in dict(exported.log_record.attributes or {})
