@@ -21,17 +21,25 @@ uvicorn (host)  --OTLP/http :4318-->  signoz-otel-collector  -->  ClickHouse
 
 ## Configuration
 
+Like every other setting, these are read in `settings.py` (from `.env`, see `.env.example`);
+`ObservabilitySettings.from_settings()` collects them, and tests override fields through it.
+Export always uses OTLP over HTTP/protobuf.
+
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `OBSERVABILITY_ENABLED` | `true` | Master switch for span/log export |
 | `OTEL_SERVICE_NAME` | `r2framework-api` | Resource `service.name` |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | SigNoz collector base URL |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | OTLP transport |
-| `OTEL_TRACES_SAMPLER_ARG` | `1.0` | Trace sample ratio (`0.0`–`1.0`) |
+| `OTEL_SERVICE_NAMESPACE` | `r2framework` | Resource `service.namespace` |
 | `DEPLOYMENT_ENVIRONMENT` | `development` | Resource `deployment.environment` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | SigNoz collector base URL |
+| `OTEL_TRACES_SAMPLER_ARG` | `1.0` | Trace sample ratio (clamped to `0.0`–`1.0`) |
 | `LOG_LEVEL` | `INFO` | Root log level |
 | `LOG_FORMAT` | `json` | `json` or `console` |
-| `LOG_FILE` | empty | Optional rotating file (10 MB × 5) |
+| `LOG_FILE` | empty | Optional rotating log file |
+| `LOG_FILE_MAX_BYTES` | `10000000` | Rotation size of `LOG_FILE` |
+| `LOG_FILE_BACKUP_COUNT` | `5` | Rotated files kept |
+| `STRANDS_LOG_LEVEL` | `INFO` | Level of the `strands` logger |
+| `TELEMETRY_MAX_TEXT_LENGTH` | `120` | Truncation of free text on spans and events (`brief()`) |
 
 `OTEL_SDK_DISABLED=true` also disables export. Unit tests set
 `OBSERVABILITY_ENABLED=false` before importing `main`, so the suite never contacts the collector.
@@ -151,10 +159,10 @@ record of payloads, messages and screenshots; telemetry does not duplicate them.
 Business code reports milestones; small per-flow telemetry objects decide how they become spans,
 attributes and events:
 
-- `routers/recovery_telemetry.py`: `recovery_turn()` / `RecoveryTurnTelemetry` for the recovery
+- `observability/instrumentation/recovery.py`: `recovery_turn()` / `RecoveryTurnTelemetry` for the recovery
   websocket (`payload_received`, `persisting`, `persisted`, `completed`, `invalid_payload`,
   `failed`, ...).
-- `database/agents/gui_telemetry.py`: `GuiTaskTelemetry` for the GUI agent loop (`screenshot`,
+- `observability/instrumentation/gui_agent.py`: `GuiTaskTelemetry` for the GUI agent loop (`screenshot`,
   `action`, `retry`, `done`, `max_actions_exceeded`, `stopped`).
 
 ## Conventions for new code
@@ -173,7 +181,8 @@ attributes and events:
   `span.record_exception`. Expected domain failures are WARN events; unexpected ones are ERROR events
   with `exc_info` plus `record_exception`. Never return raw exception text to clients.
 - **Keep business code readable.** When a flow needs more than one or two telemetry calls, give it
-  a telemetry object next to it (see above) and test that object with in-memory exporters.
+  a telemetry object in `observability/instrumentation/` (see above) and test that object with
+  in-memory exporters.
 - **Correlate with the database.** When code creates an audit row (`RobotException`,
   `AgentTrace`, ...), put its id on the current span (`recovery.id`, `agent_trace.id`).
 
@@ -278,9 +287,10 @@ waits for ingestion to settle, deletes that service's rows from ClickHouse (SigN
 API) and asserts nothing is left. Attribute autocomplete metadata is left to retention.
 The tests are skipped when SigNoz is not reachable.
 
+The tests export to `OTEL_EXPORTER_OTLP_ENDPOINT`. Their SigNoz access is also set in `settings.py`:
+
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `SIGNOZ_OTLP_ENDPOINT` | `http://localhost:4318` | Collector the tests export to |
 | `SIGNOZ_CLICKHOUSE_URL` | unset | ClickHouse HTTP endpoint; when unset, `docker exec` is used |
 | `SIGNOZ_CLICKHOUSE_CONTAINER` | `signoz-clickhouse` | Container for `docker exec` |
 | `SIGNOZ_POLL_TIMEOUT` | `60` | Seconds to wait for ingested rows |

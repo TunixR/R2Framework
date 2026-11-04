@@ -65,7 +65,7 @@ from strands.types.content import ContentBlock, Messages
 from agent_tools.hooks import AgentLoggingHook
 from agent_tools.image import screenshot_bytes
 from config import Config
-from database.agents.gui_telemetry import GuiTaskTelemetry
+from observability.instrumentation.gui_agent import GuiTaskTelemetry
 from prompts.gui_agent import (
     STANDALONE_COMPUTER_USE_DOUBAO,
 )

@@ -20,7 +20,7 @@ from database.agents.models import Agent, AgentType
 from database.keys.models import RobotKey
 from database.logging.models import RecoveryContext, RobotException
 from observability import attributes as attrs
-from routers import recovery_telemetry as telemetry
+from observability.instrumentation import recovery as telemetry
 from security.utils import robot_key_hash
 from templates.common import TemplateModel
 from templates.recovery_payload import RecoveryPayload
