@@ -130,6 +130,22 @@ git-ignored, so a new production database needs its schema from a dump or from
 `database.general.create_db_and_tables()`. Committed Alembic migrations, run once per deploy,
 are pending work.
 
+### Integration tests
+
+With the development stack up and the repository's `.env` pointing at it:
+
+```bash
+docker compose -f docker/compose.dev.yaml up -d --wait
+uv run pytest tests/integration -q
+```
+
+| Folder | Checks |
+| --- | --- |
+| `tests/integration/postgres` | Server version, a table for every model, a rolled-back write, the read-only monitoring role |
+| `tests/integration/s3` | Object round trips through the S3 gateway |
+| `tests/integration/observability` | The framework's traces, logs and exceptions in SigNoz |
+| `tests/integration/interoperability` | Postgres errors arrive as parsed logs; Postgres and S3 activity arrives as metrics |
+
 ## Published ports
 
 | Port | Service | Dev | Prod |
