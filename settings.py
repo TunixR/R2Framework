@@ -64,6 +64,6 @@ TELEMETRY_MAX_TEXT_LENGTH = int(os.getenv("TELEMETRY_MAX_TEXT_LENGTH", "120"))
 # SigNoz access for tests/integration/observability (not used by the app)
 SIGNOZ_CLICKHOUSE_URL = os.getenv("SIGNOZ_CLICKHOUSE_URL") or None
 SIGNOZ_CLICKHOUSE_CONTAINER = os.getenv(
-    "SIGNOZ_CLICKHOUSE_CONTAINER", "signoz-clickhouse"
+    "SIGNOZ_CLICKHOUSE_CONTAINER", "r2framework-signoz-clickhouse-1"
 )
 SIGNOZ_POLL_TIMEOUT = float(os.getenv("SIGNOZ_POLL_TIMEOUT", "60"))

@@ -6,9 +6,9 @@ collector. No other observability backend is required.
 ## Architecture
 
 ```
-uvicorn (host)  --OTLP/http :4318-->  signoz-otel-collector  -->  ClickHouse
-   |  traces + logs + metrics              (signoz-net)              |
-   +------------------------------------------------------->  SigNoz UI :8080
+framework (host or container) --OTLP/http :4318--> signoz-collector --> ClickHouse <-- SigNoz UI :8080
+                                                        ^
+postgres, seaweedfs-*  --metrics + container logs--> otel-agent
 ```
 
 - The application creates one `TracerProvider` and one `LoggerProvider`
@@ -16,8 +16,8 @@ uvicorn (host)  --OTLP/http :4318-->  signoz-otel-collector  -->  ClickHouse
   spans, HTTP spans, and log records share one `trace_id`.
 - HTTP spans are produced by `FastAPIInstrumentor`, which names spans after the route template
   (`PATCH /provider/{router_id}`), not the raw URL.
-- The SigNoz collector (not the repository) owns the OTLP ports. The dead `otel-collector` service
-  was removed from `docker/docker-compose.yml`.
+- SigNoz and the `otel-agent` that collects Postgres and SeaweedFS telemetry are part of the
+  repository's compose stack (`docker/observability/`); see `docker/README.md`.
 
 ## Configuration
 
@@ -102,9 +102,10 @@ log_event(
 ```
 
 The event name travels as `otel.event.name`, which the logging handler promotes to the OTLP
-LogRecord `event_name` field. SigNoz `v0.108` (collector `v0.129`) drops that field, so
+LogRecord `event_name` field. SigNoz has no column for that field yet (collector `v0.144.15`), so
 `EventNameAttributeProcessor` also exports it as the `event.name` attribute; filter events with
-`attributes_string['event.name']`. Each attribute is exported under its key and copied into the JSON
+`attributes_string['event.name']`.
+Each attribute is exported under its key and copied into the JSON
 line; ad-hoc `extra=` values are not. Free text (task names, process models, exception messages)
 is truncated to 120 characters with `brief()`.
 
@@ -241,26 +242,27 @@ explorer, open its trace, and use the related-logs view to see every event logge
 
 ## Containerized backend
 
-If the API runs in Docker, join the `signoz-net` network and change only the endpoint:
+`docker/compose.prod.yaml` runs the API in the stack on the internal `r2framework-telemetry`
+network with `OTEL_EXPORTER_OTLP_ENDPOINT=http://signoz-collector:4318`; nothing else changes.
 
-```yaml
-services:
-  backend:
-    networks:
-      - signoz-net
-    environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: "http://signoz-otel-collector:4318"
+## Infrastructure telemetry
 
-networks:
-  signoz-net:
-    external: true
-```
+The `otel-agent` (`docker/observability/agent/config.yaml`) forwards to `signoz-collector`, under
+`service.namespace=r2framework`:
 
-## Known limitation
+| Service | Metrics | Logs |
+| --- | --- | --- |
+| `postgres` | `postgresql` receiver (`postgresql.*`), as the read-only `pg_monitor` role | stderr, parsed: severity, `db.namespace`, `db.user`, `process.pid` |
+| `seaweedfs-master`, `-volume`, `-filer`, `-s3` | Prometheus scrape of each `metricsPort` | stderr (glog), parsed: severity, `code.location` |
 
-SigNoz `v0.108` indexes exceptions from **span events** (`record_exception`), which is what this
-code emits. The log-based `.exception` convention requires collector `>= 0.144.3` and SigNoz
-`>= 0.120.0`; upgrading later needs no application changes.
+Logs are read from Docker's json-file logs of containers labelled `otel.service.name`; the
+framework container has no label, as it exports its own logs over OTLP.
+
+## Exceptions
+
+Exceptions are recorded as **span events** (`record_exception`), which SigNoz indexes. The stack now
+runs collector `v0.144.15` and SigNoz `v0.149.0`, which also support the log-based `.exception`
+convention, should it be adopted later.
 
 ## Tests
 
@@ -292,7 +294,7 @@ The tests export to `OTEL_EXPORTER_OTLP_ENDPOINT`. Their SigNoz access is also s
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `SIGNOZ_CLICKHOUSE_URL` | unset | ClickHouse HTTP endpoint; when unset, `docker exec` is used |
-| `SIGNOZ_CLICKHOUSE_CONTAINER` | `signoz-clickhouse` | Container for `docker exec` |
+| `SIGNOZ_CLICKHOUSE_CONTAINER` | `r2framework-signoz-clickhouse-1` | Container for `docker exec` |
 | `SIGNOZ_POLL_TIMEOUT` | `60` | Seconds to wait for ingested rows |
 
 ## Privacy

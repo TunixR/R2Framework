@@ -1,0 +1,11 @@
+# Development stack: every service except the framework, which runs on the host
+# (`uv run fastapi dev main.py`) against the ports published on 127.0.0.1:
+#   Postgres 5432, S3 8333, SeaweedFS filer 8888, OTLP 4317/4318, SigNoz UI 8080.
+#
+#   docker compose -f docker/compose.dev.yaml up -d
+name: r2framework
+
+include:
+  - path: [postgres/compose.yaml, postgres/compose.dev.yaml]
+  - path: [seaweedfs/compose.yaml, seaweedfs/compose.dev.yaml]
+  - path: [observability/compose.yaml, observability/compose.dev.yaml]

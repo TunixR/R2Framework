@@ -1,0 +1,46 @@
+# The R2Framework API, built from framework/Dockerfile (production only;
+# in development it runs on the host, see docker/README.md).
+services:
+  framework:
+    build:
+      context: ../..
+      dockerfile: docker/framework/Dockerfile
+    image: r2framework:${FRAMEWORK_VERSION:-latest}
+    restart: unless-stopped
+    # Application settings (provider keys, SECRET_KEY, admin user...): the same
+    # variables as the repository's .env.example.
+    env_file:
+      - path: ${FRAMEWORK_ENV_FILE:-../../.env}
+        required: true
+    # Service addresses and shared credentials come from the stack, overriding
+    # anything in the env file, so they cannot drift from the other services.
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-gateway}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in docker/.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in docker/.env}
+      S3_URL: http://seaweedfs-s3:8333
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set S3_ACCESS_KEY_ID in docker/.env}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY in docker/.env}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://signoz-collector:4318
+      DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT:-production}
+      LOG_FILE: ""
+    ports:
+      - ${FRAMEWORK_BIND:-0.0.0.0}:${FRAMEWORK_PORT:-8000}:8000
+    networks:
+      - backend
+      - telemetry
+    depends_on:
+      postgres:
+        condition: service_healthy
+      seaweedfs-s3:
+        condition: service_healthy
+      signoz-collector:
+        condition: service_healthy
+
+networks:
+  backend:
+    name: r2framework-backend
+  telemetry:
+    name: r2framework-telemetry
