@@ -102,9 +102,10 @@ log_event(
 ```
 
 The event name travels as `otel.event.name`, which the logging handler promotes to the OTLP
-LogRecord `event_name` field. SigNoz has no column for that field yet (collector `v0.144.15`), so
-`EventNameAttributeProcessor` also exports it as the `event.name` attribute; filter events with
-`attributes_string['event.name']`.
+LogRecord `event_name` field, and only there. SigNoz has no column for that field yet (collector
+`v0.144.15`, [SigNoz#8140](https://github.com/SigNoz/signoz/issues/8140)), so the SigNoz collector's
+`transform/event_name` processor (`docker/observability/collector/config.yaml`) copies it into the
+`event.name` attribute at ingestion; filter events with `attributes_string['event.name']`.
 Each attribute is exported under its key and copied into the JSON
 line; ad-hoc `extra=` values are not. Free text (task names, process models, exception messages)
 is truncated to 120 characters with `brief()`.

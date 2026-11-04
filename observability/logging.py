@@ -11,10 +11,9 @@ from typing import TYPE_CHECKING, override
 
 from opentelemetry import trace
 from opentelemetry.instrumentation.logging.handler import LoggingHandler
-from opentelemetry.sdk._logs import LogRecordProcessor
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 
-from observability.attributes import EVENT_NAME, OTEL_EVENT_NAME, REQUEST_ID
+from observability.attributes import OTEL_EVENT_NAME, REQUEST_ID
 from observability.config import ObservabilitySettings
 from observability.correlation import get_request_id
 from observability.events import EVENT_FIELDS_ATTR
@@ -28,7 +27,7 @@ from observability.tracing import build_resource
 if TYPE_CHECKING:
     from types import TracebackType
 
-    from opentelemetry.sdk._logs import LoggerProvider, ReadWriteLogRecord
+    from opentelemetry.sdk._logs import LoggerProvider
     from opentelemetry.sdk._logs.export import LogRecordExporter
 
     type ExcInfo = (
@@ -110,28 +109,6 @@ class _ExcludeExporterLogs(logging.Filter):
         return not record.name.startswith("opentelemetry.exporter")
 
 
-class EventNameAttributeProcessor(LogRecordProcessor):
-    """Copy the LogRecord ``event_name`` into an ``event.name`` attribute.
-
-    Keeps events filterable by name in backends that do not store the OTLP
-    field yet (SigNoz v0.108 drops it). Remove once SigNoz keeps the field.
-    """
-
-    @override
-    def on_emit(self, log_record: ReadWriteLogRecord) -> None:
-        record = log_record.log_record
-        if record.event_name and record.attributes is not None:
-            record.attributes[EVENT_NAME] = record.event_name  # pyright: ignore[reportIndexIssue] - BoundedAttributes is mutable here
-
-    @override
-    def shutdown(self) -> None:
-        return None
-
-    @override
-    def force_flush(self, timeout_millis: int = 30000) -> bool:
-        return True
-
-
 def create_logger_provider(
     settings: ObservabilitySettings,
     exporter: LogRecordExporter | None = None,
@@ -147,7 +124,6 @@ def create_logger_provider(
 
     provider = SdkLoggerProvider(resource=build_resource(settings))
     # Processors run in order on the same record: redact before exporting.
-    provider.add_log_record_processor(EventNameAttributeProcessor())
     provider.add_log_record_processor(RedactingLogRecordProcessor())
     provider.add_log_record_processor(BatchLogRecordProcessor(exporter))
     if set_global:

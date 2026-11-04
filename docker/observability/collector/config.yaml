@@ -38,6 +38,15 @@ processors:
     traces:
       span:
         - start_time_unix_nano != 0 and start_time < Now() - Duration("360h")
+  # SigNoz's logs schema (signoz_logs.logs_v2) has no column for the OTLP
+  # LogRecord `event_name` field yet (https://github.com/SigNoz/signoz/issues/8140)
+  # and drops it. Keep it queryable as the `event.name` attribute until it does.
+  transform/event_name:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          - set(log.attributes["event.name"], log.event_name) where log.event_name != "" and log.attributes["event.name"] == nil
   signozlogsnormalizer: {}
   signozspanmapper:
     groups: []
@@ -122,7 +131,7 @@ service:
       exporters: [signozclickhousemetrics, signozmeter, metadataexporter]
     logs:
       receivers: [otlp]
-      processors: [signozlogsnormalizer, filter/drop_stale, batch]
+      processors: [transform/event_name, signozlogsnormalizer, filter/drop_stale, batch]
       exporters: [clickhouselogsexporter, signozmeter, metadataexporter]
     metrics/meter:
       receivers: [signozmeter]
