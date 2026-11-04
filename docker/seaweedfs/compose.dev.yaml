@@ -1,0 +1,9 @@
+# Development: publish the S3 gateway, and the filer's web UI/HTTP API for
+# browsing stored objects, on localhost for the framework running on the host.
+services:
+  seaweedfs-s3:
+    ports:
+      - 127.0.0.1:${S3_HOST_PORT:-8333}:8333
+  seaweedfs-filer:
+    ports:
+      - 127.0.0.1:${FILER_HOST_PORT:-8888}:8888

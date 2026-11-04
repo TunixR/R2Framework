@@ -1,0 +1,103 @@
+# SeaweedFS: S3-compatible object storage (master + volume + filer + S3 gateway).
+# Only the S3 gateway is used by the framework. Nothing is published here;
+# seaweedfs/compose.dev.yaml publishes the S3 port on localhost.
+# Each component exposes Prometheus metrics on its metricsPort, scraped by the otel-agent.
+x-seaweedfs: &seaweedfs
+  image: chrislusf/seaweedfs:${SEAWEEDFS_VERSION:-4.52}
+  restart: unless-stopped
+  networks:
+    - backend
+  logging:
+    driver: json-file
+    options:
+      max-size: 50m
+      max-file: "3"
+      labels: otel.service.name
+
+services:
+  seaweedfs-master:
+    <<: *seaweedfs
+    command: >-
+      master -ip=seaweedfs-master -ip.bind=0.0.0.0 -metricsPort=9324
+    volumes:
+      - seaweedfs-master-data:/data
+    labels:
+      otel.service.name: seaweedfs-master
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  seaweedfs-volume:
+    <<: *seaweedfs
+    command: >-
+      volume -ip=seaweedfs-volume -ip.bind=0.0.0.0 -port=8080
+      -master=seaweedfs-master:9333 -metricsPort=9325
+    volumes:
+      - seaweedfs-volume-data:/data
+    labels:
+      otel.service.name: seaweedfs-volume
+    depends_on:
+      seaweedfs-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  seaweedfs-filer:
+    <<: *seaweedfs
+    command: >-
+      filer -ip=seaweedfs-filer -ip.bind=0.0.0.0
+      -master=seaweedfs-master:9333 -metricsPort=9326
+    volumes:
+      # Filer metadata (leveldb2 store): the directory tree and S3 buckets.
+      - seaweedfs-filer-data:/data
+    labels:
+      otel.service.name: seaweedfs-filer
+    depends_on:
+      seaweedfs-volume:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8888/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  seaweedfs-s3:
+    <<: *seaweedfs
+    command: >-
+      s3 -filer=seaweedfs-filer:8888 -ip.bind=0.0.0.0 -metricsPort=9327
+    environment:
+      # When both are set, SeaweedFS creates an admin identity from them and
+      # rejects unsigned/anonymous requests. Required in production.
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+    labels:
+      otel.service.name: seaweedfs-s3
+    depends_on:
+      seaweedfs-filer:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+volumes:
+  seaweedfs-master-data:
+    name: r2framework-seaweedfs-master-data
+  seaweedfs-volume-data:
+    name: r2framework-seaweedfs-volume-data
+  seaweedfs-filer-data:
+    name: r2framework-seaweedfs-filer-data
+
+networks:
+  backend:
+    name: r2framework-backend
