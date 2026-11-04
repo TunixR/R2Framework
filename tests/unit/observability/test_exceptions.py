@@ -34,7 +34,9 @@ class Harness:
 
 
 def _build(register: Callable[[FastAPI], None]) -> Harness:
-    settings = ObservabilitySettings(log_format="console", log_level="WARNING")
+    settings = ObservabilitySettings.from_settings(
+        enabled=True, log_format="console", log_level="WARNING"
+    )
     app = FastAPI()
     register(app)
     exported = InMemorySpanExporter()

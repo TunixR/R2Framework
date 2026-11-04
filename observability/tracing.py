@@ -15,8 +15,6 @@ from observability.redaction import RedactingSpanProcessor
 if TYPE_CHECKING:
     from opentelemetry.sdk.trace.export import SpanExporter
 
-SERVICE_NAMESPACE = "r2framework"
-
 # Matched against the full request URL by OpenTelemetryMiddleware.
 EXCLUDED_URLS = (
     r"/health$,"
@@ -32,7 +30,7 @@ def build_resource(settings: ObservabilitySettings) -> Resource:
     return Resource.create(
         {
             "service.name": settings.service_name,
-            "service.namespace": SERVICE_NAMESPACE,
+            "service.namespace": settings.service_namespace,
             "deployment.environment": settings.environment,
         }
     )

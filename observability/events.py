@@ -12,18 +12,17 @@ from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
 from observability.attributes import OTEL_EVENT_NAME
+from settings import TELEMETRY_MAX_TEXT_LENGTH
 
 # Names of the attributes a ``log_event`` call attached to the record. The JSON
 # formatter reads this instead of keeping its own allowlist; the OTel export
 # pipeline drops it.
 EVENT_FIELDS_ATTR = "event_fields"
 
-_MAX_TEXT = 120
-
 type AttributeValue = str | bool | int | float | Sequence[str] | None
 
 
-def brief(value: object, limit: int = _MAX_TEXT) -> str:
+def brief(value: object, limit: int = TELEMETRY_MAX_TEXT_LENGTH) -> str:
     """Bound free text (task names, process models) before it reaches telemetry."""
     text = "" if value is None else str(value)
     return text if len(text) <= limit else f"{text[: limit - 3]}..."

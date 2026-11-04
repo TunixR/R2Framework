@@ -32,7 +32,9 @@ def _build(register: Callable[[FastAPI], None]) -> Harness:
     exported = InMemorySpanExporter()
     handle = configure_observability(
         app,
-        settings=ObservabilitySettings(log_format="console", log_level="WARNING"),
+        settings=ObservabilitySettings.from_settings(
+            enabled=True, log_format="console", log_level="WARNING"
+        ),
         span_exporter=exported,
         log_exporter=InMemoryLogRecordExporter(),
         set_global=False,

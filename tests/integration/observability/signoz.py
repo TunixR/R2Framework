@@ -4,17 +4,16 @@ SigNoz has no API to delete individual spans or logs, so the tests talk to
 ClickHouse directly. Every run exports under a unique ``service.name``, which
 is what reads are scoped to and what cleanup deletes.
 
-Connection, in order of preference:
+Connection (configured in ``settings.py`` / ``.env``), in order of preference:
 - ``SIGNOZ_CLICKHOUSE_URL`` (e.g. ``http://localhost:8123``): ClickHouse HTTP.
-- otherwise ``docker exec`` into ``SIGNOZ_CLICKHOUSE_CONTAINER``
-  (default ``signoz-clickhouse``), which works with the stock SigNoz compose
-  file where ClickHouse is not published on the host.
+- otherwise ``docker exec`` into ``SIGNOZ_CLICKHOUSE_CONTAINER``, which works
+  with the stock SigNoz compose file where ClickHouse is not published on the
+  host.
 """
 
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess  # nosec B404 - test helper running a fixed docker command
 import time
@@ -22,7 +21,9 @@ import urllib.request
 from collections.abc import Callable
 from typing import Any
 
-POLL_TIMEOUT_S = float(os.getenv("SIGNOZ_POLL_TIMEOUT", "60"))
+import settings
+
+POLL_TIMEOUT_S = settings.SIGNOZ_POLL_TIMEOUT
 POLL_INTERVAL_S = 1.0
 
 type Row = dict[str, Any]
@@ -31,8 +32,8 @@ type Row = dict[str, Any]
 class SignozClickHouse:
     def __init__(self, service_name: str) -> None:
         self.service_name = service_name
-        self._url = os.getenv("SIGNOZ_CLICKHOUSE_URL")
-        self._container = os.getenv("SIGNOZ_CLICKHOUSE_CONTAINER", "signoz-clickhouse")
+        self._url = settings.SIGNOZ_CLICKHOUSE_URL
+        self._container = settings.SIGNOZ_CLICKHOUSE_CONTAINER
 
     # --- Transport -----------------------------------------------------------
 

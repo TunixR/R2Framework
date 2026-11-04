@@ -1,48 +1,40 @@
 import pytest
 
+import settings
 from observability.config import ObservabilitySettings
 
-_ENV_VARS = (
-    "OBSERVABILITY_ENABLED",
-    "OTEL_SDK_DISABLED",
-    "OTEL_SERVICE_NAME",
-    "OTEL_EXPORTER_OTLP_ENDPOINT",
-    "OTEL_TRACES_SAMPLER_ARG",
-    "LOG_LEVEL",
-    "LOG_FORMAT",
-    "LOG_FILE",
-    "DEPLOYMENT_ENVIRONMENT",
+
+def test_values_come_from_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "OTEL_SERVICE_NAME", "svc")
+    monkeypatch.setattr(settings, "OTEL_SERVICE_NAMESPACE", "ns")
+    monkeypatch.setattr(
+        settings, "OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4318/"
+    )
+    monkeypatch.setattr(settings, "LOG_FILE_MAX_BYTES", 1024)
+
+    resolved = ObservabilitySettings.from_settings()
+
+    assert resolved.service_name == "svc"
+    assert resolved.service_namespace == "ns"
+    assert resolved.log_file_max_bytes == 1024
+    assert resolved.otlp_endpoint("traces") == "http://collector:4318/v1/traces"
+
+
+def test_overrides_win_over_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "OBSERVABILITY_ENABLED", False)
+
+    resolved = ObservabilitySettings.from_settings(enabled=True, log_format="console")
+
+    assert resolved.enabled is True
+    assert resolved.log_format == "console"
+
+
+@pytest.mark.parametrize(
+    ("configured", "expected"), [(5.0, 1.0), (-1.0, 0.0), (0.25, 0.25)]
 )
+def test_sample_ratio_is_clamped(
+    monkeypatch: pytest.MonkeyPatch, configured: float, expected: float
+) -> None:
+    monkeypatch.setattr(settings, "OTEL_TRACES_SAMPLER_ARG", configured)
 
-
-def test_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in _ENV_VARS:
-        monkeypatch.delenv(name, raising=False)
-
-    settings = ObservabilitySettings.from_env()
-
-    assert settings.enabled is True
-    assert settings.service_name == "r2framework-api"
-    assert settings.endpoint == "http://localhost:4318"
-    assert settings.sample_ratio == 1.0
-    assert settings.log_format == "json"
-
-
-def test_disabled_by_flag_or_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OBSERVABILITY_ENABLED", "false")
-    assert ObservabilitySettings.from_env().enabled is False
-
-    monkeypatch.setenv("OBSERVABILITY_ENABLED", "true")
-    monkeypatch.setenv("OTEL_SDK_DISABLED", "true")
-    assert ObservabilitySettings.from_env().enabled is False
-
-
-def test_sample_ratio_is_clamped(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OTEL_TRACES_SAMPLER_ARG", "5")
-    assert ObservabilitySettings.from_env().sample_ratio == 1.0
-
-    monkeypatch.setenv("OTEL_TRACES_SAMPLER_ARG", "-1")
-    assert ObservabilitySettings.from_env().sample_ratio == 0.0
-
-    monkeypatch.setenv("OTEL_TRACES_SAMPLER_ARG", "not-a-number")
-    assert ObservabilitySettings.from_env().sample_ratio == 1.0
+    assert ObservabilitySettings.from_settings().sample_ratio == expected

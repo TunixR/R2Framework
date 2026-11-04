@@ -1,7 +1,7 @@
 """Fixtures for the SigNoz integration tests.
 
-The suite needs a live SigNoz: the OTLP collector (``SIGNOZ_OTLP_ENDPOINT``,
-default ``http://localhost:4318``) and its ClickHouse (see ``signoz.py``).
+The suite needs a live SigNoz: the OTLP collector at
+``settings.OTEL_EXPORTER_OTLP_ENDPOINT`` and its ClickHouse (see ``signoz.py``).
 Without them every test is skipped. All telemetry is exported under a unique
 ``service.name`` and deleted again when the session ends.
 """
@@ -9,7 +9,6 @@ Without them every test is skipped. All telemetry is exported under a unique
 from __future__ import annotations
 
 import logging
-import os
 import socket
 import uuid
 from collections.abc import AsyncIterator, Iterator
@@ -24,6 +23,7 @@ from pydantic import BaseModel
 from sqlmodel import Session
 from strands.models import Model
 
+import settings
 from database.engine import get_session
 from observability import Observability, configure_observability
 from observability.config import ObservabilitySettings
@@ -41,7 +41,7 @@ from tests.unit.fixtures.session_fixture import (  # noqa: F401
     session_fixture,
 )
 
-OTLP_ENDPOINT = os.getenv("SIGNOZ_OTLP_ENDPOINT", "http://localhost:4318")
+OTLP_ENDPOINT = settings.OTEL_EXPORTER_OTLP_ENDPOINT
 SECRET = "sk-integrationsecret123"
 
 logger = logging.getLogger("tests.integration.signoz")
@@ -170,10 +170,10 @@ def telemetry(signoz: SignozClickHouse, session: Session) -> Iterator[Telemetry]
     # Global providers, so Strands' tracer exports into the same pipeline.
     handle = configure_observability(
         app,
-        settings=ObservabilitySettings(
+        settings=ObservabilitySettings.from_settings(
+            enabled=True,
             service_name=signoz.service_name,
             environment="integration-test",
-            endpoint=OTLP_ENDPOINT,
             log_format="console",
         ),
     )

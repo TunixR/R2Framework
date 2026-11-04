@@ -15,7 +15,7 @@ from opentelemetry.sdk._logs import LogRecordProcessor
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 
 from observability.attributes import EVENT_NAME, OTEL_EVENT_NAME, REQUEST_ID
-from observability.config import DEFAULT_SERVICE_NAME, ObservabilitySettings
+from observability.config import ObservabilitySettings
 from observability.correlation import get_request_id
 from observability.events import EVENT_FIELDS_ATTR
 from observability.redaction import (
@@ -58,7 +58,7 @@ class TraceContextFilter(logging.Filter):
 
 
 class JsonFormatter(logging.Formatter):
-    def __init__(self, service_name: str = DEFAULT_SERVICE_NAME) -> None:
+    def __init__(self, service_name: str) -> None:
         super().__init__()
         self.service_name = service_name
 
@@ -197,7 +197,10 @@ def configure_logging(
 
     if settings.log_file:
         file_handler = RotatingFileHandler(
-            settings.log_file, maxBytes=10_000_000, backupCount=5, encoding="utf-8"
+            settings.log_file,
+            maxBytes=settings.log_file_max_bytes,
+            backupCount=settings.log_file_backup_count,
+            encoding="utf-8",
         )
         _install(root, file_handler, formatter=text_formatter)
 
@@ -213,4 +216,4 @@ def configure_logging(
         uv_logger.handlers.clear()
         uv_logger.propagate = True
 
-    logging.getLogger("strands").setLevel(logging.INFO)
+    logging.getLogger("strands").setLevel(settings.strands_log_level)
