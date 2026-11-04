@@ -1,0 +1,8 @@
+# Development: publish Postgres on localhost for the framework running on the host,
+# and seed a fresh data volume from the dumps in postgres/dumps (git-ignored).
+services:
+  postgres:
+    ports:
+      - 127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432
+    volumes:
+      - ./dumps:/dumps:ro
