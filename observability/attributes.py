@@ -20,6 +20,9 @@ HTTP_RESPONSE_STATUS_CODE = "http.response.status_code"
 URL_PATH = "url.path"
 # Promoted to the OTel LogRecord ``event_name`` field by the logging handler.
 OTEL_EVENT_NAME = "otel.event.name"
+# Deprecated attribute form of the event name. SigNoz (v0.108, collector
+# v0.129) drops the LogRecord ``event_name`` field, so it is mirrored here.
+EVENT_NAME = "event.name"
 
 # --- Project attributes ------------------------------------------------------
 

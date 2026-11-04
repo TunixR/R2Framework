@@ -115,3 +115,28 @@ def test_span_processor_forwards_spans_to_its_delegate() -> None:
     provider.shutdown()
 
     assert [span.name for span in exporter.get_finished_spans()] == ["unit"]
+
+
+def test_logger_provider_mirrors_event_name_as_attribute() -> None:
+    exporter = InMemoryLogRecordExporter()
+    provider = create_logger_provider(
+        ObservabilitySettings(), exporter, set_global=False
+    )
+    configure_logging(ObservabilitySettings(log_format="console"), provider)
+    try:
+        log_event(
+            logging.getLogger("tests.redaction"),
+            "recovery.auth_failed",
+            None,
+            logging.WARNING,
+        )
+        provider.force_flush()
+    finally:
+        configure_logging(ObservabilitySettings(log_format="console"))
+        provider.shutdown()
+
+    [exported] = exporter.get_finished_logs()
+    assert exported.log_record.event_name == "recovery.auth_failed"
+    assert dict(exported.log_record.attributes or {})["event.name"] == (
+        "recovery.auth_failed"
+    )
