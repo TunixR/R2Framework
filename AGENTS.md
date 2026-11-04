@@ -60,6 +60,9 @@ Optional (not in CI):
 ```
 uv run pytest tests/integration -q
 ```
+- `tests/integration/observability` needs a live SigNoz (collector on `:4318`, ClickHouse via
+  `docker exec signoz-clickhouse` or `SIGNOZ_CLICKHOUSE_URL`) and skips otherwise; it deletes
+  the data it exports. See `OBSERVABILITY.md` → Tests.
 
 5) Database + migrations (Alembic)
 - Config: `alembic.ini`, migration env: `migrations/env.py`.
