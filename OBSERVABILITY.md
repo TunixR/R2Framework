@@ -94,7 +94,9 @@ log_event(
 ```
 
 The event name travels as `otel.event.name`, which the logging handler promotes to the OTLP
-LogRecord `event_name` field. Each attribute is exported under its key and copied into the JSON
+LogRecord `event_name` field. SigNoz `v0.108` (collector `v0.129`) drops that field, so
+`EventNameAttributeProcessor` also exports it as the `event.name` attribute; filter events with
+`attributes_string['event.name']`. Each attribute is exported under its key and copied into the JSON
 line; ad-hoc `extra=` values are not. Free text (task names, process models, exception messages)
 is truncated to 120 characters with `brief()`.
 
@@ -258,6 +260,30 @@ uv run pytest tests/unit/observability -q
 ```
 
 The tests use `InMemorySpanExporter` / `InMemoryLogRecordExporter` and never make network calls.
+
+### Integration tests against a live SigNoz
+
+```bash
+uv run pytest tests/integration/observability -q
+```
+
+One happy path per feature, exported through the real OTLP pipeline and read back from SigNoz:
+request tracing with `request.id`, typed and redacted log events in the request trace, client
+errors as WARN events, unhandled errors in the Exceptions index (redacted), a full recovery
+websocket turn (websocket span → `recovery.turn` → `recovery.persist` and a real Strands agent,
+joined to the `RobotException` row), and GUI action and screenshot spans.
+
+Each run exports under a unique `service.name` (`r2framework-it-<random>`). At the end the suite
+waits for ingestion to settle, deletes that service's rows from ClickHouse (SigNoz has no delete
+API) and asserts nothing is left. Attribute autocomplete metadata is left to retention.
+The tests are skipped when SigNoz is not reachable.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SIGNOZ_OTLP_ENDPOINT` | `http://localhost:4318` | Collector the tests export to |
+| `SIGNOZ_CLICKHOUSE_URL` | unset | ClickHouse HTTP endpoint; when unset, `docker exec` is used |
+| `SIGNOZ_CLICKHOUSE_CONTAINER` | `signoz-clickhouse` | Container for `docker exec` |
+| `SIGNOZ_POLL_TIMEOUT` | `60` | Seconds to wait for ingested rows |
 
 ## Privacy
 
