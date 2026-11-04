@@ -491,21 +491,15 @@ class Agent(SQLModel, table=True):
             messages=messages,  # type: ignore This works fine
         )
 
-        input_tokens = 0
-        output_tokens = 0
-
         try:
             instruction = "\n".join(
                 [f"{arg.name}: {kwargs.get(arg.name)}" for arg in self.arguments]
             )
 
-            mid = await strands_agent.invoke_async(
+            _ = await strands_agent.invoke_async(
                 instruction,
                 invocation_state=invocation_state,
             )
-
-            input_tokens = mid.metrics.accumulated_usage.get("inputTokens", 0)
-            output_tokens = mid.metrics.accumulated_usage.get("outputTokens", 0)
 
             response: BaseModel | None = (
                 await strands_agent.invoke_async(
@@ -515,13 +509,15 @@ class Agent(SQLModel, table=True):
                 )
             ).structured_output
 
-            input_tokens = mid.metrics.accumulated_usage.get("inputTokens", 0)
-            output_tokens = mid.metrics.accumulated_usage.get("outputTokens", 0)
-
             if response is None:
                 raise ValueError("Agent did not return a structured response.")
             return response.model_dump()
         finally:
+            # Every AgentResult.metrics is this same object; accumulated_usage sums
+            # both invocations above, including tokens spent before a failure.
+            usage = strands_agent.event_loop_metrics.accumulated_usage
+            input_tokens = usage.get("inputTokens", 0)
+            output_tokens = usage.get("outputTokens", 0)
             cost = self.router.get_conversation_cost(input_tokens, output_tokens)
             agent_logging_hook: AgentLoggingHook | None = next(
                 filter(  # pyright: ignore[reportAssignmentType]
