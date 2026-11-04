@@ -11,9 +11,10 @@ from typing import TYPE_CHECKING, override
 
 from opentelemetry import trace
 from opentelemetry.instrumentation.logging.handler import LoggingHandler
+from opentelemetry.sdk._logs import LogRecordProcessor
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 
-from observability.attributes import OTEL_EVENT_NAME, REQUEST_ID
+from observability.attributes import EVENT_NAME, OTEL_EVENT_NAME, REQUEST_ID
 from observability.config import DEFAULT_SERVICE_NAME, ObservabilitySettings
 from observability.correlation import get_request_id
 from observability.events import EVENT_FIELDS_ATTR
@@ -25,8 +26,15 @@ from observability.redaction import (
 from observability.tracing import build_resource
 
 if TYPE_CHECKING:
-    from opentelemetry.sdk._logs import LoggerProvider
+    from types import TracebackType
+
+    from opentelemetry.sdk._logs import LoggerProvider, ReadWriteLogRecord
     from opentelemetry.sdk._logs.export import LogRecordExporter
+
+    type ExcInfo = (
+        tuple[type[BaseException], BaseException, TracebackType | None]
+        | tuple[None, None, None]
+    )
 
 # Marks handlers installed by ``configure_logging`` so reconfiguring replaces
 # them without touching handlers owned by anyone else.
@@ -78,12 +86,50 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, default=str)
 
 
+class RedactingFormatter(logging.Formatter):
+    """Plain-text formatter that also redacts exception tracebacks.
+
+    ``RedactionFilter`` only rewrites the message; the traceback is rendered
+    later by the formatter, from ``exc_info``.
+    """
+
+    @override
+    def formatException(self, ei: ExcInfo) -> str:
+        return redact(super().formatException(ei))
+
+    @override
+    def formatStack(self, stack_info: str) -> str:
+        return redact(super().formatStack(stack_info))
+
+
 class _ExcludeExporterLogs(logging.Filter):
     """Prevent exporter failures from re-entering the OTLP handler."""
 
     @override
     def filter(self, record: logging.LogRecord) -> bool:
         return not record.name.startswith("opentelemetry.exporter")
+
+
+class EventNameAttributeProcessor(LogRecordProcessor):
+    """Copy the LogRecord ``event_name`` into an ``event.name`` attribute.
+
+    Keeps events filterable by name in backends that do not store the OTLP
+    field yet (SigNoz v0.108 drops it). Remove once SigNoz keeps the field.
+    """
+
+    @override
+    def on_emit(self, log_record: ReadWriteLogRecord) -> None:
+        record = log_record.log_record
+        if record.event_name and record.attributes is not None:
+            record.attributes[EVENT_NAME] = record.event_name  # pyright: ignore[reportIndexIssue] - BoundedAttributes is mutable here
+
+    @override
+    def shutdown(self) -> None:
+        return None
+
+    @override
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        return True
 
 
 def create_logger_provider(
@@ -101,6 +147,7 @@ def create_logger_provider(
 
     provider = SdkLoggerProvider(resource=build_resource(settings))
     # Processors run in order on the same record: redact before exporting.
+    provider.add_log_record_processor(EventNameAttributeProcessor())
     provider.add_log_record_processor(RedactingLogRecordProcessor())
     provider.add_log_record_processor(BatchLogRecordProcessor(exporter))
     if set_global:
@@ -142,7 +189,7 @@ def configure_logging(
     if settings.log_format == "json":
         text_formatter = JsonFormatter(settings.service_name)
     else:
-        text_formatter = logging.Formatter(
+        text_formatter = RedactingFormatter(
             "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
         )
 

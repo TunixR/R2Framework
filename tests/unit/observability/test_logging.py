@@ -5,7 +5,7 @@ import sys
 from observability.attributes import OTEL_EVENT_NAME, REQUEST_ID
 from observability.correlation import _request_id
 from observability.events import EVENT_FIELDS_ATTR
-from observability.logging import JsonFormatter, TraceContextFilter
+from observability.logging import JsonFormatter, RedactingFormatter, TraceContextFilter
 
 
 def _record(message: str) -> logging.LogRecord:
@@ -96,3 +96,17 @@ def test_request_id_context_is_read() -> None:
         assert vars(record)["trace_id"] is None
     finally:
         _request_id.reset(token)
+
+
+def test_console_formatter_redacts_tracebacks() -> None:
+    try:
+        raise RuntimeError("db password=hunter2 sk-abcdef123456")
+    except RuntimeError:
+        record = _record("failed")
+        record.exc_info = sys.exc_info()
+
+    rendered = RedactingFormatter("%(message)s").format(record)
+
+    assert "RuntimeError" in rendered
+    assert "hunter2" not in rendered
+    assert "abcdef123456" not in rendered
