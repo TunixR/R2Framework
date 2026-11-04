@@ -1,0 +1,58 @@
+# PostgreSQL: the framework's relational store.
+# Reachable only on the internal `backend` network; postgres/compose.dev.yaml
+# publishes it on localhost for a framework running on the host.
+services:
+  postgres:
+    image: postgres:${POSTGRES_VERSION:-18.6-trixie}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gateway}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in docker/.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in docker/.env}
+      # Read-only role the otel-agent's postgresql receiver connects with.
+      # Created by initdb/10-otel-monitor.sh when the data volume is first initialised.
+      POSTGRES_MONITOR_USER: ${POSTGRES_MONITOR_USER:-otel_monitor}
+      POSTGRES_MONITOR_PASSWORD: ${POSTGRES_MONITOR_PASSWORD:?set POSTGRES_MONITOR_PASSWORD in docker/.env}
+    command:
+      - postgres
+      # Logs go to stderr; the otel-agent ships them to SigNoz and parses
+      # this prefix (keep observability/agent/config.yaml in sync).
+      - -c
+      - "log_line_prefix=%m [%p] %q%u@%d "
+      - -c
+      - log_min_duration_statement=${POSTGRES_LOG_MIN_DURATION_MS:-1000}
+      - -c
+      - log_lock_waits=on
+      - -c
+      - track_io_timing=on
+    volumes:
+      # Postgres 18+ layout: data lives in a major-version subdirectory of
+      # /var/lib/postgresql, so later major upgrades can use pg_upgrade --link.
+      - postgres-data:/var/lib/postgresql
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    networks:
+      - backend
+    labels:
+      otel.service.name: postgres
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: "3"
+        # Copies the label into every log line, which is how the otel-agent
+        # selects (and names) the containers whose logs it ships.
+        labels: otel.service.name
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  postgres-data:
+    name: r2framework-postgres-data
+
+networks:
+  backend:
+    name: r2framework-backend

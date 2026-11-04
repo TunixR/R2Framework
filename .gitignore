@@ -29,3 +29,6 @@ evals/data
 scripts/data
 evals/notebooks
 evals/results/*
+# Postgres seed dumps (docker/postgres/dumps/README.md)
+docker/postgres/dumps/*
+!docker/postgres/dumps/README.md
