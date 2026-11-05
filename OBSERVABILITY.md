@@ -118,20 +118,26 @@ WebSocket /recovery/robot_exception/ws            (FastAPI instrumentation)
     ├── recovery.persist                           (RobotException + RecoveryContext insert)
     └── invoke_agent <gateway>                     (Strands)
         ├── chat                                   (Strands, gen_ai.usage.*)
-        └── execute_tool <gui agent>               (Strands, enriched with gui.task.*)
-            ├── gui.screenshot
-            ├── invoke_agent / chat                (UI-TARS, Strands)
-            └── gui.action                         (one per robot action)
-                └── gui.screenshot
+        └── execute_tool tooled_guiagent           (Strands, enriched with gui.task.*)
+            ├── gui.screenshot                     (initial screen)
+            └── invoke_agent / chat                (the GUI agent's own loop, Strands)
+                └── execute_tool <action>          (Strands: click, type_text, scroll, ...)
+                    ├── gui.action                 (send the action, wait for the robot)
+                    └── gui.screenshot             (screen after the action)
 ```
+
+`TooledGuiAgent` (`database/agents/tooled_gui_agent.py`) is the GUI agent behind `AgentType.GuiAgent`.
+The UI-TARS loop (`database/agents/uitars.py`) uses the same telemetry, but it parses actions from
+the model's text, so its `gui.action` and `gui.screenshot` spans sit directly under its
+`execute_tool` span.
 
 | Span | Attributes |
 | --- | --- |
 | `recovery.turn` | `robot_key.id`, `agent.id`, `recovery.id`, `recovery.outcome` (`success`, `completed_unsuccessful`, `invalid_payload`, `client_disconnected`, `no_gateway_agent`, `internal_error`), `recovery.success`, `recovery.task_name`, `recovery.platform`, `recovery.os`, `recovery.process_model`, `recovery.payload.size`, `recovery.payload.ui_log_count`, `recovery.payload.has_errored_activity`, `recovery.payload.invalid_fields` |
 | `recovery.persist` | none |
 | `invoke_agent` (Strands) | `agent.id`, `agent_trace.id` (joins the trace to the `AgentTrace` row) |
-| `execute_tool` (GUI agent) | `gui.task.name`, `gui.task.process_model`, `gui.task.ui_log_count`, `gui.task.has_errored_activity`, `gui.task.iterations`, `gui.task.outcome` (`done`, `max_actions_exceeded`, `unparseable_response`) |
-| `gui.action` | `gui.action.iteration`, `gui.action.type`, `gui.action.success`; failed actions carry a redacted exception |
+| `execute_tool` (GUI agent) | `gui.task.name`, `gui.task.process_model`, `gui.task.ui_log_count`, `gui.task.has_errored_activity`, `gui.task.iterations`, `gui.task.outcome` (`done`, `model_stopped`, `client_disconnected`, `error`; UI-TARS also `max_actions_exceeded`, `unparseable_response`); errors carry a redacted exception |
+| `gui.action` | `gui.action.iteration`, `gui.action.type`, `gui.action.success`; failed actions carry a redacted exception without the action inputs. In `TooledGuiAgent` a failed action is returned to the model as a tool error, so it does not end the task |
 | `gui.screenshot` | `gui.screenshot.width`, `gui.screenshot.height`, `gui.screenshot.size` |
 | `POST /recovery/report_result/{recovery_id}` | `recovery.id`, `robot_key.id`, `recovery.success` |
 | `recovery.eval` (`/evals/recovery/eval/ws`) | `robot_key.id`, `agent.id`; unexpected failures carry a redacted exception |
@@ -164,8 +170,9 @@ attributes and events:
 - `observability/instrumentation/recovery.py`: `recovery_turn()` / `RecoveryTurnTelemetry` for the recovery
   websocket (`payload_received`, `persisting`, `persisted`, `completed`, `invalid_payload`,
   `failed`, ...).
-- `observability/instrumentation/gui_agent.py`: `GuiTaskTelemetry` for the GUI agent loop (`screenshot`,
-  `action`, `retry`, `done`, `max_actions_exceeded`, `stopped`).
+- `observability/instrumentation/gui_agent.py`: `GuiTaskTelemetry` for both GUI agent loops (`screenshot`,
+  `action`, `retry`, `done`, `model_stopped`, `client_disconnected`, `failed`, `max_actions_exceeded`,
+  `stopped`). `agent_tools.image.capture_screenshot` wraps a screenshot round trip in its span.
 
 ## Conventions for new code
 
