@@ -5,29 +5,32 @@ structured tool calls instead of parsing free-form text output. Each action
 (click, type, scroll, etc.) is a Strands tool that dispatches the action over
 WebSocket, waits for the client result, records a GUI trace, and returns a
 fresh screenshot for the model to reason about.
+
+Telemetry goes through ``GuiTaskTelemetry``: the outer ``tooled_guiagent`` tool
+span carries ``gui.task.*`` and each action tool span gets ``gui.action`` and
+``gui.screenshot`` children (see OBSERVABILITY.md).
 """
 
 from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from database.agents.models import Agent
 
 import asyncio
-from datetime import datetime, timezone
-from io import BytesIO
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import WebSocketDisconnect
-from PIL import Image
 from strands import Agent as StrandsAgent
 from strands import ToolContext, tool
-from strands.types.tools import ToolUse
 from strands.types.content import ContentBlock, Messages
-from strands.types.tools import ToolResult
+from strands.types.tools import ToolResult, ToolUse
 
 from agent_tools.hooks import AgentLoggingHook, MaxGuiImagesHook
-from agent_tools.image import screenshot_bytes
+from agent_tools.image import capture_screenshot
+from observability.instrumentation.gui_agent import GuiTaskTelemetry
 
 
 class TooledGuiAgent:
@@ -60,36 +63,51 @@ class TooledGuiAgent:
         state = tool_context.invocation_state
         websocket = state["websocket"]
         hook: AgentLoggingHook = state["hook"]
+        telemetry: GuiTaskTelemetry = state["gui_telemetry"]
         current_image: bytes = state["current_image"]
 
-        started_at = datetime.now(timezone.utc)
-        await websocket.send_json(
-            {
-                "type": "action",
-                "content": {"action_type": action_type, "action_inputs": action_inputs},
-            }
-        )
-        result = await websocket.receive_json()
-        finished_at = datetime.now(timezone.utc)
-
-        success = bool(result.get("success", False))
-        await hook.register_gui_trace(
-            action_type, action_inputs, current_image, started_at, finished_at, success
-        )
-
-        if not success:
-            raise RuntimeError(
-                f"Action '{action_type}' failed on client side. Inputs: {action_inputs}"
+        with telemetry.action(telemetry.actions + 1, action_type) as action_telemetry:
+            started_at = datetime.now(UTC)
+            await websocket.send_json(
+                {
+                    "type": "action",
+                    "content": {
+                        "action_type": action_type,
+                        "action_inputs": action_inputs,
+                    },
+                }
             )
+            result = await websocket.receive_json()
+            finished_at = datetime.now(UTC)
+
+            success = bool(result.get("success", False))
+            action_telemetry.result(success)
+            await hook.register_gui_trace(
+                action_type,
+                action_inputs,
+                current_image,
+                started_at,
+                finished_at,
+                success,
+            )
+
+            if not success:
+                # The span gets a copy without the inputs, which may hold typed text.
+                action_telemetry.failed(
+                    RuntimeError(
+                        f"Action execution failed on client side (action_type={action_type})."
+                    )
+                )
+                raise RuntimeError(
+                    f"Action '{action_type}' failed on client side. Inputs: {action_inputs}"
+                )
 
         # Brief pause so the UI can settle before the next screenshot.
         await asyncio.sleep(1.0)
 
-        new_image = await screenshot_bytes(websocket)
-        new_w_px, new_h_px = Image.open(BytesIO(new_image)).size  # PIL: (width, height)
-
+        new_image, image_size = await capture_screenshot(websocket, telemetry)
         state["current_image"] = new_image
-        state["image_size"] = (new_w_px, new_h_px)
+        state["image_size"] = image_size
 
         match self.agent.router.model_name:
             case model if "Holo" in model:
@@ -360,8 +378,10 @@ class TooledGuiAgent:
         """
         state = tool_context.invocation_state
         hook: AgentLoggingHook = state["hook"]
+        telemetry: GuiTaskTelemetry = state["gui_telemetry"]
         current_image: bytes = state["current_image"]
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
+        telemetry.done(telemetry.actions)
         await hook.register_gui_trace(
             "finished", {"content": content}, current_image, now, now, success=True
         )
@@ -478,8 +498,11 @@ class TooledGuiAgent:
     """
 
         websocket = tool_context.invocation_state["websocket"]
-        image = await screenshot_bytes(websocket)
-        w_px, h_px = Image.open(BytesIO(image)).size  # PIL returns (width, height)
+        # Enriches the Strands span of this tool call.
+        telemetry = GuiTaskTelemetry(
+            task=task, model=model, ui_log=ui_log, errored_act=errored_act
+        )
+        image, image_size = await capture_screenshot(websocket, telemetry)
 
         hook = AgentLoggingHook(
             agent_id=self.agent.id,
@@ -490,8 +513,9 @@ class TooledGuiAgent:
 
         inner_state = dict(tool_context.invocation_state) | {
             "hook": hook,
+            "gui_telemetry": telemetry,
             "current_image": image,
-            "image_size": (w_px, h_px),
+            "image_size": image_size,
         }
 
         messages: Messages = [
@@ -517,6 +541,8 @@ class TooledGuiAgent:
 
         try:
             _ = await agent.invoke_async(messages, invocation_state=inner_state)
+            if telemetry.outcome is None:
+                telemetry.model_stopped(telemetry.actions)
 
             conversation_history = list(
                 map(
@@ -526,10 +552,13 @@ class TooledGuiAgent:
             )
             return conversation_history, variables
         except WebSocketDisconnect:
+            telemetry.client_disconnected(telemetry.actions)
             raise
-        except RuntimeError:
+        except RuntimeError as e:
+            telemetry.failed(telemetry.actions, e, escaped=True)
             raise
         except Exception as e:
+            telemetry.failed(telemetry.actions, e)
             return str(e), variables
         finally:
             hook.update_trace(finished=True, cost=-1.0)
