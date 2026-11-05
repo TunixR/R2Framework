@@ -4,104 +4,84 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from pydantic import BaseModel
 
 import database.agents.models as agent_models
-from agent_tools.hooks import AgentLoggingHook
-from database.agents.models import Agent
+from database.agents.models import Agent, Argument
 from database.provider.models import Router
+from tests.unit.shared.scripted_model import ScriptedModel, ToolCall, Turn
 
 
 class _Report(BaseModel):
     done: bool
 
 
-class _FakeStrandsAgent:
-    """Mimics Strands: every result shares one cumulative metrics object."""
-
-    usage_per_call = (
-        {"inputTokens": 100, "outputTokens": 10},
-        {"inputTokens": 40, "outputTokens": 5},
-    )
-
-    def __init__(self, **_: Any) -> None:
-        self.event_loop_metrics = SimpleNamespace(
-            accumulated_usage={"inputTokens": 0, "outputTokens": 0}
-        )
-        self._calls = 0
-
-    async def invoke_async(self, *_: Any, **kwargs: Any) -> SimpleNamespace:
-        usage = self.usage_per_call[self._calls]
-        self._calls += 1
-        for key, value in usage.items():
-            self.event_loop_metrics.accumulated_usage[key] += value
-        if self._calls == 2 and kwargs.get("fail"):
-            raise RuntimeError("structured output failed")
-        return SimpleNamespace(
-            metrics=self.event_loop_metrics,
-            structured_output=_Report(done=True) if self._calls == 2 else None,
-        )
+def _usage_event(caplog: pytest.LogCaptureFixture) -> dict[str, Any]:
+    [usage] = [
+        r for r in caplog.records if vars(r).get("otel.event.name") == "agent.usage"
+    ]
+    return vars(usage)
 
 
 @pytest.fixture
-def agent(
+def run_agent(
     make_agent: Callable[..., Agent],
     mock_router: Router,
     monkeypatch: pytest.MonkeyPatch,
-) -> Agent:
+    caplog: pytest.LogCaptureFixture,
+) -> Callable[..., Any]:
+    """Run ``Agent.__call__`` on a real Strands agent whose model plays ``turns``."""
+
     async def _no_screenshot(_websocket: object) -> bytes:
         return b""
 
-    monkeypatch.setattr(agent_models, "StrandsAgent", _FakeStrandsAgent)
     monkeypatch.setattr(agent_models, "screenshot_bytes", _no_screenshot)
-    monkeypatch.setattr(Router, "get_model", lambda _self: object())
     monkeypatch.setattr(Agent, "get_pydantic_response_model", lambda _self: _Report)
     monkeypatch.setattr(
         Router, "get_conversation_cost", lambda _self, i, o: i * 0.001 + o * 0.01
     )
-    monkeypatch.setattr(AgentLoggingHook, "update_trace", lambda *_a, **_k: None)
-    return make_agent(router=mock_router)
+    # The logging hooks write audit rows to Postgres; this test is about tokens.
+    monkeypatch.setattr(Agent, "get_logging_hooks", lambda _self, _state: [])
+    caplog.set_level(logging.INFO)
+    # Strands rejects a blank prompt, and the instruction lists the arguments.
+    task = Argument(name="task", description="Task", type="str", json_type="string")
+    agent = make_agent(router=mock_router, arguments=[task])
+
+    async def _run(*turns: Turn) -> tuple[Any, ScriptedModel]:
+        model = ScriptedModel(*turns, usage=(100, 10))
+        monkeypatch.setattr(Router, "get_model", lambda _self: model)
+        result = await agent({"websocket": None}, task="Recover the robot")
+        return result, model
+
+    return _run
 
 
 @pytest.mark.asyncio
 async def test_usage_sums_both_invocations(
-    agent: Agent, caplog: pytest.LogCaptureFixture
+    run_agent: Callable[..., Any], caplog: pytest.LogCaptureFixture
 ) -> None:
-    caplog.set_level(logging.INFO)
-
-    result = await agent(invocation_state={"websocket": None})
+    # First invocation answers in text, the second fills the report.
+    result, model = await run_agent(
+        "Looked at the robot.", ToolCall("_Report", {"done": True})
+    )
 
     assert result == {"done": True}
-    [usage] = [
-        r for r in caplog.records if vars(r).get("otel.event.name") == "agent.usage"
-    ]
-    assert vars(usage)["gen_ai.usage.input_tokens"] == 140
-    assert vars(usage)["gen_ai.usage.output_tokens"] == 15
-    assert vars(usage)["agent.cost"] == pytest.approx(0.29)
+    assert model.calls >= 2
+    usage = _usage_event(caplog)
+    assert usage["gen_ai.usage.input_tokens"] == 100 * model.calls
+    assert usage["gen_ai.usage.output_tokens"] == 10 * model.calls
+    assert usage["agent.cost"] == pytest.approx(0.2 * model.calls)
 
 
 @pytest.mark.asyncio
 async def test_usage_is_reported_when_the_second_invocation_fails(
-    agent: Agent, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+    run_agent: Callable[..., Any], caplog: pytest.LogCaptureFixture
 ) -> None:
-    caplog.set_level(logging.INFO)
-    original = _FakeStrandsAgent.invoke_async
-
-    async def _failing(
-        self: _FakeStrandsAgent, *args: Any, **kwargs: Any
-    ) -> SimpleNamespace:
-        return await original(self, *args, **kwargs, fail=True)
-
-    monkeypatch.setattr(_FakeStrandsAgent, "invoke_async", _failing)
-
     with pytest.raises(RuntimeError):
-        await agent(invocation_state={"websocket": None})
+        await run_agent("Looked at the robot.", RuntimeError("model unavailable"))
 
-    [usage] = [
-        r for r in caplog.records if vars(r).get("otel.event.name") == "agent.usage"
-    ]
-    assert vars(usage)["gen_ai.usage.input_tokens"] == 140
+    # Tokens of the first invocation are still accounted for.
+    assert _usage_event(caplog)["gen_ai.usage.input_tokens"] == 100

@@ -16,8 +16,9 @@ from sqlmodel import Session
 from database.agents.models import Agent
 from database.logging.models import RobotException
 from observability.instrumentation.gui_agent import GuiTaskTelemetry
-from tests.integration.observability.conftest import SECRET, ScriptedModel, Telemetry
+from tests.integration.observability.conftest import SECRET, Telemetry
 from tests.integration.observability.signoz import Row
+from tests.unit.shared.scripted_model import ScriptedModel
 
 
 def _by_name(spans: list[Row]) -> dict[str, Row]:
