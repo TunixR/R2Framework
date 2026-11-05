@@ -15,10 +15,15 @@ from sqlmodel import Session
 
 from database.agents.models import Agent
 from database.logging.models import RobotException
-from observability.instrumentation.gui_agent import GuiTaskTelemetry
 from tests.integration.observability.conftest import SECRET, Telemetry
 from tests.integration.observability.signoz import Row
-from tests.unit.shared.scripted_model import ScriptedModel
+from tests.unit.shared.scripted_model import ScriptedModel, ToolCall
+from tests.unit.shared.tooled_gui_fakes import (
+    GUI_TASK_INPUT,
+    make_robot,
+    make_tooled_gui_agent,
+    patch_gui_io,
+)
 
 
 def _by_name(spans: list[Row]) -> dict[str, Row]:
@@ -192,32 +197,53 @@ def test_recovery_turn_is_one_trace_joined_to_the_database(
     assert stored.infered_success is True
 
 
-def test_gui_task_records_actions_and_screenshots_as_child_spans(
-    telemetry: Telemetry,
+@pytest.mark.asyncio
+async def test_gui_task_records_actions_and_screenshots_as_child_spans(
+    telemetry: Telemetry, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from strands import Agent as StrandsAgent
+
+    patch_gui_io(monkeypatch)
+    gui_agent = make_tooled_gui_agent(
+        ToolCall("click", {"start_box": [10, 20]}),
+        ToolCall("finished", {"content": "Invoice filled"}),
+    )
+    # A real gateway agent calls the GUI agent tool, as in a recovery turn.
+    gateway = StrandsAgent(
+        model=ScriptedModel(ToolCall("tooled_guiagent", GUI_TASK_INPUT), "Recovered."),
+        tools=[gui_agent.tooled_guiagent],
+        name="gateway",
+        callback_handler=None,
+    )
     tracer = trace.get_tracer("tests.integration.gui")
-    with tracer.start_as_current_span("execute_tool gui_agent") as tool_span:
-        task = GuiTaskTelemetry(
-            task="Fill the invoice",
-            model="invoice-process",
-            ui_log=[{}],
-            errored_act={},
+    with tracer.start_as_current_span("integration.gui") as root:
+        await gateway.invoke_async(
+            "Recover the robot", invocation_state={"websocket": make_robot()}
         )
-        with task.screenshot() as shot:
-            shot.taken(b"jpeg-bytes", 1280, 720)
-        with task.action(1, "click") as action:
-            action.result(True)
-        task.done(iterations=1)
     telemetry.flush()
 
-    trace_id = format(tool_span.get_span_context().trace_id, "032x")
-    spans = _by_name(_trace_spans(telemetry, trace_id, at_least=3))
+    trace_id = format(root.get_span_context().trace_id, "032x")
+    spans = _trace_spans(telemetry, trace_id, at_least=9)
+    by_name = _by_name(spans)
 
-    tool = spans["execute_tool gui_agent"]
-    assert tool["attributes_string"]["gui.task.outcome"] == "done"
-    assert tool["attributes_number"]["gui.task.iterations"] == 1
-    for child in ("gui.screenshot", "gui.action"):
-        assert spans[child]["parent_span_id"] == tool["span_id"]
-    assert spans["gui.action"]["attributes_string"]["gui.action.type"] == "click"
-    assert spans["gui.action"]["attributes_bool"]["gui.action.success"] is True
-    assert spans["gui.screenshot"]["attributes_number"]["gui.screenshot.width"] == 1280
+    task = by_name["execute_tool tooled_guiagent"]
+    assert task["attributes_string"]["gui.task.outcome"] == "done"
+    assert task["attributes_number"]["gui.task.iterations"] == 1
+    assert task["attributes_number"]["gui.task.ui_log_count"] == 2
+
+    # The GUI agent's own Strands loop runs inside the tool span.
+    assert any(
+        s["name"].startswith("invoke_agent") and s["parent_span_id"] == task["span_id"]
+        for s in spans
+    )
+    click = by_name["execute_tool click"]
+    action = by_name["gui.action"]
+    assert action["parent_span_id"] == click["span_id"]
+    assert action["attributes_string"]["gui.action.type"] == "left_single"
+    assert action["attributes_bool"]["gui.action.success"] is True
+
+    # The first screenshot belongs to the task, the next one to the click.
+    screenshot_parents = {
+        s["parent_span_id"] for s in spans if s["name"] == "gui.screenshot"
+    }
+    assert screenshot_parents == {task["span_id"], click["span_id"]}
