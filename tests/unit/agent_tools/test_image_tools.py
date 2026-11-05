@@ -1,68 +1,15 @@
-import asyncio
-from io import BytesIO
-from typing import Any, Literal
-
 import pytest
-from PIL import Image
 
 # Import the functions under test
 from agent_tools.image import (
     request_remote_screenshot,
     take_screenshot,
 )
+from tests.unit.shared.fake_websocket import FakeWebSocket, make_test_image_bytes
 
 # ---------------------------------------------------------------------------
 # Helpers / Fakes
 # ---------------------------------------------------------------------------
-
-
-def make_test_image_bytes(
-    color: tuple[int, int, int] = (255, 0, 0),
-    size: tuple[int, int] = (16, 16),
-    fmt: Literal["JPEG", "PNG"] = "JPEG",
-) -> bytes:
-    """
-    Create an in-memory image and return its encoded bytes.
-    """
-    img = Image.new("RGB", size, color)
-    buf = BytesIO()
-    img.save(buf, format=fmt)
-    return buf.getvalue()
-
-
-class FakeWebSocket:
-    """
-    Minimal async fake of FastAPI WebSocket sufficient for testing screenshot tools.
-
-    Behaviors implemented:
-    - send_json: records outbound JSON messages
-    - receive_bytes: returns queued byte responses, optionally delayed
-    """
-
-    def __init__(self, responses: list[bytes], delay: float = 0.0):
-        self._responses = list(responses)
-        self._delay = delay
-        self.sent_messages: list[Any] = []
-        self.closed = False
-
-    async def send_json(self, data: Any):
-        # Simulate send latency negligible for tests
-        if self.closed:
-            raise RuntimeError("WebSocket is closed")
-        self.sent_messages.append(("json", data))
-
-    async def receive_bytes(self):
-        if self.closed:
-            raise RuntimeError("WebSocket is closed")
-        if self._delay > 0:
-            await asyncio.sleep(self._delay)
-        if not self._responses:
-            # Simulate lack of response (would hang); raise to surface unexpected path
-            raise RuntimeError("No response bytes available")
-        return self._responses.pop(0)
-
-    async def close(self):
-        self.closed = True
 
 
 class StubToolContext:
