@@ -56,12 +56,18 @@ class GuiTaskTelemetry:
 
     The tool call already has a span, so the task enriches it instead of
     opening a redundant one; actions and screenshots get child spans.
+
+    Two loops use it: UI-TARS, which parses free text and counts iterations
+    itself, and ``TooledGuiAgent``, whose actions are Strands tools and which
+    reads ``actions`` and ``outcome`` back.
     """
 
     def __init__(
         self, *, task: str, model: str, ui_log: list[Any], errored_act: Any
     ) -> None:
         self._span = trace.get_current_span()
+        self.actions = 0
+        self.outcome: str | None = None
         self._span.set_attributes(
             {
                 attrs.GUI_TASK_NAME: brief(task),
@@ -80,6 +86,7 @@ class GuiTaskTelemetry:
     @contextmanager
     def action(self, iteration: int, action_type: str) -> Iterator[GuiActionTelemetry]:
         """Child span around sending one action and waiting for its result."""
+        self.actions += 1
         with tracer.start_as_current_span(
             attrs.SPAN_GUI_ACTION,
             attributes={
@@ -121,7 +128,25 @@ class GuiTaskTelemetry:
         """The model reply had no parsable content; the loop ended early."""
         self._finish(iterations, "unparseable_response")
 
+    def model_stopped(self, iterations: int) -> None:
+        """The agent loop returned without the model calling the ``finished`` tool.
+
+        Call it once, after the loop: turns that end in a tool call keep it running.
+        """
+        self._finish(iterations, "model_stopped")
+
+    def client_disconnected(self, iterations: int) -> None:
+        self._finish(iterations, "client_disconnected")
+
+    def failed(
+        self, iterations: int, exc: BaseException, *, escaped: bool = False
+    ) -> None:
+        """An unexpected error ended the task (raised if ``escaped``, else returned)."""
+        self._finish(iterations, "error")
+        record_exception(self._span, exc, escaped=escaped)
+
     def _finish(self, iterations: int, outcome: str) -> None:
+        self.outcome = outcome
         self._span.set_attributes(
             {attrs.GUI_TASK_ITERATIONS: iterations, attrs.GUI_TASK_OUTCOME: outcome}
         )
