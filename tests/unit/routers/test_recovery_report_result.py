@@ -62,7 +62,7 @@ def test_report_result_not_found(
     assert "Recovery ID not found" in response.json()["detail"]
 
 
-def test_report_result_updates_infered_success(
+def test_report_result_updates_reported_success(
     session: Session,
     client: TestClient,
     make_robot_exception: Callable[..., RobotException],
@@ -83,10 +83,10 @@ def test_report_result_updates_infered_success(
     session.expire_all()
     updated = session.get(RobotException, exception.id)
     assert updated
-    assert updated.infered_success is True
+    assert updated.reported_success is True
 
 
-def test_report_result_updates_infered_success_false(
+def test_report_result_updates_reported_success_false(
     session: Session,
     client: TestClient,
     make_robot_exception: Callable[..., RobotException],
@@ -107,4 +107,4 @@ def test_report_result_updates_infered_success_false(
     session.expire_all()
     updated = session.get(RobotException, exception.id)
     assert updated
-    assert updated.infered_success is False
+    assert updated.reported_success is False

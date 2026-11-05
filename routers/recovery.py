@@ -278,7 +278,7 @@ async def report_recovery_result(
     if not exception:
         raise HTTPException(status_code=404, detail="Recovery ID not found")
 
-    exception.infered_success = success
+    exception.reported_success = success
     session.add(exception)
     session.commit()
     trace.get_current_span().set_attributes(
