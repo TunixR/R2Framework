@@ -69,10 +69,7 @@ class TooledGuiAgent:
                 "content": {"action_type": action_type, "action_inputs": action_inputs},
             }
         )
-        try:
-            result = await websocket.receive_json()
-        except WebSocketDisconnect:
-            raise
+        result = await websocket.receive_json()
         finished_at = datetime.now(timezone.utc)
 
         success = bool(result.get("success", False))
@@ -355,6 +352,8 @@ class TooledGuiAgent:
         tool_context: ToolContext,
     ) -> str:
         """Mark the task as complete and persist the final GUI trace.
+        This should be called when the task is finished or when the number of actions exceeds 40.
+        This can also be called if you believe the task is unfullfillable.
 
         Args:
             content: Summary of what was accomplished.

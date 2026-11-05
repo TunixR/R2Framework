@@ -26,7 +26,6 @@ class Router(SQLModel, table=True):
         OTHER = "OTHER"
         QWEN2_5 = "QWEN2.5"
         QWEN3_5 = "QWEN3.5"
-        QWEN3_8 = "QWEN3.8"
 
     id: uuid.UUID = Field(
         default_factory=uuid.uuid4,
@@ -123,10 +122,16 @@ class Router(SQLModel, table=True):
     ) -> list[float]:
         """Map model-space coordinates back to original-image coordinates."""
         model_height, model_width = self.relative_dim(height, width)
-        return [
-            x * width / model_width,
-            y * height / model_height,
-        ]
+        if x > 1 and y > 1:  # Coords in range [0.0, model_width/height]
+            return [
+                x * width / model_width,
+                y * height / model_height,
+            ]
+        else:  # Coords in range [0.0, 1.0]
+            return [
+                x * width,
+                y * height,
+            ]
 
     def get_model(self) -> Model:
         """Return the model instance for the router."""

@@ -460,7 +460,7 @@ def test_router_replace_updates_vision_backbone(
     headers = make_auth_headers(mock_admin, session)
     payload = make_router_create(
         capabilities=[Router.Capability.TEXT, Router.Capability.VISION],
-        vision_backbone=Router.VisionBackbone.QWEN3_8,
+        vision_backbone=Router.VisionBackbone.QWEN3_5,
     )
 
     response = client.put(
@@ -470,4 +470,4 @@ def test_router_replace_updates_vision_backbone(
     )
 
     assert response.status_code == status.HTTP_200_OK
-    assert response.json()["vision_backbone"] == "QWEN3.8"
+    assert response.json()["vision_backbone"] == "QWEN3.5"

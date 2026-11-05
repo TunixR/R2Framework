@@ -102,18 +102,6 @@ def test_router_relative_dim_is_identity_for_other_backbone(
     assert router.original_coords(540, 960, 1920, 1080) == [540, 960]
 
 
-def test_router_relative_dim_is_identity_for_qwen38(
-    make_router: Callable[..., Router],
-):
-    router = make_router(
-        capabilities=[Router.Capability.TEXT, Router.Capability.VISION],
-        vision_backbone=Router.VisionBackbone.QWEN3_8,
-    )
-
-    assert router.relative_dim(1080, 1920) == [1080, 1920]
-    assert router.original_coords(540, 960, 1920, 1080) == [540, 960]
-
-
 def test_router_relative_dim_uses_1000_square_for_qwen35(
     make_router: Callable[..., Router],
 ):
