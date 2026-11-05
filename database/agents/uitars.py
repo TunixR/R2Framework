@@ -53,17 +53,15 @@ import math
 import re
 import uuid
 from datetime import UTC, datetime
-from io import BytesIO
 from typing import Any
 
 from fastapi import WebSocketDisconnect
-from PIL import Image
 from strands import Agent, ToolContext, tool
 from strands.models.openai import OpenAIModel
 from strands.types.content import ContentBlock, Messages
 
 from agent_tools.hooks import AgentLoggingHook
-from agent_tools.image import screenshot_bytes
+from agent_tools.image import capture_screenshot
 from config import Config
 from observability.instrumentation.gui_agent import GuiTaskTelemetry
 from prompts.gui_agent import (
@@ -81,17 +79,6 @@ MAX_PIXELS = 16384 * 28 * 28
 MAX_RATIO = 200
 
 logger = logging.getLogger(__name__)
-
-
-async def _capture_screenshot(
-    websocket: Any, telemetry: GuiTaskTelemetry
-) -> tuple[bytes, tuple[int, int]]:
-    """Fetch a client screenshot and return its bytes and (width, height)."""
-    with telemetry.screenshot() as shot:
-        image = await screenshot_bytes(websocket)
-        width, height = Image.open(BytesIO(image)).size
-        shot.taken(image, width, height)
-    return image, (width, height)
 
 
 def convert_point_to_coordinates(text, is_answer=False):
@@ -758,7 +745,7 @@ Model Context: {model}
     telemetry = GuiTaskTelemetry(
         task=task, model=model, ui_log=ui_log, errored_act=errored_act
     )
-    image, image_size = await _capture_screenshot(websocket, telemetry)
+    image, image_size = await capture_screenshot(websocket, telemetry)
 
     messages: Messages = [
         {
@@ -871,7 +858,7 @@ Model Context: {model}
 
                 # Artificial delay to allow UI to update
                 await asyncio.sleep(0.5)
-                image, image_size = await _capture_screenshot(websocket, telemetry)
+                image, image_size = await capture_screenshot(websocket, telemetry)
 
                 new_messages: Messages = [
                     {
