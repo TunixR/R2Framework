@@ -9,6 +9,8 @@ from PIL import Image
 from skimage.metrics import structural_similarity as ssim
 from strands import ToolContext, tool
 
+from observability.instrumentation.gui_agent import GuiTaskTelemetry
+
 IMAGE_SIMILARITY_THRESHOLD = 0.95  # Threshold for image similarity (0 to 1)
 
 
@@ -187,3 +189,18 @@ async def screenshot_bytes(websocket: WebSocket) -> bytes:
         screenshot_data = await screenshot_bytes(websocket)
     """
     return await request_remote_screenshot(websocket)
+
+
+async def capture_screenshot(
+    websocket: WebSocket, telemetry: GuiTaskTelemetry
+) -> tuple[bytes, tuple[int, int]]:
+    """Fetch a client screenshot in a ``gui.screenshot`` span.
+
+    Returns:
+        The image bytes and its (width, height) in pixels.
+    """
+    with telemetry.screenshot() as shot:
+        image = await screenshot_bytes(websocket)
+        width, height = Image.open(BytesIO(image)).size
+        shot.taken(image, width, height)
+    return image, (width, height)
