@@ -2,6 +2,14 @@
 
 Purpose: onboarding/runbook for agentic coding assistants operating in this repo. Keep changes small, verifiable, and consistent with CI.
 
+Domain overview (details in `ARCHITECTURE.md`):
+- A FastAPI backend (`main.py`) that recovers failed RPA robot runs with LLM agents built on Strands.
+- A robot opens `WS /recovery/robot_exception/ws` with its `X-ROBOT-KEY`, sends one recovery payload, and the exception plus its recovery context are saved (`routers/recovery.py`).
+- The `GatewayAgent` is invoked and delegates to sub-agents exposed as tools: an error agent, then GUI agents that drive the robot's desktop through screenshot/action messages on the same socket.
+- Agents, their prompts, tools, sub-agents, call limits and LLM provider routers are database rows (`database/agents/`, `database/provider/`), seeded from `database/populators/*.json` by `populate.py`.
+- Every agent, tool and GUI step is traced per recovery in Postgres, with screenshots in S3 (`database/logging/`, `agent_tools/hooks.py`); OpenTelemetry goes to SigNoz (`OBSERVABILITY.md`).
+- Robots authenticate with robot keys; users with JWT sessions and administrator/developer roles (`security/`, `middlewares/auth.py`).
+
 1) Environment
 - Python: project requires `>=3.12` (`pyproject.toml`); CI uses Python `3.12` (`.github/workflows/unit-tests.yml`).
 - Note: `.python-version` currently pins `3.13`; when reproducing CI issues, prefer Python `3.12`.
@@ -163,3 +171,29 @@ Repo layout conventions (as seen in this codebase):
 5. Run the narrowest relevant test(s) (`pytest` nodeid preferred).
 
 If you see anything missing or a CI mismatch, update this document and add a short note in the PR describing why the agent workflow changed.
+
+16) Documentation
+Docs are conceptual and stable: they explain ideas and how they connect, then point to the code. Don't copy schemas, endpoint lists, DB diagrams or config values into markdown. A typical code change needs no doc edit.
+
+Doc map:
+| Question | File |
+| --- | --- |
+| What is it, how do I run it, where is what? | `README.md` |
+| How do the pieces fit together? | `ARCHITECTURE.md` |
+| What is implemented vs. planned? | `REQUIREMENTS.md` (the only place that tracks this) |
+| How do I work in the repo? | `AGENTS.md` (this file) |
+| Traces, logs, SigNoz | `OBSERVABILITY.md` |
+| Docker services and production | `docker/README.md` |
+| Endpoints, payloads, fields | the code and `/scalar` (OpenAPI) |
+
+Read before changing: read `ARCHITECTURE.md` before touching the recovery flow, agents, auth or telemetry (and `OBSERVABILITY.md` for telemetry).
+
+Update docs, in the same PR, only if the change:
+- [ ] adds, removes or renames a top-level module or concept → README repo map, `ARCHITECTURE.md`;
+- [ ] changes the recovery lifecycle, the auth model or an external interface such as the WS protocol or robot contract → `ARCHITECTURE.md` (and `scripts/recovery_ws_client/README.md` for the robot side);
+- [ ] implements or drops a requirement → its checkbox in `REQUIREMENTS.md`;
+- [ ] adds, removes or renames an env var → `.env.example` (and the table in `OBSERVABILITY.md` for observability settings);
+- [ ] changes setup, test or lint commands → `AGENTS.md`, README quickstart;
+- [ ] changes Docker services, ports or deployment → `docker/README.md`.
+
+Don't update docs for: bug fixes, refactors inside a module, new fields or endpoints that follow existing patterns, new agents/tools/seed data, prompt tweaks. The code and `/scalar` are the source of truth for those.

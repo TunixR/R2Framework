@@ -1,11 +1,13 @@
-**Version:** 2.1  
-**Date:** February 25, 2026  
+**Version:** 2.2  
+**Date:** November 5, 2026  
 **Document Type:** Requirements Document (Living)
 
 **Implementation Checklist Legend:**
 - `[x]` Implemented in repository
 - `[ ]` Not implemented in repository
 - Notes may call out **Partial** implementations and link to evidence (repo paths/endpoints).
+
+This is the single place that tracks what is implemented versus planned. How the implemented parts fit together is described in `ARCHITECTURE.md`.
 
 ---
 
@@ -27,7 +29,7 @@ The platform addresses critical business continuity needs by minimizing automati
 
 #### 1.1.1 Gateway (Ingress + GatewayAgent)
 - [x] **REQ-F-001**: The system SHALL implement a central gateway that receives error notifications from external RPA orchestrators and automation systems (Partial: WebSocket robot ingestion exists via `WS /recovery/robot_exception/ws` in `routers/recovery.py`.)
-- [ ] **REQ-F-002**: The gateway SHALL parse and standardize incoming error data into a common format regardless of source system (Partial: raw JSON is persisted as `RobotException.exception_details` in `database/logging/models.py`; no enforced normalization schema.)
+- [x] **REQ-F-002**: The gateway SHALL parse and standardize incoming error data into a common format regardless of source system (Payloads are validated against `templates/recovery_payload.py:RecoveryPayload` and normalized into `database/logging/models.py:RecoveryContext`; the raw JSON is also kept in `RobotException.exception_details`.)
 - [x] **REQ-F-003**: The gateway SHALL maintain a registry of available recovery modules and their capabilities
 - [x] **REQ-F-004**: The gateway SHALL implement intelligent routing logic to select the most appropriate module(s) for each error type
 - [x] **REQ-F-005**: The gateway SHALL support multiple concurrent error handling sessions
@@ -41,7 +43,7 @@ The platform addresses critical business continuity needs by minimizing automati
 - [x] **REQ-F-011**: Agents SHALL execute plans step-by-step with iterative decision-making after each step (Especialized agents like GUIAgent's custom flow)
 - [x] **REQ-F-012**: Agents SHALL evaluate step completion status and determine next actions (continue, replan, escalate, or complete)
 - [ ] **REQ-F-013**: Agents SHALL access and utilize the business knowledge base for context-aware problem solving 
-- [ ] **REQ-F-014**: Agents SHALL escalate uncompletable tasks to human operators via the cockpit interface 
+- [ ] **REQ-F-014**: Agents SHALL escalate uncompletable tasks to human operators via the cockpit interface (The gateway has a `route_to_human` tool in `gateway/agent.py`, but it is a placeholder that raises `NotImplementedError`.)
 - [x] **REQ-F-015**: Agents SHALL provide detailed progress reporting throughout execution
 
 ### 1.2 Task Execution and Recovery
@@ -147,7 +149,7 @@ The platform addresses critical business continuity needs by minimizing automati
 - [x] **REQ-F-091**: The system SHALL integrate with major RPA orchestrators (UiPath, Automation Anywhere, Blue Prism, etc.) 
 - [x] **REQ-F-093**: The system SHALL provide APIs for custom integrations with proprietary automation systems
 - [x] **REQ-F-094**: The system SHALL support authentication methods for external system connections (X-ROBOT-KEY for robots; API keys for management APIs)
-- [x] **REQ-F-095**: The system SHALL provide status callbacks to originating systems upon resolution completion
+- [x] **REQ-F-095**: The system SHALL provide status callbacks to originating systems upon resolution completion (A `done` message with the structured response and recovery id is sent over the recovery WebSocket.)
 
 #### 1.5.2 Notification and Alerting
 - [ ] **REQ-F-096**: The system SHALL send notifications to relevant stakeholders upon task completion or escalation
@@ -179,11 +181,27 @@ The platform addresses critical business continuity needs by minimizing automati
 - [x] **REQ-F-112**: The system SHALL provide export of a UI event log as CSV alongside screenshots (Implemented: `GET /logging/ui_log/` returns ZIP in `routers/logging.py`; screenshots stored in S3 via `s3/utils.py` and `database/logging/models.py:GUITrace`.)
 
 #### 1.6.5 Provider Routing (LLM backends)
-- [x] **REQ-F-113**: The system SHALL support multiple LLM providers via a provider router abstraction configurable at runtime (Implemented: `database/provider/models.py:Router` with `provider_type` values `openai` and `openrouter`.)
+- [x] **REQ-F-113**: The system SHALL support multiple LLM providers via a provider router abstraction configurable at runtime (Implemented: `database/provider/models.py:Router` with `provider_type` values `openai`, `openrouter` and `vllm`, plus declared capabilities (text, vision) checked against each agent's input type.)
 
 #### 1.6.6 Tool Call Limits and Traceability
 - [x] **REQ-F-114**: The system SHALL support per-agent limits on tool invocations and sub-agent invocations (Implemented: `database/agents/models.py:AgentTool.limit`, `database/agents/models.py:SubAgent.limit`, enforced by `agent_tools/hooks.py:LimitToolCounts`.)
 - [x] **REQ-F-115**: The system SHALL log tool calls with inputs/outputs and success/failure for later inspection (Implemented: `database/logging/models.py:ToolTrace` via `agent_tools/hooks.py:ToolLoggingHook`.)
+
+#### 1.6.7 Recovery Context and Outcome Reporting
+- [x] **REQ-F-116**: The system SHALL store a normalized recovery context (task, platform, OS, variables, ordered UI log, failed activity) with each robot exception and expose it for inspection (Implemented: `database/logging/models.py:RecoveryContext`, `RecoveryUiLogEntry`, `RecoveryErroredActivity`; `GET /logging/recovery_context/{exception_id}` in `routers/logging.py`.)
+- [x] **REQ-F-117**: The system SHALL let the robot report the final outcome of a recovery after the fact, authenticated by its RobotKey (Implemented: `POST /recovery/report_result/{recovery_id}` in `routers/recovery.py`.)
+
+#### 1.6.8 GUI Recovery Agents
+- [x] **REQ-F-118**: The system SHALL drive the robot's desktop during recovery by requesting screenshots and sending UI actions over the recovery WebSocket (Implemented: `agent_tools/image.py`, `database/agents/tooled_gui_agent.py`; robot side in `scripts/recovery_ws_client/`.)
+- [x] **REQ-F-119**: The system SHALL support interchangeable GUI agent strategies selected by configuration (Implemented: tool-based grounding agent in `database/agents/tooled_gui_agent.py` and standalone UI-TARS loop in `database/agents/uitars.py`; prompt variants chosen by `UI_ERROR_PLANNING` / `UI_MID_AGENT` in `settings.py`.)
+- [x] **REQ-F-120**: The system SHALL bound the number of screenshots kept in a GUI agent's conversation (Implemented: `agent_tools/hooks.py:MaxGuiImagesHook`, `MAX_GUI_IMAGES`.)
+
+#### 1.6.9 Evaluation
+- [x] **REQ-F-121**: The system SHALL provide offline evaluation of error filtering, recovery-task identification and end-to-end recovery (Implemented: `evals/run_filter_eval.py`, `evals/run_task_eval.py`, `evals/run_recovery_eval.py`.)
+- [x] **REQ-F-122**: The system SHALL expose a RobotKey-authenticated evaluation WebSocket that runs a selected GUI agent on a given recovery task (Implemented: `WS /evals/recovery/ws` in `routers/evals.py`.)
+
+#### 1.6.10 User Authentication
+- [x] **REQ-F-123**: The system SHALL authenticate users with JWTs backed by revocable server-side sessions and administrator/developer roles (Implemented: `routers/auth.py`, `middlewares/auth.py`, `database/auth/models.py`; admin seeded from `ADMIN_USERNAME`/`ADMIN_PASSWORD` by `database/populators/users.py`.)
 
 
 
@@ -235,7 +253,7 @@ The platform addresses critical business continuity needs by minimizing automati
 #### 2.3.2 Data Protection
 - [ ] **REQ-NF-024**: The system SHALL encrypt all data at rest
 - [ ] **REQ-NF-025**: The system SHALL encrypt all data in transit
-- [x] **REQ-NF-026**: The system SHALL implement data masking for sensitive information in logs and displays
+- [x] **REQ-NF-026**: The system SHALL implement data masking for sensitive information in logs and displays (Partial: best-effort redaction of secrets in exported logs and span exceptions, `observability/redaction.py`; robot keys are masked in API responses.)
 - [ ] **REQ-NF-027**: The system SHALL comply with GDPR, HIPAA, and SOX requirements where applicable
 
 #### 2.3.3 Audit and Compliance
@@ -249,13 +267,13 @@ The platform addresses critical business continuity needs by minimizing automati
 - [x] **REQ-NF-031**: Recovery agents SHALL be independently deployable without system downtime (Data driven)
 
 #### 2.4.2 Monitoring and Diagnostics
-- [ ] **REQ-NF-035**: The system SHALL implement comprehensive logging with configurable log levels 
-- [ ] **REQ-NF-036**: The system SHALL provide health check endpoints for all components
-- [x] **REQ-NF-037**: The system SHALL integrate with enterprise monitoring tools (Prometheus, Grafana, etc.)
-- [x] **REQ-NF-038**: The system SHALL provide distributed tracing capabilities for debugging
+- [x] **REQ-NF-035**: The system SHALL implement comprehensive logging with configurable log levels (Implemented: structured logging in `observability/logging.py`, configured by `LOG_LEVEL`, `LOG_FORMAT`, `STRANDS_LOG_LEVEL`.)
+- [x] **REQ-NF-036**: The system SHALL provide health check endpoints for all components (Partial: `GET /health` on the API; Compose health checks for Postgres, SeaweedFS and SigNoz in `docker/`.)
+- [x] **REQ-NF-037**: The system SHALL integrate with enterprise monitoring tools (Prometheus, Grafana, etc.) (Traces and logs are exported over OTLP to SigNoz; see `OBSERVABILITY.md`.)
+- [x] **REQ-NF-038**: The system SHALL provide distributed tracing capabilities for debugging (OpenTelemetry in `observability/`; FastAPI, Strands and recovery spans share one trace.)
 
 #### 2.4.3 Configuration Management
-- [x] **REQ-NF-039**: The system SHALL support externalized configuration management
+- [x] **REQ-NF-039**: The system SHALL support externalized configuration management (Environment variables read in `settings.py`, template in `.env.example`; agents and provider routers are configured in the database.)
 - [ ] **REQ-NF-040**: Configuration changes SHALL be applied without system restarts where possible
 - [ ] **REQ-NF-041**: The system SHALL implement configuration validation and rollback capabilities
 

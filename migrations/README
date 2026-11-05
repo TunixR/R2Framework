@@ -1,1 +1,5 @@
-Generic single-database configuration.
+Alembic migrations for the framework's Postgres schema (single database, generic template).
+
+Configuration is in alembic.ini; migrations/env.py registers every SQLModel table through the
+wildcard imports in database/general.py. Common commands (upgrade, autogenerate, downgrade) are
+listed in the "Database + migrations" section of AGENTS.md.

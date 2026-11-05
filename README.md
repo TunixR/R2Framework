@@ -1,73 +1,82 @@
-# Recovery WS Test Client
+# R2Framework backend
 
-This repository now includes a standalone websocket test client for recovery flow development and verification.
+R2Framework recovers failed RPA runs. When a software robot hits an exception, it opens a
+WebSocket to this FastAPI backend and sends what it knows: the task, the UI log up to the failure,
+the failed activity and the process variables. LLM agents built on
+[Strands](https://strandsagents.com) analyse the failure and, when they can, take over the robot's
+desktop through screenshots and UI actions to bring the process back to a state the robot can
+continue from. The backend tells the robot where to resume, and records every agent, tool and GUI
+step so a run can be inspected or exported afterwards.
 
-It is not coupled to pytest and is intended for local desktop-driven E2E checks.
+## Quickstart
 
-## What It Does
+You need Docker, [uv](https://docs.astral.sh/uv/) and an OpenAI-compatible LLM endpoint
+(OpenRouter, OpenAI, vLLM...).
 
-- Connects to `/recovery/robot_exception/ws` with `X-ROBOT-KEY`.
-- Sends a predefined payload selected from `scripts/data/payloads.json`.
-- Responds to `type: "screenshot"` messages using `pyautogui.screenshot()` bytes.
-- Executes `type: "action"` messages automatically using `pyautogui`.
-- Enforces a non-blocking minimum delay between actions (default 1 second).
-- Writes optional transcript logs for run analysis.
+1. Start Postgres, SeaweedFS (S3) and SigNoz (observability). Details: [`docker/README.md`](docker/README.md).
 
-## Payload Catalog
+   ```bash
+   cp docker/.env.example docker/.env   # fill in the passwords
+   docker compose -f docker/compose.dev.yaml up -d --wait
+   ```
 
-Payloads are stored in:
+2. Configure the framework. Use the same Postgres and S3 credentials as `docker/.env`, set
+   `SECRET_KEY` and `ADMIN_USERNAME`/`ADMIN_PASSWORD`, and fill in the `PROVIDER_*` models and key.
 
-- `scripts/data/payloads.json`
+   ```bash
+   cp .env.example .env
+   ```
 
-Each entry has this shape:
+3. Install dependencies, create the schema and seed the default agents, tools, provider routers and
+   admin user.
 
-```json
-{
-  "id": 1,
-  "payload": {
-    "task_name": "...",
-    "platform": "...",
-    "os": "...",
-    "variables": {},
-    "ui_log": [],
-    "errored_act": {},
-    "model": "..."
-  }
-}
-```
+   ```bash
+   uv sync --all-extras --frozen
+   uv run alembic upgrade head
+   uv run python populate.py
+   ```
 
-Use `--payload-id` to choose which payload to send.
+4. Run the API and open the API reference at http://localhost:8000/scalar.
 
-## Run
+   ```bash
+   uv run fastapi dev main.py
+   ```
 
-```bash
-rtk uv run python -m scripts.recovery_ws_test_client \
-  --ws-url ws://localhost:8000/recovery/robot_exception/ws \
-  --robot-key "$X_ROBOT_KEY" \
-  --payload-file scripts/data/payloads.json \
-  --payload-id 1 \
-  --action-delay-seconds 1 \
-  --log-json tmp/recovery_ws_log.json
-```
+5. Try a recovery: log in as the admin (`POST /auth/login`), create a robot key (`POST /keys`),
+   then run the desktop test client with it, see
+   [`scripts/recovery_ws_client/README.md`](scripts/recovery_ws_client/README.md). It performs
+   real mouse and keyboard actions on your desktop.
 
-Optional flags:
+## Repository map
 
-- `--dry-run-actions`
-- `--max-actions <n>`
-- `--save-screenshots-dir <dir>`
+| Path | What lives there |
+| --- | --- |
+| `main.py` | FastAPI app: routers, `/health`, `/scalar`, observability setup |
+| `settings.py`, `config.py` | Environment settings (see `.env.example`) and fixed limits |
+| `routers/` | HTTP and WebSocket endpoints: recovery, evals, agents, tools, provider, keys, auth, logging |
+| `database/` | SQLModel models and engine, grouped by concept (agents, tools, provider, keys, auth, logging) |
+| `database/populators/` | Seed data (`agents.json`, `routers.json`) and the code that loads it; run by `populate.py` |
+| `gateway/` | Tools for the gateway agent (human hand-off is a placeholder) |
+| `agent_tools/` | Strands tools and hooks shared by agents: screenshots, tool limits, trace logging |
+| `prompts/`, `templates/` | Agent prompts and the Pydantic models for recovery payloads and agent responses |
+| `security/`, `middlewares/` | Password and robot-key hashing, JWT handling, auth dependencies |
+| `s3/` | S3 client for screenshots |
+| `observability/` | OpenTelemetry tracing, logging, redaction and domain spans (see [`OBSERVABILITY.md`](OBSERVABILITY.md)) |
+| `evals/` | Offline evaluation runners and evaluators |
+| `scripts/` | Developer tools, including the recovery WebSocket test client |
+| `migrations/` | Alembic migrations |
+| `docker/` | Compose stacks for development and production |
+| `tests/` | `unit/` (SQLite, runs in CI) and `integration/` (needs the Docker stack) |
+| `modules/` | Reserved for recovery modules; currently empty |
 
-## Safety Notes
+## Documentation
 
-- Actions are performed on your active desktop.
-- Keep `pyautogui` fail-safe enabled (default in runner).
-- Avoid running this on a machine with unrelated foreground activity.
-
-## Verification Checklist
-
-1. Valid payload id runs and reaches websocket session.
-2. Invalid payload id fails fast before connect.
-3. Bad robot key is rejected by server.
-4. Screenshot requests are answered with image bytes.
-5. Action results are sent with success/failure shape.
-6. Action execution spacing is at least 1 second.
-7. `done` finalizes run with exit code 0 and summary.
+| Question | Read |
+| --- | --- |
+| What is this and how do I run it? | This file |
+| How do the pieces fit together? | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
+| What is implemented and what is planned? | [`REQUIREMENTS.md`](REQUIREMENTS.md) |
+| How do I work in the repo (lint, tests, migrations, conventions)? | [`AGENTS.md`](AGENTS.md) |
+| Traces, logs and SigNoz | [`OBSERVABILITY.md`](OBSERVABILITY.md) |
+| Docker services, ports, production | [`docker/README.md`](docker/README.md) |
+| Endpoints and payload schemas | `/scalar` on a running server |

@@ -1,413 +1,168 @@
-**Version:** 1.0  
-**Date:** June 17, 2025  
-**Document Type:** Technical Architecture
+# Architecture
 
----
+How the R2Framework backend is put together today. This document explains concepts and how they
+connect, and points to the code for detail. It does not list endpoints, fields or tables: the code
+and the OpenAPI reference (`/scalar`) are the source of truth for those. What is implemented versus
+planned is tracked in [`REQUIREMENTS.md`](REQUIREMENTS.md).
 
-## 1. Executive Summary
+## 1. Overview
 
-The RPA Recovery Framework is an intelligent, agent-based platform designed to automatically detect, diagnose, and resolve runtime failures in Robotic Process Automation (RPA) and other automation solutions. The system operates as a distributed, modular architecture centered around AI agents that can autonomously complete failed tasks, analyze and repair automation scripts, and escalate complex issues to human operators through a comprehensive cockpit interface.
+The backend is a single FastAPI application (`main.py`) that receives failures from RPA robots and
+tries to recover them with LLM agents. Its main parts:
 
-## 2. System Overview
+| Part | Role | Where |
+| --- | --- | --- |
+| Recovery ingress | WebSocket a robot opens when it fails; one recovery per connection | `routers/recovery.py` |
+| Agents | Database-configured Strands agents: a gateway agent and the sub-agents it delegates to | `database/agents/` |
+| Tools | Python functions agents can call, registered in the database | `database/tools/`, `agent_tools/`, `gateway/` |
+| Provider routers | Which LLM backend and model each agent uses | `database/provider/`, `routers/provider.py` |
+| Trace logging | Per-recovery record of agent, tool and GUI steps, with screenshots in S3 | `database/logging/`, `agent_tools/hooks.py`, `s3/` |
+| Auth | Robot keys for robots, JWT sessions for users | `security/`, `middlewares/auth.py`, `routers/keys.py`, `routers/auth.py` |
+| Observability | OpenTelemetry traces and logs exported to SigNoz | `observability/`, [`OBSERVABILITY.md`](OBSERVABILITY.md) |
+| Evals | Offline benchmarks of the agents, plus an eval WebSocket | `evals/`, `routers/evals.py` |
 
-### 2.1 Core Architecture Principles
+State lives in Postgres (configuration and traces) and in S3-compatible storage (screenshots). The
+supporting services run from `docker/` (see [`docker/README.md`](docker/README.md)).
 
-- **Agent-Centric Design**: All core components are implemented as AI agents with specialized capabilities
-- **Modular Recovery**: Independent, pluggable modules handle specific error types
-- **Intelligent Routing**: Central gateway agent distributes errors to appropriate recovery modules
-- **Human-in-the-Loop**: Comprehensive cockpit for monitoring, intervention, and system management
-- **Knowledge-Driven**: Centralized business knowledge base enhances agent decision-making
+## 2. Recovery lifecycle
 
-### 2.2 High-Level Architecture
+```mermaid
+sequenceDiagram
+    participant R as Robot
+    participant WS as Backend (recovery router)
+    participant DB as Postgres / S3
+    participant G as Gateway agent
+    participant S as Sub-agents (error, GUI)
 
-```
-┌─────────────────┐    ┌──────────────────────────────────────────┐
-│   RPA Systems   │    │           RPA Recovery Framework         │
-│                 │    │                                          │
-│ ┌─────────────┐ │    │ ┌──────────┐    ┌──────────────────────┐ │
-│ │Integration  │ │────┤ │ Gateway  │────│  Recovery Modules    │ │
-│ │   Module    │ │    │ │  Agent   │    │  (Specialized Agents)│ │
-│ └─────────────┘ │    │ └──────────┘    └──────────────────────┘ │
-└─────────────────┘    │                                          │
-                       │ ┌──────────────────────────────────────┐ │
-                       │ │            Cockpit Interface         │ │
-                       │ │     (Human Oversight & Control)      │ │
-                       │ └──────────────────────────────────────┘ │
-                       └──────────────────────────────────────────┘
-```
-
-## 3. Component Architecture
-
-### 3.1 Gateway Agent
-
-**Purpose**: Central orchestration agent responsible for error intake, standardization, and intelligent routing.
-
-**Key Responsibilities**:
-
-- Receive and parse error notifications from external RPA systems
-- Standardize error data into common format
-- Maintain registry of available recovery modules and their capabilities
-- Implement intelligent routing logic based on error type and module capabilities
-- Support concurrent error handling sessions
-- Provide fallback mechanisms for routing failures
-
-**Technical Specifications**:
-
-- **Performance**: Acknowledge errors within 5 seconds, complete routing within 30 seconds
-- **Scalability**: Handle 100+ error notifications per second
-- **Fault Tolerance**: Circuit breakers for external integrations
-
-### 3.2 Recovery Modules (Specialized Agents)
-
-**Purpose**: Domain-specific AI agents designed to handle particular types of automation failures.
-
-**Module Architecture**:
-
-```
-┌─────────────────────────────────────┐
-│           Recovery Module           │
-│                                     │
-│ ┌─────────────┐ ┌─────────────────┐ │
-│ │   Agent     │ │  Capability     │ │
-│ │   Core      │ │  Declaration    │ │
-│ └─────────────┘ └─────────────────┘ │
-│                                     │
-│ ┌─────────────┐ ┌─────────────────┐ │
-│ │  Planning   │ │   Execution     │ │
-│ │  Engine     │ │   Engine        │ │
-│ └─────────────┘ └─────────────────┘ │
-│                                     │
-│ ┌─────────────┐ ┌─────────────────┐ │
-│ │   Tool      │ │   Knowledge     │ │
-│ │  Interface  │ │   Interface     │ │
-│ └─────────────┘ └─────────────────┘ │
-└─────────────────────────────────────┘
+    R->>WS: connect with X-ROBOT-KEY
+    WS->>WS: check robot key
+    R->>WS: recovery payload (task, UI log, failed activity, variables)
+    WS->>DB: save robot exception + recovery context
+    WS->>G: invoke with the recovery context
+    G->>S: delegate (agents exposed as tools)
+    loop while a GUI agent works
+        S->>R: screenshot request
+        R-->>S: screenshot
+        S->>R: UI action
+        R-->>S: action result
+    end
+    S-->>G: structured report
+    G-->>WS: structured response (success, where to continue)
+    WS->>R: done (response + recovery id)
+    Note over S,DB: every agent, tool and GUI step is traced to the exception
+    R->>WS: later: POST /recovery/report_result/{id} (final outcome)
+    WS->>DB: store outcome
 ```
 
-**Key Capabilities**:
-
-- **Declarative Interface**: Each module declares input requirements, output capabilities, available tools, and supported error types
-- **High-Level Planning**: Generate execution plans for error resolution
-- **Step-by-Step Execution**: Iterative decision-making after each execution step
-- **Decision States**: Continue, replan, escalate, or complete based on step evaluation
-- **Script Analysis**: Analyze and repair automation scripts when accessible
-- **Knowledge Integration**: Query business knowledge base for context-aware problem solving
-
-**Execution Flow**:
-
-1. Receive error context from Gateway Agent
-2. Generate high-level resolution plan
-3. Execute plan step-by-step
-4. Evaluate completion status after each step
-5. Make next action decision (continue/replan/escalate/complete)
-6. Report progress and outcomes
-
-### 3.3 Cockpit Interface
-
-**Purpose**: Comprehensive web-based interface for human oversight, system management, and intervention.
-
-**Architecture Components**:
-
-#### 3.3.1 Authentication & Access Control Layer
-
-- Role-based authentication (Administrator, Operator, Viewer, Auditor)
-- Multi-factor authentication support
-- Session management and audit logging
-
-#### 3.3.2 Monitoring & Oversight Dashboard
-
-- Real-time visibility into active recovery sessions
-- Live status updates and progress tracking
-- Detailed agent action logs and decision processes
-- Performance metrics and system health indicators
-
-#### 3.3.3 Human Intervention Management
-
-- Queue for escalated unresolvable errors
-- Section for recommended fixes to be manually applied
-
-#### 3.3.4 Module & System Management
-
-- Module registration (new agent) and capability validation
-- Enable/disable modules
-- Health monitoring and performance analytics
-
-#### 3.3.5 Tool Management
-
-- Secure tool upload and versioning
-- Granular tool access permissions for modules
-- Usage analytics and performance monitoring
-
-## 4. Data Architecture
-
-### 4.1 Data Layer Components
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Data Layer                             │
-│                                                             │
-│ ┌─────────────┐ ┌─────────────┐ ┌─────────────────────────┐ │
-│ │  Cockpit    │ │   Tools     │ │    Knowledge Base       │ │
-│ │ Database    │ │ Database    │ │   (Vector Database)     │ │
-│ │ (Relational)│ │(Relational) │ │                         │ │
-│ └─────────────┘ └─────────────┘ └─────────────────────────┘ │
-│                                                             │
-│ ┌─────────────┐ ┌─────────────────────────────────────────┐ │
-│ │    Job      │ │         Logging & Monitoring            │ │
-│ │   Queue     │ │              Database                   │ │
-│ │ (Message    │ │          (Time Series)                  │ │
-│ │  Broker)    │ │                                         │ │
-│ └─────────────┘ └─────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
-```
-
-#### 4.1.1 Cockpit Database (Relational)
-
-**Purpose**: Store cockpit application data, user management, and system configuration.
-
-**Key Entities**:
-
-- User accounts and role assignments
-- Module registrations and configurations
-- Recovery session metadata
-- System configuration and settings
-- Audit logs and compliance records
-
-#### 4.1.2 Knowledge Base (Vector Database)
-
-**Purpose**: Store and provide semantic search capabilities for business knowledge.
-
-**Content Types**:
-
-- Proprietary application documentation
-- Business process workflows
-- Historical resolution patterns
-- Best practices and procedures
-- Contextual business rules
-
-**Technical Requirements**:
-
-- Vector embeddings for semantic search
-- Version control and update tracking
-- Query performance optimization
-- Acessible via agentic tools
-
-#### 4.1.3 Tools Database (Relational)
-
-**Purpose**: Manage agent tools, permissions, and metadata.
-
-**Key Entities**:
-
-- Tool definitions and metadata
-- Version management and deployment history
-- Access permissions and module associations
-
-#### 4.1.4 Job Queue (Message Broker)
-
-**Purpose**: Manage asynchronous task processing and inter-component communication.
-
-**Capabilities**:
-
-- Error notification queuing
-- Task distribution to recovery modules
-- Progress updates and status reporting
-- Dead letter queues for failed operations
-- Priority-based message processing
-
-#### 4.1.5 Logging & Monitoring Database (Time Series)
-
-**Purpose**: Store system logs, metrics, and performance data.
-
-**Data Types**:
-
-- Agent execution logs and decision traces
-- System performance metrics
-- Error patterns and resolution outcomes
-- User activity and system events
-- Compliance and audit trails
-
-### 4.2 Data Flow Architecture (Simplified)
-
-![[Pasted image 20250617132856.png]]
-## 5. Integration Architecture
-
-### 5.1 External System Integration
-
-**Integration Pattern**: API-based communication through standardized interfaces.
-
-**Supported Integration Types**:
-
-- Webhook-based error notifications
-- REST API callbacks for status updates
-- Authentication via API keys or OAuth
-- Support for major RPA platforms (UiPath, Automation Anywhere, Blue Prism)
-
-**Integration Module Responsibilities**:
-
-- Wrap RPA systems with standardized communication layer
-- Transform platform-specific error formats
-- Manage authentication and authorization
-- Handle connection resilience and retry logic
-
-### 5.2 API Architecture
-
-**Gateway API Endpoints**:
-
-```
-POST /api/v1/errors              - Submit error notification
-GET  /api/v1/errors/{id}/status  - Check resolution status
-PUT  /api/v1/errors/{id}/cancel  - Cancel active resolution
-```
-
-**Cockpit API Endpoints**:
-
-```
-GET    /api/v1/sessions          - List active sessions
-GET    /api/v1/sessions/{id}     - Get session details
-POST   /api/v1/escalations       - Create manual escalation
-GET    /api/v1/modules           - List available modules
-POST   /api/v1/tools             - Upload new tool
-GET    /api/v1/analytics         - System performance metrics
-```
-
-## 6. Security Architecture
-
-### 6.1 Security Layers
-
-**Authentication & Authorization**:
-
-- Multi-factor authentication for cockpit access
-- Role-based access control (RBAC) with granular permissions
-- API key management for external system integrations
-- Enterprise identity system integration (LDAP, SAML, OAuth)
-
-**Data Protection**:
-
-- AES-256 encryption for data at rest
-- TLS 1.3 for data in transit
-- Data masking for sensitive information in logs
-- Secure tool validation and deployment
-
-**Compliance & Audit**:
-
-- Comprehensive audit logging with integrity protection
-- GDPR, HIPAA, and SOX compliance support
-- Immutable audit trails
-- Compliance reporting capabilities
-
-### 6.2 Security Controls
-
-**Network Security**:
-
-- Network segmentation between components
-- Firewall rules for component communication
-- VPN/Private network requirements for external integrations
-
-**Application Security**:
-
-- Input validation and sanitization
-- SQL injection and XSS prevention
-- Secure coding practices
-- Regular security scanning and updates
-
-## 7. Deployment Architecture
-
-### 7.1 Infrastructure Requirements
-
-**Same System Strategy**:
-
-The system must be deployed alongside RPA platforms, as to be able to continue execution of processes within the same machine, guaranteeing continuity. However, agents can be deployed remotely and their outputs processed locally.
-
-### 7.2 Environment Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Production Environment                    │
-│                                                             │
-│ ┌─────────────┐ ┌─────────────┐ ┌─────────────────────────┐ │
-│ │  Gateway    │ │  Recovery   │ │        Cockpit          │ │
-│ │   Agent     │ │  Modules    │ │      Interface          │ │
-│ │ (Container) │ │(Containers) │ │     (Container)         │ │
-│ └─────────────┘ └─────────────┘ └─────────────────────────┘ │
-│                                                             │
-│ ┌─────────────────────────────────────────────────────────┐ │
-│ │                  Data Layer                             │ │
-│ │  ┌───────────┐ ┌───────────┐ ┌─────────┐ ┌───────────┐ │ │
-│ │  │ Cockpit   │ │Knowledge  │ │  Job    │ │ Logging & │ │ │
-│ │  │    DB     │ │Base (Vec) │ │ Queue   │ │Monitoring │ │ │
-│ │  └───────────┘ └───────────┘ └─────────┘ └───────────┘ │ │
-│ └─────────────────────────────────────────────────────────┘ │
-│                                                             │
-│ ┌─────────────────────────────────────────────────────────┐ │
-│ │              Infrastructure Services                    │ │
-│ │    Load Balancer | Service Discovery | Monitoring       │ │
-│ └─────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## 8. Monitoring and Observability
-
-### 8.1 Monitoring Strategy
-
-**System Health Monitoring**:
-
-- Component health checks and status reporting
-- Performance metrics collection and analysis
-- Resource utilization tracking
-- Error rate and success rate monitoring
-
-**Agent Performance Monitoring**:
-
-- Decision-making process tracing
-- Execution time and efficiency metrics
-- Success/failure pattern analysis
-
-**Business Metrics**:
-
-- Automation recovery success rates
-- Human intervention frequency
-
-### 8.2 Alerting and Notification
-
-**Alert Categories**:
-
-- Critical system failures
-- Performance threshold breaches
-- Capacity planning warnings
-
-**Notification Channels**:
-
-- Dashboard alerts
-- Webhook notifications
-
-## 9. Performance Requirements
-
-### 9.1 Performance Targets
-
-**Response Times**:
-
-- Gateway error acknowledgment: < 5 seconds
-- Module routing completion: < 30 seconds
-- Cockpit interface load time: < 3 seconds
-- Knowledge base queries: < 2 seconds
-
-**Throughput**:
-
-- Concurrent error sessions: 1000+
-- Error notifications per second: 100+
-- Concurrent cockpit users: 50+
-
-**Availability**:
-
-- System uptime: 99.9%
-- Planned maintenance: < 4 hours/month
-- Fault tolerance: 75% module availability minimum
-
-
----
-
-## 11. Conclusion
-
-The RPA Recovery Framework architecture provides a robust, scalable, and intelligent solution for automation failure recovery. The agent-centric design ensures flexibility and extensibility, while the comprehensive cockpit interface maintains human oversight and control. The modular architecture allows organizations to gradually adopt and extend capabilities based on their specific needs and requirements.
-
-The system's emphasis on knowledge-driven decision-making, combined with sophisticated monitoring and learning capabilities, positions it as a critical component in maintaining business continuity and maximizing automation ROI in enterprise environments.
+1. **Connect.** A robot opens the recovery WebSocket with its robot key in the `X-ROBOT-KEY`
+   header. Unknown or disabled keys are rejected before the socket is accepted. The server sends
+   periodic pings while the recovery runs.
+2. **Submit.** The robot sends one recovery payload. It is validated against the payload model
+   (`templates/recovery_payload.py`) and normalised into a recovery context: the task, platform, the
+   ordered UI log, the failed activity and the variables.
+3. **Persist.** The raw payload is saved as a robot exception together with its recovery context
+   (`database/logging/models.py`). The exception id is the recovery id used everywhere afterwards.
+4. **Run the gateway.** The backend loads the agent of type `GatewayAgent` and invokes it with the
+   recovery context. The WebSocket and the exception id travel in the Strands invocation state, so
+   every nested agent and tool can reach the robot and attach its traces to the right recovery.
+5. **Delegate.** Agents call sub-agents as tools. In the seeded configuration the gateway hands UI
+   errors to an error agent, which in turn uses a GUI agent to act on the desktop and then works out
+   which of the remaining activities the recovery already completed (`agent_tools/utils.py`).
+6. **Drive the desktop.** A GUI agent asks the robot for screenshots and sends it UI actions
+   (click, type, scroll...) over the same WebSocket; the robot executes them and replies. This is the
+   robot-side contract implemented by the test client in `scripts/recovery_ws_client/`.
+7. **Finish.** The gateway's structured response is sent to the robot in a `done` message with the
+   recovery id, and the inferred success is stored on the exception.
+8. **Report.** Once the robot (or its orchestrator) knows whether the process really continued, it
+   reports the outcome through the report-result endpoint, authenticated with the same robot key.
+
+## 3. Agents
+
+**Agents are data, not code.** An agent is a database row (`database/agents/models.py`) holding its
+prompt, typed input arguments, response model, input type (text or image + text), provider router,
+tools and sub-agents. Invoking an agent builds a Strands agent from that row on the fly, validates the
+inputs, runs it, and asks for a structured response using the configured Pydantic model.
+
+- **Types.** `AgentType` distinguishes the gateway (the entry point for every recovery), error
+  agents, GUI agents and generic agents. Recovery uses the first `GatewayAgent` it finds, so keep
+  exactly one.
+- **Composition.** Sub-agents are exposed to their parent as tools, so delegation is just a tool
+  call. Each tool or sub-agent link can carry a call limit, enforced by a hook
+  (`agent_tools/hooks.py`). Disabled agents are left out.
+- **GUI agents.** GUI agents work from screenshots and emit UI actions. The tool-based GUI agent
+  (`database/agents/tooled_gui_agent.py`) gives a grounding model one tool per action; a standalone
+  UI-TARS loop (`database/agents/uitars.py`) parses actions from the model's text output. A hook caps
+  how many screenshots stay in the conversation.
+- **Prompts and responses.** Prompts live in `prompts/`; response and payload models in
+  `templates/`. Some prompt variants are chosen by feature flags in `settings.py`.
+- **Seeding.** `populate.py` loads the default agents, sub-agent links, tools, provider routers and
+  the admin user from `database/populators/` (`agents.json`, `routers.json`). After that, agents and
+  routers can be changed at runtime through the API without a deploy.
+
+## 4. Tools
+
+A tool is a Strands `@tool` function registered in the database by its import path
+(`database/tools/models.py`); an agent gets the tools linked to it. Shared tools are in
+`agent_tools/`, and gateway-specific ones in `gateway/`. Adding a tool means writing the function
+and registering it (see `database/populators/tools.py`).
+
+## 5. LLM providers
+
+A provider router (`database/provider/models.py`) names an OpenAI-compatible backend (OpenAI,
+OpenRouter, vLLM), a model, an API key, its capabilities (text, vision) and, for vision models, the
+backbone used to map coordinates. Every agent points at one router; an agent that takes images needs
+a vision-capable router. Routers are seeded from the `PROVIDER_*` settings and managed through
+`routers/provider.py`. The router also prices a conversation from its token usage.
+
+## 6. Trace logging and artifacts
+
+Recoveries are recorded in the database, separately from OpenTelemetry, so they can be reviewed and
+exported per recovery:
+
+- **Agent traces** with their messages, cost and parent/child links between agents; **tool traces**
+  with inputs, outputs and status; **GUI traces** with the action taken and the screenshot it was
+  based on. Hooks in `agent_tools/hooks.py` write them as agents run.
+- Screenshots are stored in S3 (`s3/`), and deleted with their trace (`database/logging/orm_events.py`).
+- `routers/logging.py` serves traces, the recovery context, a markdown report of a run, and a ZIP
+  with the UI log as CSV plus its screenshots.
+
+## 7. Authentication
+
+There are two separate schemes:
+
+- **Robots** authenticate with robot keys (`X-ROBOT-KEY`) on the recovery and eval endpoints. Only a
+  hash of each key is stored (`security/utils.py`); the plain key is shown once, at creation
+  (`routers/keys.py`).
+- **Users** log in for a JWT backed by a stored session (`routers/auth.py`, `security/`), checked by
+  the dependencies in `middlewares/auth.py`. Roles are administrator and developer. Every management API
+  (agents, tools, providers, keys, logging) needs a logged-in user; creating, changing or deleting
+  agents, provider routers, robot keys and users needs an administrator.
+
+## 8. Observability
+
+The app exports traces and logs over OTLP to a self-hosted SigNoz. FastAPI requests, Strands agent,
+model and tool calls, and the recovery turn share one trace; logs are structured and redacted.
+Postgres and SeaweedFS telemetry is collected by an agent in the Docker stack. Everything about it is
+in [`OBSERVABILITY.md`](OBSERVABILITY.md).
+
+## 9. Evaluation
+
+`evals/` holds offline runners that benchmark parts of the pipeline against a dataset: whether the
+gateway routes errors correctly (`run_filter_eval.py`), whether a sensible recovery task is generated
+(`run_task_eval.py`), and end-to-end recovery against a running server (`run_recovery_eval.py`).
+`routers/evals.py` exposes an eval WebSocket that runs a chosen GUI agent on a given recovery task
+and infers where the robot should continue.
+
+## 10. Roadmap / not yet implemented
+
+The original design describes more than this repository contains. None of the following exists yet;
+the detailed list is in [`REQUIREMENTS.md`](REQUIREMENTS.md).
+
+- **Human escalation.** The gateway's hand-off tool (`gateway/agent.py`) is a placeholder.
+- **Cockpit UI** for monitoring sessions, handling escalations and managing agents and tools. The
+  backend has APIs for some of this, but no UI.
+- **Business knowledge base** queried by agents, and learning from past recoveries.
+- **Script analysis and repair** of the robot's own automation.
+- **Recovery modules** beyond the UI error path (`modules/` is reserved for them).
+- **Asynchronous job queue**, horizontal scaling, and the performance and availability targets.
+- **Enterprise auth** (MFA, LDAP/SAML/OAuth) and finer-grained roles.
