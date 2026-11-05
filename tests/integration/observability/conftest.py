@@ -11,17 +11,14 @@ from __future__ import annotations
 import logging
 import socket
 import uuid
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, override
 from urllib.parse import urlparse
 
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from pydantic import BaseModel
 from sqlmodel import Session
-from strands.models import Model
 
 import settings
 from database.engine import get_session
@@ -59,52 +56,6 @@ class Telemetry:
         assert self.handle.logger_provider is not None
         self.handle.tracer_provider.force_flush()
         self.handle.logger_provider.force_flush()
-
-
-class ScriptedModel(Model):
-    """Strands model that answers with fixed text, so no LLM is called."""
-
-    def __init__(self, text: str) -> None:
-        self._text = text
-
-    @override
-    def update_config(self, **model_config: Any) -> None:
-        return None
-
-    @override
-    def get_config(self) -> Any:
-        return {}
-
-    @override
-    async def structured_output(  # pyright: ignore[reportIncompatibleMethodOverride]
-        self,
-        output_model: type[BaseModel],
-        prompt: Any,
-        system_prompt: str | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[dict[str, Any]]:
-        raise NotImplementedError
-        yield {}
-
-    @override
-    async def stream(  # pyright: ignore[reportIncompatibleMethodOverride]
-        self,
-        messages: Any,
-        tool_specs: Any = None,
-        system_prompt: str | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[Any]:
-        yield {"messageStart": {"role": "assistant"}}
-        yield {"contentBlockStart": {"start": {}}}
-        yield {"contentBlockDelta": {"delta": {"text": self._text}}}
-        yield {"contentBlockStop": {}}
-        yield {"messageStop": {"stopReason": "end_turn"}}
-        yield {
-            "metadata": {
-                "usage": {"inputTokens": 12, "outputTokens": 4, "totalTokens": 16},
-                "metrics": {"latencyMs": 1},
-            }
-        }
 
 
 def _collector_reachable() -> bool:
