@@ -76,7 +76,8 @@ You need Docker, [uv](https://docs.astral.sh/uv/) and an OpenAI-compatible LLM e
 | What is this and how do I run it? | This file |
 | How do the pieces fit together? | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
 | What is implemented and what is planned? | [`REQUIREMENTS.md`](REQUIREMENTS.md) |
-| How do I work in the repo (lint, tests, migrations, conventions)? | [`AGENTS.md`](AGENTS.md) |
+| How do I work in the repo (lint, tests, migrations, code style)? | [`AGENTS.md`](AGENTS.md) |
+| How do I name commits, branches, issues and PRs? How do labels work? | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 | Traces, logs and SigNoz | [`OBSERVABILITY.md`](OBSERVABILITY.md) |
 | Docker services, ports, production | [`docker/README.md`](docker/README.md) |
 | Endpoints and payload schemas | `/scalar` on a running server |
