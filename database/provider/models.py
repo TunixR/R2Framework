@@ -7,9 +7,9 @@ import requests
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Column, Enum, Field, Relationship, SQLModel
 from strands.models import Model
-from strands.models.openai import OpenAIModel
 
 from database.provider.scripts.image import Qwen2_5ImageResizer
+from observability.instrumentation.genai import TracedOpenAIModel
 
 
 class Router(SQLModel, table=True):
@@ -140,7 +140,7 @@ class Router(SQLModel, table=True):
             or self.provider_type == self.Provider.VLLM
             or self.provider_type == self.Provider.OPENROUTER
         ):
-            return OpenAIModel(
+            return TracedOpenAIModel(
                 client_args={
                     "api_key": self.api_key or "api-key",
                     "base_url": self.api_endpoint,

@@ -8,13 +8,13 @@ from opentelemetry import trace
 from pydantic import BaseModel, ValidationError
 from sqlmodel import select
 from strands import Agent as StrandsAgent
-from strands.models.openai import OpenAIModel
 
 import database.general as database
 from database.agents.models import Agent, AgentType
 from observability import attributes as attrs
 from observability.events import error_type, log_event
 from observability.exceptions import record_exception
+from observability.instrumentation.genai import TracedOpenAIModel
 from routers.recovery import (
     ROBOT_KEY_HEADER,
     _build_recovery_context_or_raise,
@@ -116,7 +116,7 @@ async def _run_standalone_recovery(
     else:
         trace_text = str(guiagent_result)
 
-    agent_model = OpenAIModel(
+    agent_model = TracedOpenAIModel(
         client_args={"api_key": PROVIDER_API_KEY, "base_url": PROVIDER_API_BASE},
         model_id=PROVIDER_MODEL,
     )
@@ -138,9 +138,10 @@ Error Information:
 Process Model:
 {model}"""
 
-    result: ContinuationOutput = continuation_inferrer(
+    inference = await continuation_inferrer.invoke_async(
         inferrer_prompt, structured_output_model=ContinuationOutput
-    ).structured_output  # pyright: ignore[reportAssignmentType]
+    )
+    result: ContinuationOutput = inference.structured_output  # pyright: ignore[reportAssignmentType]
 
     return result.model_dump() | {"variables": updated_variables}
 

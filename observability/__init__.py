@@ -14,6 +14,7 @@ from observability.exceptions import (
     UnhandledExceptionMiddleware,
     register_exception_handlers,
 )
+from observability.instrumentation.genai import install_genai_tracer
 from observability.logging import configure_logging, create_logger_provider
 from observability.tracing import EXCLUDED_URLS, create_tracer_provider
 
@@ -65,6 +66,8 @@ def configure_observability(
         tracer_provider = create_tracer_provider(settings, span_exporter)
         if set_global:
             trace.set_tracer_provider(tracer_provider)
+            # Strands builds its tracer from the global provider.
+            install_genai_tracer()
 
     configure_logging(settings, logger_provider)
 

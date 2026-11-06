@@ -53,6 +53,11 @@ uv run uvicorn main:app --port 8000
 - `GET /health` returns `{"status": "ok"}` and is **not** traced.
 - Logs are JSON lines on stdout, including `trace_id`, `span_id`, and `request.id`.
 - Every response carries `X-Request-ID`; an inbound value is reused.
+- Spans and logs are exported in batches every few seconds, and flushed on exit. A span is
+  exported only once it ends. Killing the process (a debugger stop, `TerminateProcess`) loses the
+  last batch, and any exit loses the spans still open, such as the route span of a recovery
+  interrupted by a second Ctrl+C. Their exported children then show up in SigNoz under a missing
+  parent. Let running recoveries finish, and stop the server with a single Ctrl+C.
 
 ## What is recorded
 
@@ -81,6 +86,20 @@ happened at a point in time and is not already a span: a rejection, a recovered 
 misconfiguration, an accounting record. Successful work produces no logs. Strands already traces
 agent invocations (`invoke_agent`), model calls (`chat`, with `gen_ai.usage.*`) and tool calls
 (`execute_tool <name>`), so the code enriches those spans instead of logging around them.
+
+### GenAI spans
+
+SigNoz shows a `chat` or `invoke_agent` span as a conversation, with a token breakdown, when the
+span uses the latest GenAI semantic conventions. `observability/instrumentation/genai.py` makes
+Strands do that:
+
+- `install_genai_tracer()`, called by `configure_observability`, adds `gen_ai_latest_experimental`
+  and `gen_ai_span_attributes_only` to `OTEL_SEMCONV_STABILITY_OPT_IN` (tokens already set stay).
+  The conversation goes to the `gen_ai.input.messages` / `gen_ai.output.messages` span attributes
+  instead of span events. Its tracer also renames Strands' `reasoningContent` parts to `reasoning`.
+- `TracedOpenAIModel`, used for every OpenAI-compatible router, sets
+  `gen_ai.usage.reasoning.output_tokens` on the `chat` span when the provider reports reasoning
+  tokens. Strands' own usage record has no field for them.
 
 ### Naming
 
@@ -173,6 +192,8 @@ attributes and events:
 - `observability/instrumentation/gui_agent.py`: `GuiTaskTelemetry` for both GUI agent loops (`screenshot`,
   `action`, `retry`, `done`, `model_stopped`, `client_disconnected`, `failed`, `max_actions_exceeded`,
   `stopped`). `agent_tools.image.capture_screenshot` wraps a screenshot round trip in its span.
+- `observability/instrumentation/genai.py`: the Strands tracer and `TracedOpenAIModel` described in
+  [GenAI spans](#genai-spans).
 
 ## Conventions for new code
 
@@ -290,7 +311,8 @@ One happy path per feature, exported through the real OTLP pipeline and read bac
 request tracing with `request.id`, typed and redacted log events in the request trace, client
 errors as WARN events, unhandled errors in the Exceptions index (redacted), a full recovery
 websocket turn (websocket span → `recovery.turn` → `recovery.persist` and a real Strands agent,
-joined to the `RobotException` row), and GUI action and screenshot spans.
+joined to the `RobotException` row), and a GUI task whose spans all have their parent in the trace
+(`execute_tool finished` included), with the conversation on its `chat` spans.
 
 Each run exports under a unique `service.name` (`r2framework-it-<random>`). At the end the suite
 waits for ingestion to settle, deletes that service's rows from ClickHouse (SigNoz has no delete
@@ -310,8 +332,8 @@ The tests export to `OTEL_EXPORTER_OTLP_ENDPOINT`. Their SigNoz access is also s
 Redaction is a known gap, tracked in [#202](https://github.com/TunixR/R2Framework/issues/202). Today:
 
 - Regex redaction misses quoted keys, e.g. `{"password": "..."}` in JSON or Python reprs.
-- Strands exports prompts and completions as `gen_ai.*` span data. They include the task, the UI
-  log, variables and user-typed input, and reach SigNoz unredacted.
+- Strands exports prompts and completions as `gen_ai.*` span attributes. They include the task,
+  the UI log, variables, user-typed input and model reasoning, and reach SigNoz unredacted.
 
 Every exported span already flows through `RedactingSpanProcessor` and every log record through
 `RedactingLogRecordProcessor` (`observability/redaction.py`), so the fix lands in one module. The
