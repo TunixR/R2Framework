@@ -27,6 +27,7 @@ class ObservabilitySettings:
     log_file_max_bytes: int
     log_file_backup_count: int
     strands_log_level: str
+    semconv_opt_in: str
 
     def otlp_endpoint(self, signal: str) -> str:
         """Return the OTLP/HTTP URL for a signal such as ``traces`` or ``logs``."""
@@ -47,6 +48,7 @@ class ObservabilitySettings:
             log_file_max_bytes=settings.LOG_FILE_MAX_BYTES,
             log_file_backup_count=settings.LOG_FILE_BACKUP_COUNT,
             strands_log_level=settings.STRANDS_LOG_LEVEL,
+            semconv_opt_in=settings.OTEL_SEMCONV_STABILITY_OPT_IN,
         )
         resolved = replace(resolved, **overrides)
         # A sampler ratio outside [0, 1] is a misconfiguration; clamp it.

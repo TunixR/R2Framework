@@ -247,3 +247,14 @@ async def test_gui_task_records_actions_and_screenshots_as_child_spans(
         s["parent_span_id"] for s in spans if s["name"] == "gui.screenshot"
     }
     assert screenshot_parents == {task["span_id"], click["span_id"]}
+
+    # Every span has its parent in the trace, ``finished`` included.
+    span_ids = {s["span_id"] for s in spans}
+    orphans = [s["name"] for s in spans if s["parent_span_id"] not in span_ids]
+    assert orphans == ["integration.gui"]
+    assert by_name["execute_tool finished"]["parent_span_id"] in span_ids
+
+    # SigNoz reads the conversation from these attributes.
+    chats = [s for s in spans if s["name"] == "chat"]
+    assert all("gen_ai.input.messages" in s["attributes_string"] for s in chats)
+    assert all("gen_ai.output.messages" in s["attributes_string"] for s in chats)

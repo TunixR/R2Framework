@@ -57,12 +57,12 @@ from typing import Any
 
 from fastapi import WebSocketDisconnect
 from strands import Agent, ToolContext, tool
-from strands.models.openai import OpenAIModel
 from strands.types.content import ContentBlock, Messages
 
 from agent_tools.hooks import AgentLoggingHook
 from agent_tools.image import capture_screenshot
 from config import Config
+from observability.instrumentation.genai import TracedOpenAIModel
 from observability.instrumentation.gui_agent import GuiTaskTelemetry
 from prompts.gui_agent import (
     STANDALONE_COMPUTER_USE_DOUBAO,
@@ -766,7 +766,7 @@ Model Context: {model}
         },
     ]
 
-    agent_model = OpenAIModel(
+    agent_model = TracedOpenAIModel(
         client_args={"api_key": PROVIDER_API_KEY, "base_url": PROVIDER_API_BASE},
         model_id=PROVIDER_GROUNDING_MODEL,
     )
