@@ -39,6 +39,7 @@ Export always uses OTLP over HTTP/protobuf.
 | `LOG_FILE_MAX_BYTES` | `10000000` | Rotation size of `LOG_FILE` |
 | `LOG_FILE_BACKUP_COUNT` | `5` | Rotated files kept |
 | `STRANDS_LOG_LEVEL` | `INFO` | Level of the `strands` logger |
+| `OTEL_SEMCONV_STABILITY_OPT_IN` | `gen_ai_latest_experimental,gen_ai_span_attributes_only` | GenAI convention opt-in passed to Strands; those two tokens are always added (see [GenAI spans](#genai-spans)) |
 | `TELEMETRY_MAX_TEXT_LENGTH` | `120` | Truncation of free text on spans and events (`brief()`) |
 
 `OTEL_SDK_DISABLED=true` also disables export. Unit tests set
@@ -93,8 +94,8 @@ SigNoz shows a `chat` or `invoke_agent` span as a conversation, with a token bre
 span uses the latest GenAI semantic conventions. `observability/instrumentation/genai.py` makes
 Strands do that:
 
-- `install_genai_tracer()`, called by `configure_observability`, adds `gen_ai_latest_experimental`
-  and `gen_ai_span_attributes_only` to `OTEL_SEMCONV_STABILITY_OPT_IN` (tokens already set stay).
+- `install_genai_tracer()`, called by `configure_observability`, passes `OTEL_SEMCONV_STABILITY_OPT_IN`
+  to Strands, always with `gen_ai_latest_experimental` and `gen_ai_span_attributes_only` added.
   The conversation goes to the `gen_ai.input.messages` / `gen_ai.output.messages` span attributes
   instead of span events. Its tracer also renames Strands' `reasoningContent` parts to `reasoning`.
 - `TracedOpenAIModel`, used for every OpenAI-compatible router, sets

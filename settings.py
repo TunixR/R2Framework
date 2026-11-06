@@ -58,6 +58,12 @@ LOG_FILE = os.getenv("LOG_FILE") or None
 LOG_FILE_MAX_BYTES = int(os.getenv("LOG_FILE_MAX_BYTES", "10000000"))
 LOG_FILE_BACKUP_COUNT = int(os.getenv("LOG_FILE_BACKUP_COUNT", "5"))
 STRANDS_LOG_LEVEL = os.getenv("STRANDS_LOG_LEVEL", "INFO").upper()
+# GenAI semantic-convention opt-in passed to Strands. The tokens SigNoz needs
+# (latest conventions, messages as span attributes) are always added.
+OTEL_SEMCONV_STABILITY_OPT_IN = os.getenv(
+    "OTEL_SEMCONV_STABILITY_OPT_IN",
+    "gen_ai_latest_experimental,gen_ai_span_attributes_only",
+)
 # Longest free text (task names, process models...) put on spans and events.
 TELEMETRY_MAX_TEXT_LENGTH = int(os.getenv("TELEMETRY_MAX_TEXT_LENGTH", "120"))
 

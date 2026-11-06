@@ -67,7 +67,7 @@ def configure_observability(
         if set_global:
             trace.set_tracer_provider(tracer_provider)
             # Strands builds its tracer from the global provider.
-            install_genai_tracer()
+            install_genai_tracer(settings.semconv_opt_in)
 
     configure_logging(settings, logger_provider)
 

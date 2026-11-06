@@ -46,7 +46,7 @@ def tracer(
     tracer = provider.get_tracer("tests.genai")
     monkeypatch.delenv(SEMCONV_OPT_IN_ENV, raising=False)
     monkeypatch.setattr(strands_tracer, "_tracer_instance", None)
-    install_genai_tracer()
+    install_genai_tracer("")
     genai_tracer = strands_tracer.get_tracer()
     genai_tracer.tracer = tracer
     monkeypatch.setattr(gui_agent_module, "tracer", tracer)
@@ -69,11 +69,13 @@ def _messages(span: ReadableSpan, key: str) -> list[dict[str, Any]]:
     return json.loads(value)
 
 
-def test_install_keeps_existing_opt_in_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(SEMCONV_OPT_IN_ENV, "gen_ai_tool_definitions")
+def test_install_adds_the_signoz_tokens_to_the_configured_opt_in(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(SEMCONV_OPT_IN_ENV, raising=False)
     monkeypatch.setattr(strands_tracer, "_tracer_instance", None)
 
-    install_genai_tracer()
+    install_genai_tracer("gen_ai_tool_definitions, gen_ai_latest_experimental")
 
     assert isinstance(strands_tracer.get_tracer(), GenAITracer)
     assert os.environ[SEMCONV_OPT_IN_ENV].split(",") == [

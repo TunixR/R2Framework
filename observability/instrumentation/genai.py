@@ -52,19 +52,17 @@ def _reasoning_part(part: dict[str, Any]) -> dict[str, Any]:
     return {"type": "reasoning", "content": text if isinstance(text, str) else ""}
 
 
-def install_genai_tracer() -> None:
+def install_genai_tracer(opt_in: str) -> None:
     """Opt Strands into the latest conventions and make it use ``GenAITracer``.
 
-    Call it after the global tracer provider is set and before agents are
-    created: Strands reads both when its tracer is built, and each agent keeps
-    the tracer it was created with. Opt-in tokens already set are kept.
+    ``opt_in`` is ``OTEL_SEMCONV_STABILITY_OPT_IN`` from ``settings``; the
+    tokens SigNoz needs are added to it. Call it after the global tracer
+    provider is set and before agents are created: Strands reads both when its
+    tracer is built, and each agent keeps the tracer it was created with.
     """
-    tokens = [
-        token.strip()
-        for token in os.environ.get(SEMCONV_OPT_IN_ENV, "").split(",")
-        if token.strip()
-    ]
+    tokens = [token.strip() for token in opt_in.split(",") if token.strip()]
     tokens += [token for token in STRANDS_SEMCONV_OPT_IN if token not in tokens]
+    # Strands reads the opt-in from the process environment only.
     os.environ[SEMCONV_OPT_IN_ENV] = ",".join(tokens)
     # Strands keeps one module-level tracer, returned by ``get_tracer()``.
     strands_tracer._tracer_instance = GenAITracer()  # pyright: ignore[reportPrivateUsage]
