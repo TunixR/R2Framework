@@ -1,0 +1,71 @@
+name: Bug
+description: Something does not work as it should.
+labels: ["type: bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Write the title as a plain description (no `Bug:` prefix): type and area are labels.
+        **Redact** API keys, tokens, robot keys and any personal data in robot payloads or screenshots.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The observed behaviour, with error messages or logs.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: where
+    attributes:
+      label: Where
+      description: Endpoint, agent or tool, and the files involved (`routers/recovery.py:120`).
+      placeholder: |
+        - `WS /recovery/robot_exception/ws`
+        - `database/agents/tooled_gui_agent.py`
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How to reproduce
+      description: Steps, payload (redacted), seed data or test that shows it.
+    validations:
+      required: true
+  - type: input
+    id: ids
+    attributes:
+      label: Recovery / exception id and SigNoz trace id
+      description: If the bug happened during a recovery.
+  - type: input
+    id: version
+    attributes:
+      label: Commit or version
+      placeholder: "develop @ abc1234"
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the system (CONTRIBUTING.md -> Areas). More `area:` labels are added from the file paths you mention.
+      multiple: true
+      options:
+        - recovery
+        - agents
+        - gui-agent
+        - tools
+        - providers
+        - auth
+        - tracing
+        - observability
+        - db
+        - api
+        - evals
+        - ws-client
+        - docker
+        - ci
+        - deps
