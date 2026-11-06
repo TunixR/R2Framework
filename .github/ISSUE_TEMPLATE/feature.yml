@@ -1,0 +1,66 @@
+name: Feature / requirement
+description: New behaviour or a requirement to implement.
+labels: ["type: feature"]
+body:
+  - type: markdown
+    attributes:
+      value: Write the title as a plain description (no prefix); type and area are labels.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is missing or hard today, and for whom (robot, operator, developer).
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: The behaviour you want, with the files, endpoints or agents it touches.
+    validations:
+      required: true
+  - type: input
+    id: requirement
+    attributes:
+      label: Requirement
+      description: The REQUIREMENTS.md section this implements, if any.
+  - type: input
+    id: design
+    attributes:
+      label: Design doc
+      description: "Link to a design doc, if one exists (otherwise the issue may get `status: needs-design`)."
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How a reviewer knows it is done.
+      placeholder: |
+        - [ ] ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the system (CONTRIBUTING.md -> Areas). More `area:` labels are added from the file paths you mention.
+      multiple: true
+      options:
+        - recovery
+        - agents
+        - gui-agent
+        - tools
+        - providers
+        - auth
+        - tracing
+        - observability
+        - db
+        - api
+        - evals
+        - ws-client
+        - docker
+        - ci
+        - deps

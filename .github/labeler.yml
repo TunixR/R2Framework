@@ -1,0 +1,119 @@
+# Areas of the system, applied as `area: …` labels to pull requests from their changed files
+# (actions/labeler, see workflows/triage.yml).
+#
+# This file is also the list of commit scopes: every `area: <name>` key below is a valid
+# `<type>(<name>): …` scope, plus `deps`, which maps to the `dependencies` label instead (applied
+# by the dependency bot and from `(deps)` PR titles, not from files, so that sync-labels never
+# strips it from a bump PR).
+# .github/scripts/conventions.py reads it to check commit messages and PR titles and to label
+# issues from the paths they mention. When adding an area, also add it to labels.yml, to the
+# "Area" dropdown of the issue forms and to the table in CONTRIBUTING.md (a unit test checks).
+
+"area: recovery":
+  - changed-files:
+      - any-glob-to-any-file:
+          - routers/recovery.py
+          - templates/recovery_payload.py
+          - tests/unit/routers/test_recovery*.py
+
+"area: agents":
+  - changed-files:
+      - any-glob-to-any-file:
+          - database/agents/**
+          - gateway/**
+          - prompts/**
+          - templates/**
+          - modules/**
+          - tests/unit/templates/**
+
+"area: gui-agent":
+  - changed-files:
+      - any-glob-to-any-file:
+          - database/agents/uitars.py
+          - database/agents/tooled_gui_agent.py
+          - prompts/gui_agent.py
+          - templates/gui_agent.py
+          - agent_tools/image.py
+
+"area: tools":
+  - changed-files:
+      - any-glob-to-any-file:
+          - agent_tools/**
+          - database/tools/**
+          - tests/unit/agent_tools/**
+
+"area: providers":
+  - changed-files:
+      - any-glob-to-any-file:
+          - database/provider/**
+
+"area: auth":
+  - changed-files:
+      - any-glob-to-any-file:
+          - security/**
+          - middlewares/**
+          - database/auth/**
+          - database/keys/**
+          - routers/auth.py
+          - tests/unit/security/**
+          - tests/unit/middlewares/**
+
+"area: tracing":
+  - changed-files:
+      - any-glob-to-any-file:
+          - database/logging/**
+          - s3/**
+          - tests/integration/s3/**
+
+"area: observability":
+  - changed-files:
+      - any-glob-to-any-file:
+          - observability/**
+          - OBSERVABILITY.md
+          - docker/observability/**
+          - tests/unit/observability/**
+          - tests/integration/observability/**
+          - tests/integration/interoperability/**
+
+"area: db":
+  - changed-files:
+      - any-glob-to-any-file:
+          - database/general.py
+          - database/populators/**
+          - migrations/**
+          - populate.py
+          - alembic.ini
+          - tests/integration/postgres/**
+
+"area: api":
+  - changed-files:
+      - any-glob-to-any-file:
+          - main.py
+          - routers/agents.py
+          - routers/keys.py
+          - routers/logging.py
+          - routers/provider.py
+          - routers/tools.py
+
+"area: evals":
+  - changed-files:
+      - any-glob-to-any-file:
+          - evals/**
+          - experiment_files/**
+          - routers/evals.py
+
+"area: ws-client":
+  - changed-files:
+      - any-glob-to-any-file:
+          - scripts/recovery_ws_client/**
+
+"area: docker":
+  - changed-files:
+      - any-glob-to-any-file:
+          - docker/**
+
+"area: ci":
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/**
+          - .pre-commit-config.yaml

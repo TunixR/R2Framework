@@ -1,0 +1,29 @@
+name: Lint
+# Runs the pre-commit hooks (ruff, ruff-format, bandit, basedpyright) so CI enforces what local
+# hooks check. Unit tests run in unit-tests.yml.
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: "3.12"
+      - name: Sync project dependencies
+        run: uv sync --all-extras --frozen
+      - name: Run pre-commit
+        env:
+          SKIP: pytest-unit
+        run: uvx pre-commit run --all-files --show-diff-on-failure

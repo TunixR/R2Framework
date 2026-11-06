@@ -1,0 +1,57 @@
+name: Refactor / tech debt
+description: Restructure existing code without changing behaviour.
+labels: ["type: refactor"]
+body:
+  - type: markdown
+    attributes:
+      value: Write the title as a plain description (no prefix); type and area are labels.
+  - type: textarea
+    id: current
+    attributes:
+      label: Current state
+      description: How the code is structured today, with file references (`database/agents/models.py`).
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Why it is a problem now (bugs it causes, work it blocks, duplication).
+    validations:
+      required: true
+  - type: textarea
+    id: target
+    attributes:
+      label: Target state
+      description: The structure you want, and how to get there in small steps.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] Behaviour unchanged: existing tests pass
+        - [ ] ...
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the system (CONTRIBUTING.md -> Areas). More `area:` labels are added from the file paths you mention.
+      multiple: true
+      options:
+        - recovery
+        - agents
+        - gui-agent
+        - tools
+        - providers
+        - auth
+        - tracing
+        - observability
+        - db
+        - api
+        - evals
+        - ws-client
+        - docker
+        - ci
+        - deps

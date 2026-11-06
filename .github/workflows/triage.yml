@@ -1,0 +1,64 @@
+name: Triage
+# Labels issues and pull requests automatically (see CONTRIBUTING.md -> Labels):
+#   PRs:    `area: ...` from changed files (labeler.yml), `type: ...` / `breaking` / `dependencies`
+#           from the Conventional Commit title.
+#   Issues: `area: ...` from the form's "Area" dropdown and the repo paths the body mentions;
+#           `type: ...` comes from the issue form.
+#
+# pull_request_target runs this workflow from the base branch with a write token, so fork PRs get
+# labels too. It must never check out or run the PR's code: the steps below only read the event
+# payload and the base branch's config.
+
+on:
+  issues:
+    types: [opened, edited]
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: triage-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  areas:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/labeler@v7
+        with:
+          sync-labels: true
+
+  classify:
+    if: github.event.action != 'synchronize'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.3.3
+      - name: Apply labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          changes=$(uv run --no-project --python 3.12 --with pyyaml==6.0.3 \
+            python .github/scripts/conventions.py labels "$GITHUB_EVENT_PATH")
+          echo "$changes"
+          number=$(jq -r .number <<<"$changes")
+          jq -r '.add[]' <<<"$changes" | while read -r label; do
+            gh api --silent -X POST "repos/$REPO/issues/$number/labels" -f "labels[]=$label"
+          done
+          jq -r '.remove[] | @uri' <<<"$changes" | while read -r label; do
+            gh api --silent -X DELETE "repos/$REPO/issues/$number/labels/$label"
+          done

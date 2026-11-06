@@ -57,3 +57,6 @@ reportExplicitAny = false
 reportUnannotatedClassAttribute = false
 reportImportCycles = "warning"
 reportCallInDefaultInitializer = false
+# Only errors fail the check, as `--level error` intends. Under GitHub Actions basedpyright still
+# counts warnings (as annotations) and would fail on them otherwise.
+failOnWarnings = false

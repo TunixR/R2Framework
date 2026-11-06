@@ -2,6 +2,10 @@
 
 Purpose: onboarding/runbook for agentic coding assistants operating in this repo. Keep changes small, verifiable, and consistent with CI.
 
+Commits, branches, issues, PRs and labels follow `CONTRIBUTING.md` (Conventional Commits with the
+repo's types and areas, enforced by a `commit-msg` hook and CI). Read it before committing or
+opening an issue/PR.
+
 Domain overview (details in `ARCHITECTURE.md`):
 - A FastAPI backend (`main.py`) that recovers failed RPA robot runs with LLM agents built on Strands.
 - A robot opens `WS /recovery/robot_exception/ws` with its `X-ROBOT-KEY`, sends one recovery payload, and the exception plus its recovery context are saved (`routers/recovery.py`).
@@ -38,7 +42,7 @@ uv run bandit -c pyproject.toml -r .
 ```
 pre-commit run --all-files
 ```
-- Install the git hooks locally:
+- Install the git hooks locally (pre-commit and commit-msg, see `default_install_hook_types`):
 ```
 pre-commit install
 ```
@@ -152,8 +156,12 @@ Repo layout conventions (as seen in this codebase):
 
 12) Repo automation files (read before changing workflows)
 - `pyproject.toml`: dependencies + tool configuration (bandit, basedpyright).
-- `.pre-commit-config.yaml`: ruff, bandit, basedpyright, and unit tests.
+- `.pre-commit-config.yaml`: ruff, bandit, basedpyright, unit tests, and the commit-msg check.
 - `.github/workflows/unit-tests.yml`: CI uses `uv sync --all-extras --frozen` then `uv run pytest tests/unit -q`.
+- `.github/workflows/lint.yml`: runs the pre-commit hooks (except unit tests) in CI.
+- `.github/workflows/pr-title.yml`, `triage.yml`, `labels.yml`: PR-title check, automatic labels,
+  label sync. Their vocabulary lives in `.github/labeler.yml` and `.github/scripts/conventions.py`
+  (see `CONTRIBUTING.md`).
 
 13) Cursor / Copilot rules
 - Cursor rules: no `.cursor/rules/` and no `.cursorrules` found at repo root.
