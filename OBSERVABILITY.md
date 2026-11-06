@@ -55,10 +55,13 @@ uv run uvicorn main:app --port 8000
 - Logs are JSON lines on stdout, including `trace_id`, `span_id`, and `request.id`.
 - Every response carries `X-Request-ID`; an inbound value is reused.
 - Spans and logs are exported in batches every few seconds, and flushed on exit. A span is
-  exported only once it ends. Killing the process (a debugger stop, `TerminateProcess`) loses the
-  last batch, and any exit loses the spans still open, such as the route span of a recovery
+  exported only once it ends. Stopping the server gracefully (Ctrl+C, SIGTERM, Ctrl+Break on
+  Windows) runs the app's shutdown, which flushes everything. A hard kill (a debugger stop,
+  `Popen.terminate()` on Windows, which is `TerminateProcess`) skips it and loses what is still
+  queued, and any exit loses the spans still open, such as the route span of a recovery
   interrupted by a second Ctrl+C. Their exported children then show up in SigNoz under a missing
-  parent. Let running recoveries finish, and stop the server with a single Ctrl+C.
+  parent. Scripts that start the server should stop it gracefully, as
+  `evals/run_recovery_eval.py` does.
 
 ## What is recorded
 

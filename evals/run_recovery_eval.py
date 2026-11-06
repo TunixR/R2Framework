@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-import numpy
 import argparse
+import signal
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+import numpy
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -81,8 +83,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def wait_for_server(host: str, port: int, _timeout: float) -> bool:
-    import urllib.request
     import urllib.error
+    import urllib.request
 
     url = f"http://{host}:{port}/scalar"
     while time.monotonic() < numpy.inf:  # Sorry
@@ -95,6 +97,24 @@ def wait_for_server(host: str, port: int, _timeout: float) -> bool:
             pass
         time.sleep(0.5)
     return False
+
+
+def stop_server(server_proc: subprocess.Popen[bytes], timeout: float) -> None:
+    """Stop uvicorn gracefully, so the app's shutdown flushes its telemetry.
+
+    ``terminate()`` is a hard kill on Windows (``TerminateProcess``): the
+    lifespan never runs and the last spans and logs of the run are lost.
+    uvicorn shuts down cleanly on Ctrl+Break there, and on SIGTERM elsewhere.
+    """
+    if sys.platform == "win32":
+        server_proc.send_signal(signal.CTRL_BREAK_EVENT)
+    else:
+        server_proc.terminate()
+    try:
+        _ = server_proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        server_proc.kill()
+        _ = server_proc.wait()
 
 
 def main() -> int:
@@ -123,6 +143,8 @@ def main() -> int:
             str(args.port),
         ],
         cwd=str(Path(__file__).resolve().parent.parent),
+        # Its own process group, so Ctrl+Break reaches uvicorn and not this script.
+        creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
         # stdout=subprocess.PIPE,
         # stderr=subprocess.PIPE,
     )
@@ -131,8 +153,7 @@ def main() -> int:
         print(f"Waiting for server on {args.host}:{args.port}...")
         if not wait_for_server(args.host, args.port, args.startup_timeout):
             print("Server failed to start within timeout", file=sys.stderr)
-            server_proc.terminate()
-            server_proc.wait(timeout=5)
+            stop_server(server_proc, timeout=5)
             return 3
         print("Server is ready.")
 
@@ -182,12 +203,7 @@ def main() -> int:
         return result.returncode
     finally:
         print("Shutting down server...")
-        server_proc.terminate()
-        try:
-            server_proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            server_proc.kill()
-            server_proc.wait()
+        stop_server(server_proc, timeout=10)
         print("Server stopped.")
 
 
