@@ -1,0 +1,25 @@
+name: PR title
+# The PR title becomes the squash commit, so it follows the same Conventional Commit rules as
+# commits (.github/scripts/conventions.py, CONTRIBUTING.md -> Commits).
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  conventional-title:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10
+      - name: Check title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          uv run --no-project --python 3.12 --with pyyaml==6.0.3 \
+            python .github/scripts/conventions.py check-title "$TITLE"

@@ -1,3 +1,7 @@
+# `pre-commit install` installs both hook types below.
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]
+
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.14
@@ -36,3 +40,10 @@ repos:
         pass_filenames: false
         types: [python]
         stages: [pre-commit]
+
+      - id: conventional-commit
+        name: conventional commit message
+        # Same vocabulary as PR titles and labels: CONTRIBUTING.md -> Commits.
+        entry: uv run python .github/scripts/conventions.py check-commit
+        language: system
+        stages: [commit-msg]
